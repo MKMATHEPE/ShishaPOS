@@ -10,7 +10,7 @@ const FLAVOURS = [
   { id: "hh", name: "Honey Hunter", short: "HH", icon: "🍯", bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
 ];
 
-const PRICES = { full: 170, refill: 120 };
+const DEFAULT_PRICES = { full: 170, refill: 120 };
 const LOGO_SRC = chillPipeLogo;
 
 function formatTime(date) {
@@ -23,12 +23,13 @@ function formatCurrency(n) {
 
 export default function App() {
   const [orders, setOrders] = useState([]);
+  const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [orderType, setOrderType] = useState("full");
   const [payMethod, setPayMethod] = useState("card");
-  const [showSummary, setShowSummary] = useState(false);
   const [selectedFlavour, setSelectedFlavour] = useState(null);
   const [flash, setFlash] = useState(null);
   const [undoTarget, setUndoTarget] = useState(null);
+  const [activeTab, setActiveTab] = useState("pos");
   const listRef = useRef(null);
   const undoTimer = useRef(null);
 
@@ -46,7 +47,7 @@ export default function App() {
       flavour: selectedFlavour,
       type: orderType,
       payment: payMethod,
-      price: PRICES[orderType],
+      price: prices[orderType],
       time: new Date(),
       status: "active",
     };
@@ -58,7 +59,16 @@ export default function App() {
     undoTimer.current = setTimeout(() => setUndoTarget(null), 4000);
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
-  }, [selectedFlavour, orderType, payMethod]);
+    setActiveTab("pos");
+  }, [selectedFlavour, orderType, payMethod, prices]);
+
+  const updatePrice = useCallback((type, value) => {
+    const nextPrice = Number(value);
+    setPrices((prev) => ({
+      ...prev,
+      [type]: Number.isFinite(nextPrice) && nextPrice >= 0 ? nextPrice : 0,
+    }));
+  }, []);
 
   const undoLast = useCallback(() => {
     if (!undoTarget) return;
@@ -117,93 +127,6 @@ export default function App() {
     month: "short",
   });
 
-  if (showSummary) {
-    const grouped = { card_full: [], card_refill: [], cash_full: [], cash_refill: [] };
-    orders.forEach((o) => {
-      grouped[`${o.payment}_${o.type}`].push(o);
-    });
-
-    return (
-      <div style={styles.container}>
-        <div style={styles.appChrome}>
-          <div style={styles.brandPanel}>
-            <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.brandLogo} />
-          </div>
-
-          <div style={styles.summaryHeader}>
-            <div>
-              <div style={styles.kicker}>Shift Closeout</div>
-              <h1 style={styles.summaryTitle}>Session Summary</h1>
-              <div style={styles.terminalMeta}>{todayLabel} · Terminal 01</div>
-            </div>
-            <button onClick={() => setShowSummary(false)} style={styles.backBtn}>← Back</button>
-          </div>
-
-          <div style={styles.statRow}>
-            <div style={{ ...styles.statCard, borderLeft: "4px solid #059669" }}>
-              <div style={styles.statLabel}>Gross</div>
-              <div style={{ ...styles.statValue, color: "#059669" }}>{formatCurrency(totals.gross)}</div>
-            </div>
-            <div style={{ ...styles.statCard, borderLeft: "4px solid #2563eb" }}>
-              <div style={styles.statLabel}>Card</div>
-              <div style={{ ...styles.statValue, color: "#2563eb" }}>{formatCurrency(totals.card)}</div>
-            </div>
-            <div style={{ ...styles.statCard, borderLeft: "4px solid #d97706" }}>
-              <div style={styles.statLabel}>Cash</div>
-              <div style={{ ...styles.statValue, color: "#d97706" }}>{formatCurrency(totals.cash)}</div>
-            </div>
-          </div>
-
-          <div style={styles.statRow}>
-            {FLAVOURS.map((f) => (
-              <div key={f.id} style={{ ...styles.statCard, borderLeft: `4px solid ${f.color}` }}>
-                <div style={styles.statLabel}>{f.name}</div>
-                <div style={styles.statValue}>{flavourCounts[f.id] || 0}</div>
-              </div>
-            ))}
-          </div>
-
-          {Object.entries(grouped).map(([key, items]) => {
-            if (!items.length) return null;
-            const [pay, type] = key.split("_");
-            const label = `${pay === "card" ? "💳 Card" : "💵 Cash"} · ${type === "full" ? "New Pipe (R170)" : "Refill (R120)"}`;
-
-            return (
-              <div key={key} style={styles.summarySection}>
-                <div style={styles.sectionLabel}>
-                  {label}
-                  <span style={styles.countBadge}>{items.length}</span>
-                </div>
-                <div style={styles.summaryList}>
-                  {items.map((o, i) => (
-                    <div key={o.id} style={styles.summaryRow}>
-                      <span style={styles.summaryIndex}>{String(i + 1).padStart(2, "0")}</span>
-                      <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
-                        {o.flavour.icon} {o.flavour.name}
-                      </span>
-                      <span style={styles.summaryTime}>{formatTime(o.time)}</span>
-                      <span style={styles.summaryPrice}>{formatCurrency(o.price)}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            );
-          })}
-
-          <button
-            onClick={() => {
-              const text = orders.map((o, i) => `${i + 1}. ${o.flavour.name} R${o.price} [${formatTime(o.time)}] ${o.payment} ${o.type}`).join("\n");
-              navigator.clipboard?.writeText(`Shisha Orders (${orders.length})\n${text}\n\nGross: R${totals.gross} | Card: R${totals.card} | Cash: R${totals.cash}`);
-            }}
-            style={styles.copyBtn}
-          >
-            Copy Shift Report
-          </button>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div style={styles.container}>
       <div style={styles.appChrome}>
@@ -216,11 +139,11 @@ export default function App() {
               <div style={styles.terminalMeta}>{todayLabel} · Terminal 01</div>
             </div>
           </div>
-          <button onClick={() => setShowSummary(true)} style={styles.summaryBtn}>
-            Summary ({orders.length})
-          </button>
         </div>
 
+        <main style={styles.mainContent}>
+          {activeTab === "pos" && (
+            <>
         <div style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
@@ -232,7 +155,7 @@ export default function App() {
                   style={{ ...styles.toggleBtn, ...(orderType === t ? styles.toggleActive : {}) }}
                 >
                   <span>{t === "full" ? "New Pipe" : "Refill"}</span>
-                  <strong>{formatCurrency(PRICES[t])}</strong>
+                  <strong>{formatCurrency(prices[t])}</strong>
                 </button>
               ))}
             </div>
@@ -270,7 +193,7 @@ export default function App() {
                 <span style={styles.flavourIcon}>{f.icon}</span>
                 <span style={styles.flavourName}>{f.name}</span>
                 <span style={{ ...styles.flavourPrice, color: selectedFlavour?.id === f.id ? "#fff" : f.color }}>
-                  {formatCurrency(PRICES[orderType])}
+                  {formatCurrency(prices[orderType])}
                 </span>
                 {flavourCounts[f.id] ? (
                   <span style={{ ...styles.flavourCount, background: selectedFlavour?.id === f.id ? "#fff" : f.color, color: selectedFlavour?.id === f.id ? f.color : "#fff" }}>
@@ -283,7 +206,7 @@ export default function App() {
 
           {selectedFlavour && (
             <button onClick={confirmOrder} style={styles.confirmBtn}>
-              Add to order · {selectedFlavour.name} · {orderType === "full" ? "New Pipe" : "Refill"} · {formatCurrency(PRICES[orderType])}
+              Add to order · {selectedFlavour.name} · {orderType === "full" ? "New Pipe" : "Refill"} · {formatCurrency(prices[orderType])}
             </button>
           )}
 
@@ -324,8 +247,11 @@ export default function App() {
             ))}
           </div>
         </div>
+            </>
+          )}
 
-        <div style={styles.deliveredPanel}>
+          {activeTab === "delivered" && (
+            <div style={styles.deliveredPanel}>
           <div style={styles.deliveredBar}>
             <div style={styles.totalLeft}>
               <span style={styles.totalLabel}>Orders Delivered</span>
@@ -350,7 +276,142 @@ export default function App() {
               </div>
             ))}
           </div>
-        </div>
+            </div>
+          )}
+
+          {activeTab === "management" && (() => {
+            const grouped = { card_full: [], card_refill: [], cash_full: [], cash_refill: [] };
+            orders.forEach((o) => { grouped[`${o.payment}_${o.type}`].push(o); });
+            return (
+            <div style={styles.settingsPanel}>
+              <div style={styles.settingsBar}>
+                <div style={styles.totalLeft}>
+                  <span style={styles.totalLabel}>Management</span>
+                  <span style={styles.totalSub}>Terminal 01 · {todayLabel}</span>
+                </div>
+              </div>
+
+              <div style={styles.settingsGrid}>
+                <div style={styles.settingCard}>
+                  <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
+                  <input
+                    id="new-pipe-price"
+                    type="number"
+                    min="0"
+                    value={prices.full}
+                    onChange={(event) => updatePrice("full", event.target.value)}
+                    style={styles.priceInput}
+                  />
+                </div>
+                <div style={styles.settingCard}>
+                  <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
+                  <input
+                    id="refill-price"
+                    type="number"
+                    min="0"
+                    value={prices.refill}
+                    onChange={(event) => updatePrice("refill", event.target.value)}
+                    style={styles.priceInput}
+                  />
+                </div>
+                <div style={styles.settingCard}>
+                  <span style={styles.statLabel}>Active Orders</span>
+                  <strong style={styles.settingValue}>{currentOrders.length}</strong>
+                </div>
+                <div style={styles.settingCard}>
+                  <span style={styles.statLabel}>Delivered</span>
+                  <strong style={styles.settingValue}>{deliveredOrders.length}</strong>
+                </div>
+              </div>
+
+              <div style={styles.sectionHeaderLabel}>Shift Summary</div>
+
+              <div style={styles.statRow}>
+                <div style={{ ...styles.statCard, borderLeft: "4px solid #059669" }}>
+                  <div style={styles.statLabel}>Gross</div>
+                  <div style={{ ...styles.statValue, color: "#059669" }}>{formatCurrency(totals.gross)}</div>
+                </div>
+                <div style={{ ...styles.statCard, borderLeft: "4px solid #2563eb" }}>
+                  <div style={styles.statLabel}>Card</div>
+                  <div style={{ ...styles.statValue, color: "#2563eb" }}>{formatCurrency(totals.card)}</div>
+                </div>
+                <div style={{ ...styles.statCard, borderLeft: "4px solid #d97706" }}>
+                  <div style={styles.statLabel}>Cash</div>
+                  <div style={{ ...styles.statValue, color: "#d97706" }}>{formatCurrency(totals.cash)}</div>
+                </div>
+              </div>
+
+              <div style={styles.statRow}>
+                {FLAVOURS.map((f) => (
+                  <div key={f.id} style={{ ...styles.statCard, borderLeft: `4px solid ${f.color}` }}>
+                    <div style={styles.statLabel}>{f.name}</div>
+                    <div style={styles.statValue}>{flavourCounts[f.id] || 0}</div>
+                  </div>
+                ))}
+              </div>
+
+              {Object.entries(grouped).map(([key, items]) => {
+                if (!items.length) return null;
+                const [pay, type] = key.split("_");
+                const label = `${pay === "card" ? "💳 Card" : "💵 Cash"} · ${type === "full" ? `New Pipe (R${prices.full})` : `Refill (R${prices.refill})`}`;
+                return (
+                  <div key={key} style={styles.summarySection}>
+                    <div style={styles.sectionLabel}>
+                      {label}
+                      <span style={styles.countBadge}>{items.length}</span>
+                    </div>
+                    <div style={styles.summaryList}>
+                      {items.map((o, i) => (
+                        <div key={o.id} style={styles.summaryRow}>
+                          <span style={styles.summaryIndex}>{String(i + 1).padStart(2, "0")}</span>
+                          <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
+                            {o.flavour.icon} {o.flavour.name}
+                          </span>
+                          <span style={styles.summaryTime}>{formatTime(o.time)}</span>
+                          <span style={styles.summaryPrice}>{formatCurrency(o.price)}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                );
+              })}
+
+              <button
+                onClick={() => {
+                  const text = orders.map((o, i) => `${i + 1}. ${o.flavour.name} R${o.price} [${formatTime(o.time)}] ${o.payment} ${o.type}`).join("\n");
+                  navigator.clipboard?.writeText(`Shisha Orders (${orders.length})\n${text}\n\nGross: R${totals.gross} | Card: R${totals.card} | Cash: R${totals.cash}`);
+                }}
+                style={styles.copyBtn}
+              >
+                Copy Shift Report
+              </button>
+            </div>
+            );
+          })()}
+        </main>
+
+        <footer style={styles.footer}>
+          <button
+            onClick={() => setActiveTab("pos")}
+            style={{ ...styles.footerTab, ...(activeTab === "pos" ? styles.footerTabActive : {}) }}
+          >
+            POS
+            <span style={styles.footerBadge}>{currentOrders.length}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("delivered")}
+            style={{ ...styles.footerTab, ...(activeTab === "delivered" ? styles.footerTabActive : {}) }}
+          >
+            Orders Delivered
+            <span style={styles.footerBadge}>{deliveredOrders.length}</span>
+          </button>
+          <button
+            onClick={() => setActiveTab("management")}
+            style={{ ...styles.footerTab, ...(activeTab === "management" ? styles.footerTabActive : {}) }}
+          >
+            Management
+          </button>
+        </footer>
       </div>
     </div>
   );
@@ -386,6 +447,14 @@ const styles = {
     background: "#ffffff",
     border: "1px solid #e5e7eb",
     borderRadius: 10,
+  },
+  mainContent: {
+    flex: 1,
+    minHeight: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 12,
+    overflowY: "auto",
   },
   brandLockup: {
     display: "flex",
@@ -602,6 +671,15 @@ const styles = {
     border: "1px solid #bbf7d0",
     borderRadius: 10,
   },
+  settingsPanel: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 8,
+    padding: 10,
+    background: "#f8fafc",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+  },
   totalBar: {
     display: "flex",
     justifyContent: "space-between",
@@ -618,6 +696,16 @@ const styles = {
     alignItems: "center",
     gap: 12,
     background: "#166534",
+    color: "#fff",
+    padding: "13px 15px",
+    borderRadius: 9,
+  },
+  settingsBar: {
+    display: "flex",
+    justifyContent: "space-between",
+    alignItems: "center",
+    gap: 12,
+    background: "#334155",
     color: "#fff",
     padding: "13px 15px",
     borderRadius: 9,
@@ -654,6 +742,39 @@ const styles = {
     gap: 5,
     maxHeight: 190,
     overflowY: "auto",
+  },
+  settingsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 8,
+  },
+  settingCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    padding: "12px",
+    background: "#ffffff",
+    border: "1px solid #e5e7eb",
+    borderRadius: 9,
+  },
+  settingValue: {
+    fontSize: 20,
+    fontWeight: 900,
+    color: "#0f172a",
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+  },
+  priceInput: {
+    width: "100%",
+    minHeight: 42,
+    padding: "8px 10px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    background: "#f8fafc",
+    color: "#0f172a",
+    fontSize: 18,
+    fontWeight: 900,
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    outline: "none",
   },
   emptyState: {
     textAlign: "center",
@@ -875,5 +996,50 @@ const styles = {
     width: "100%",
     maxHeight: 140,
     objectFit: "contain",
+  },
+  footer: {
+    display: "flex",
+    alignItems: "center",
+    gap: 6,
+    padding: 6,
+    background: "#e2e8f0",
+    border: "1px solid #cbd5e1",
+    borderRadius: 10,
+  },
+  footerTab: {
+    flex: 1,
+    minHeight: 44,
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 5,
+    border: "1px solid transparent",
+    borderRadius: 8,
+    background: "transparent",
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: 900,
+    cursor: "pointer",
+    fontFamily: "inherit",
+    textAlign: "center",
+  },
+  footerTabActive: {
+    background: "#ffffff",
+    borderColor: "#cbd5e1",
+    color: "#0f172a",
+    boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
+  },
+  footerBadge: {
+    minWidth: 20,
+    height: 20,
+    padding: "0 6px",
+    borderRadius: 999,
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    background: "#0f172a",
+    color: "#ffffff",
+    fontSize: 11,
+    fontWeight: 900,
   },
 };
