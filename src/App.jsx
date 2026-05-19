@@ -32,20 +32,18 @@ const RESTOCK_PACK = {
 };
 
 const STOCK_PRESETS = [
-  { name: "Coal",          category: "consumable", unit: "bags",    lowThreshold: 2 },
-  { name: "Flavour",       category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Lady Killer",   category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Mint Cream",    category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Berlin Nights", category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Gum & Mint",    category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Joker",         category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Honey Hunter",  category: "consumable", unit: "pouches", lowThreshold: 3 },
-  { name: "Mouth Pieces",  category: "consumable", unit: "pieces",  lowThreshold: 10 },
-  { name: "Kops",          category: "equipment",  unit: "units",   lowThreshold: 1 },
-  { name: "Rotas",         category: "equipment",  unit: "units",   lowThreshold: 2 },
-  { name: "Rota Tops",     category: "equipment",  unit: "units",   lowThreshold: 2 },
+  { name: "Coal",         category: "consumable", unit: "pieces", lowThreshold: 144 },
+  { name: "Flavour",      category: "consumable", unit: "boxes",  lowThreshold: 2  },
+  { name: "Mouth Pieces", category: "consumable", unit: "pieces", lowThreshold: 50 },
+  { name: "Kops",          category: "equipment",  unit: "units",   lowThreshold: 10 },
+  { name: "Rotas",         category: "equipment",  unit: "units",   lowThreshold: 10 },
+  { name: "Rota Tops",     category: "equipment",  unit: "units",   lowThreshold: 10 },
   { name: "Stove",         category: "equipment",  unit: "units",   lowThreshold: 1 },
-  { name: "New Hookah",    category: "equipment",  unit: "units",   lowThreshold: 1 },
+  { name: "2 Pipe Hookah",    category: "equipment",  unit: "units",   lowThreshold: 7 },
+  { name: "Blower",    category: "equipment",  unit: "units",   lowThreshold: 1 },
+  { name: "Tongs",    category: "equipment",  unit: "units",   lowThreshold: 4 },
+  { name: "Extension Cord",    category: "equipment",  unit: "units",   lowThreshold: 0 },
+
 ];
 const LOGO_SRC = chillPipeLogo;
 
@@ -86,12 +84,6 @@ export default function App() {
       { id: 1,  name: "Coal",         category: "consumable", quantity: 72, unit: "pieces",  lowThreshold: 10 },
       { id: 14, name: "Flavour", category: "consumable", unit: "boxes", lowThreshold: 1,
         subItems: FLAVOURS.map(f => ({ id: f.id, name: f.name, icon: f.icon, color: f.color, bg: f.bg, quantity: 10 })) },
-      { id: 2,  name: "Lady Killer",  category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
-      { id: 3,  name: "Mint Cream",   category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
-      { id: 4,  name: "Berlin Nights",category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
-      { id: 5,  name: "Gum & Mint",   category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
-      { id: 6,  name: "Joker",        category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
-      { id: 7,  name: "Honey Hunter", category: "consumable", quantity: 10, unit: "pouches", lowThreshold: 3 },
       { id: 8,  name: "Mouth Pieces", category: "consumable", quantity: 50, unit: "pieces",  lowThreshold: 10 },
       { id: 9,  name: "Kops",         category: "equipment",  quantity: 5,  unit: "units",   lowThreshold: 1 },
       { id: 10, name: "Rotas",        category: "equipment",  quantity: 8,  unit: "units",   lowThreshold: 2 },
@@ -102,7 +94,9 @@ export default function App() {
     try {
       const s = localStorage.getItem("pos_stock");
       if (!s) return defaults;
-      const saved = JSON.parse(s);
+      const flavourNames = new Set(FLAVOURS.map(f => f.name));
+      // Strip old individual flavour rows — they're now sub-items under Flavour
+      const saved = JSON.parse(s).filter(i => !flavourNames.has(i.name));
       // Merge: update unit/threshold from defaults, add subItems if missing, add new default items
       const merged = saved.map(i => {
         const def = defaults.find(d => d.name === i.name);
@@ -125,11 +119,35 @@ export default function App() {
   const [newStockCategory, setNewStockCategory] = useState("consumable");
   const [newStockCustomName, setNewStockCustomName] = useState("");
   const [usersCollapsed, setUsersCollapsed] = useState(false);
+  const [consumablesCollapsed, setConsumablesCollapsed] = useState(true);
+  const [equipmentCollapsed, setEquipmentCollapsed] = useState(true);
+  const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
+  const [kpisCollapsed, setKpisCollapsed] = useState(true);
+  const [accountingCollapsed, setAccountingCollapsed] = useState(true);
+  const [expensesCollapsed, setExpensesCollapsed] = useState(true);
   const [expandedUsers, setExpandedUsers] = useState(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [restockId, setRestockId] = useState(null);
+  const [restockSubId, setRestockSubId] = useState(null); // { stockId, subId }
   const [restockQty, setRestockQty] = useState("");
+  const [editSubId, setEditSubId] = useState(null); // { stockId, subId }
+  const [editSubQty, setEditSubQty] = useState("");
+  const [editStockId, setEditStockId] = useState(null);
+  const [editStockQty, setEditStockQty] = useState("");
+  const [showShareMenu, setShowShareMenu] = useState(false);
+  const [restockLog, setRestockLog] = useState(() => {
+    try { const s = localStorage.getItem("pos_restock_log"); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  const [expenses, setExpenses] = useState(() => {
+    try { const s = localStorage.getItem("pos_expenses"); return s ? JSON.parse(s) : []; } catch { return []; }
+  });
+  const [newExpenseCat, setNewExpenseCat] = useState("Coal");
+  const [newExpenseDesc, setNewExpenseDesc] = useState("");
+  const [newExpenseAmt, setNewExpenseAmt] = useState("");
+  const [editStockCost, setEditStockCost] = useState("");
+  const [editSubCost, setEditSubCost] = useState("");
+  const [confirmLogout, setConfirmLogout] = useState(false);
   const listRef = useRef(null);
   const undoTimer = useRef(null);
 
@@ -146,6 +164,14 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("pos_stock", JSON.stringify(stock));
   }, [stock]);
+
+  useEffect(() => {
+    localStorage.setItem("pos_restock_log", JSON.stringify(restockLog));
+  }, [restockLog]);
+
+  useEffect(() => {
+    localStorage.setItem("pos_expenses", JSON.stringify(expenses));
+  }, [expenses]);
 
 
   const confirmOrder = useCallback(() => {
@@ -343,13 +369,27 @@ export default function App() {
               <div style={styles.terminalMeta}>{todayLabel} · Terminal 01</div>
             </div>
           </div>
-          <button onClick={() => setActiveUser(null)} style={styles.activeUserChip}>
-            <div style={styles.activeUserAvatar}>{activeUser.name.charAt(0).toUpperCase()}</div>
-            <div style={styles.activeUserInfo}>
-              <span style={styles.activeUserName}>{activeUser.name}</span>
-              <span style={styles.activeUserRoleLabel}>{activeUser.role} · Switch</span>
+          {confirmLogout ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Switch user?</span>
+              <button
+                onClick={() => { setActiveUser(null); setConfirmLogout(false); }}
+                style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#0f172a", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
+              >Yes</button>
+              <button
+                onClick={() => setConfirmLogout(false)}
+                style={{ fontSize: 12, fontWeight: 800, color: "#64748b", background: "rgba(0,0,0,0.06)", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
+              >No</button>
             </div>
-          </button>
+          ) : (
+            <button onClick={() => setConfirmLogout(true)} style={styles.activeUserChip}>
+              <div style={styles.activeUserAvatar}>{activeUser.name.charAt(0).toUpperCase()}</div>
+              <div style={styles.activeUserInfo}>
+                <span style={styles.activeUserName}>{activeUser.name}</span>
+                <span style={styles.activeUserRoleLabel}>{activeUser.role} · Switch</span>
+              </div>
+            </button>
+          )}
         </div>
 
         <main style={styles.mainContent}>
@@ -482,7 +522,7 @@ export default function App() {
                     </span>
                     <span style={styles.orderMeta}>
                       <strong>{o.flavour.name}</strong>
-                      <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · delivered {formatTime(o.deliveredAt)}</small>
+                      <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · ordered {formatTime(o.time)} · delivered {formatTime(o.deliveredAt)}</small>
                     </span>
                   </div>
                 ))}
@@ -494,6 +534,50 @@ export default function App() {
             const newPipeOrders = orders.filter((o) => o.type === "full");
             const refillOrders = orders.filter((o) => o.type === "refill");
             const maxFlavourCount = Math.max(...FLAVOURS.map((f) => flavourCounts[f.id] || 0), 1);
+
+            // KPIs
+            const totalOrders = orders.length;
+            const avgOrderValue = totalOrders > 0 ? totals.gross / totalOrders : 0;
+            const refillRate = totalOrders > 0 ? Math.round((refillOrders.length / totalOrders) * 100) : 0;
+            const cardPct = totals.gross > 0 ? Math.round((totals.card / totals.gross) * 100) : 0;
+            const cashPct = 100 - cardPct;
+
+            const sortedFlavours = [...FLAVOURS].sort((a, b) => (flavourCounts[b.id] || 0) - (flavourCounts[a.id] || 0));
+            const topFlavour = totalOrders > 0 ? sortedFlavours[0] : null;
+            const topFlavourCount = topFlavour ? (flavourCounts[topFlavour.id] || 0) : 0;
+            const leastFlavour = totalOrders > 0 ? sortedFlavours[sortedFlavours.length - 1] : null;
+            const leastFlavourCount = leastFlavour ? (flavourCounts[leastFlavour.id] || 0) : 0;
+            const activeFlavours = FLAVOURS.filter(f => (flavourCounts[f.id] || 0) > 0).length;
+
+            const sessionMins = (() => {
+              if (orders.length < 2) return null;
+              const times = orders.map(o => new Date(o.time).getTime());
+              return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
+            })();
+            const ordersPerHour = sessionMins > 0 ? ((totalOrders / sessionMins) * 60).toFixed(1) : null;
+            const revenuePerHour = sessionMins > 0 ? Math.round((totals.gross / sessionMins) * 60) : null;
+
+            const deliveryRate = totalOrders > 0 ? Math.round((deliveredOrders.length / totalOrders) * 100) : 0;
+
+            // Status helpers
+            const refillStatus = refillRate >= 40
+              ? { label: "Strong", color: "#16a34a", bg: "#dcfce7", tip: "Customers are staying & coming back" }
+              : refillRate >= 20
+              ? { label: "Average", color: "#b45309", bg: "#fef9c3", tip: "Encourage more refills" }
+              : { label: "Low", color: "#dc2626", bg: "#fee2e2", tip: "Promote refill packages" };
+
+            const avgStatus = avgOrderValue >= prices.full * 0.9
+              ? { label: "Strong", color: "#16a34a", bg: "#dcfce7", tip: "Mostly new pipes — great revenue" }
+              : avgOrderValue >= (prices.full + prices.refill) / 2
+              ? { label: "Moderate", color: "#b45309", bg: "#fef9c3", tip: "Balance of pipes & refills" }
+              : { label: "Low", color: "#dc2626", bg: "#fee2e2", tip: "Mostly refills — push new pipes" };
+
+            const paceStatus = ordersPerHour >= 10
+              ? { label: "Busy", color: "#16a34a", bg: "#dcfce7" }
+              : ordersPerHour >= 5
+              ? { label: "Steady", color: "#b45309", bg: "#fef9c3" }
+              : { label: "Slow", color: "#dc2626", bg: "#fee2e2" };
+
             return (
             <div style={styles.settingsPanel}>
               <div style={styles.settingsBar}>
@@ -503,114 +587,400 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={styles.settingsGrid}>
-                <div style={styles.settingCard}>
-                  <span style={styles.statLabel}>Active Orders</span>
-                  <strong style={styles.settingValue}>{currentOrders.length}</strong>
-                </div>
-                <div style={styles.settingCard}>
-                  <span style={styles.statLabel}>Delivered</span>
-                  <strong style={styles.settingValue}>{deliveredOrders.length}</strong>
-                </div>
-              </div>
-
-              {/* Divider */}
-              <div style={styles.summaryDivider}>
-                <div style={styles.summaryDividerLine} />
-                <span style={styles.summaryDividerLabel}>Shift Summary</span>
-                <div style={styles.summaryDividerLine} />
-              </div>
-
-              {/* Revenue hero */}
-              <div style={styles.revenueHero}>
-                <div style={styles.revenueHeroTop}>
-                  <div>
-                    <div style={styles.revenueHeroLabel}>Total Revenue</div>
-                    <div style={styles.revenueHeroAmount}>{formatCurrency(totals.gross)}</div>
-                  </div>
-                  <div style={styles.revenueHeroMeta}>{orders.length} {orders.length === 1 ? "order" : "orders"} · {todayLabel}</div>
-                </div>
-                <div style={styles.revenueStatRow}>
-                  <div style={styles.revenueStat}>
-                    <span style={styles.revenueStatIcon}>💳</span>
-                    <span style={styles.revenueStatLabel}>Card</span>
-                    <span style={styles.revenueStatValue}>{formatCurrency(totals.card)}</span>
-                  </div>
-                  <div style={styles.revenueStatDivider} />
-                  <div style={styles.revenueStat}>
-                    <span style={styles.revenueStatIcon}>💵</span>
-                    <span style={styles.revenueStatLabel}>Cash</span>
-                    <span style={styles.revenueStatValue}>{formatCurrency(totals.cash)}</span>
-                  </div>
-                  <div style={styles.revenueStatDivider} />
-                  <div style={styles.revenueStat}>
-                    <span style={styles.revenueStatIcon}>🪈</span>
-                    <span style={styles.revenueStatLabel}>Pipes</span>
-                    <span style={styles.revenueStatValue}>{newPipeOrders.length}</span>
-                  </div>
-                  <div style={styles.revenueStatDivider} />
-                  <div style={styles.revenueStat}>
-                    <span style={styles.revenueStatIcon}>🔄</span>
-                    <span style={styles.revenueStatLabel}>Refills</span>
-                    <span style={styles.revenueStatValue}>{refillOrders.length}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Flavour breakdown with bars */}
-              <div style={styles.flavourBreakdown}>
-                <div style={styles.flavourBreakdownHeader}>By Flavour</div>
-                {FLAVOURS.map((f) => {
-                  const count = flavourCounts[f.id] || 0;
-                  return (
-                    <div key={f.id} style={styles.flavourBreakdownRow}>
-                      <span style={styles.flavourBreakdownIcon}>{f.icon}</span>
-                      <span style={styles.flavourBreakdownName}>{f.name}</span>
-                      <div style={styles.flavourBarTrack}>
-                        <div style={{ ...styles.flavourBar, width: `${(count / maxFlavourCount) * 100}%`, background: f.color }} />
-                      </div>
-                      <span style={{ ...styles.flavourBreakdownCount, color: count > 0 ? f.color : "#cbd5e1" }}>{count}</span>
-                    </div>
-                  );
-                })}
-              </div>
-
-              {/* Full order log */}
-              {orders.length > 0 && (
-                <div style={styles.orderLogSection}>
-                  <div style={styles.orderLogHeader}>Full Order Log</div>
-                  <div style={styles.orderLog}>
-                    {orders.map((o, i) => (
-                      <div key={o.id} style={styles.orderLogRow}>
-                        <span style={styles.orderLogIndex}>{String(i + 1).padStart(2, "0")}</span>
-                        <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color, fontSize: 11, padding: "3px 7px" }}>
-                          {o.flavour.icon} {o.flavour.short}
-                        </span>
-                        <span style={styles.orderLogMeta}>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "💳" : "💵"}</span>
-                        <span style={styles.orderLogTime}>{formatTime(o.time)}</span>
-                        <span style={styles.orderLogPrice}>{formatCurrency(o.price)}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-              )}
-
-              <button
-                onClick={() => {
-                  const text = orders.map((o, i) => `${i + 1}. ${o.flavour.name} R${o.price} [${formatTime(o.time)}] ${o.payment} ${o.type}`).join("\n");
-                  navigator.clipboard?.writeText(`Shisha Orders (${orders.length})\n${text}\n\nGross: R${totals.gross} | Card: R${totals.card} | Cash: R${totals.cash}`);
-                }}
-                style={styles.copyBtn}
-              >
-                Copy Shift Report
+              {/* ── KPIs ── */}
+              <button onClick={() => setKpisCollapsed(c => !c)} style={styles.collapsibleHeader}>
+                <span>📊 KPIs</span>
+                <span style={styles.collapseChevron}>{kpisCollapsed ? "▶" : "▼"}</span>
               </button>
+
+              {!kpisCollapsed && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+
+                {/* ── Revenue at a glance (full width) ── */}
+                <div style={styles.revenueHero}>
+                  <div style={styles.revenueHeroTop}>
+                    <div>
+                      <div style={styles.revenueHeroLabel}>Total Revenue</div>
+                      <div style={styles.revenueHeroAmount}>{formatCurrency(totals.gross)}</div>
+                    </div>
+                    <div style={styles.revenueHeroMeta}>{orders.length} {orders.length === 1 ? "order" : "orders"} · {todayLabel}</div>
+                  </div>
+                  <div style={styles.revenueStatRow}>
+                    <div style={styles.revenueStat}>
+                      <span style={styles.revenueStatIcon}>💳</span>
+                      <span style={styles.revenueStatLabel}>Card</span>
+                      <span style={styles.revenueStatValue}>{formatCurrency(totals.card)}</span>
+                    </div>
+                    <div style={styles.revenueStatDivider} />
+                    <div style={styles.revenueStat}>
+                      <span style={styles.revenueStatIcon}>💵</span>
+                      <span style={styles.revenueStatLabel}>Cash</span>
+                      <span style={styles.revenueStatValue}>{formatCurrency(totals.cash)}</span>
+                    </div>
+                    <div style={styles.revenueStatDivider} />
+                    <div style={styles.revenueStat}>
+                      <span style={styles.revenueStatIcon}>🪈</span>
+                      <span style={styles.revenueStatLabel}>Pipes</span>
+                      <span style={styles.revenueStatValue}>{newPipeOrders.length}</span>
+                    </div>
+                    <div style={styles.revenueStatDivider} />
+                    <div style={styles.revenueStat}>
+                      <span style={styles.revenueStatIcon}>🔄</span>
+                      <span style={styles.revenueStatLabel}>Refills</span>
+                      <span style={styles.revenueStatValue}>{refillOrders.length}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* ── Row: Avg Value + Refill Rate ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div style={styles.kpiCard}>
+                    <span style={styles.kpiLabel}>Avg Order Value</span>
+                    <span style={styles.kpiValue}>{totalOrders > 0 ? formatCurrency(Math.round(avgOrderValue)) : "—"}</span>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: avgStatus.color, background: avgStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{avgStatus.label}</span>
+                    <span style={styles.kpiSub}>{avgStatus.tip}</span>
+                  </div>
+                  <div style={styles.kpiCard}>
+                    <span style={styles.kpiLabel}>Refill Rate</span>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+                      <span style={styles.kpiValue}>{refillRate}%</span>
+                    </div>
+                    <div style={{ height: 4, borderRadius: 99, background: "rgba(0,0,0,0.07)", overflow: "hidden", marginTop: 4 }}>
+                      <div style={{ height: "100%", width: `${refillRate}%`, background: refillStatus.color, borderRadius: 99 }} />
+                    </div>
+                    <span style={{ fontSize: 10, fontWeight: 800, color: refillStatus.color, background: refillStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 4 }}>{refillStatus.label}</span>
+                    <span style={styles.kpiSub}>{refillStatus.tip}</span>
+                  </div>
+                </div>
+
+                {/* ── Row: Pace + Active ── */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                  <div style={styles.kpiCard}>
+                    <span style={styles.kpiLabel}>Session Pace</span>
+                    <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
+                      <span style={styles.kpiValue}>{ordersPerHour ?? "—"}</span>
+                      {ordersPerHour && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>/ hr</span>}
+                    </div>
+                    {ordersPerHour && <span style={{ fontSize: 10, fontWeight: 800, color: paceStatus.color, background: paceStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{paceStatus.label}</span>}
+                    <span style={styles.kpiSub}>{sessionMins ? `${sessionMins} min session · ${totalOrders} orders` : "Not enough data yet"}</span>
+                  </div>
+                  <div style={{ ...styles.kpiCard, background: currentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: currentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
+                    <span style={styles.kpiLabel}>Active Now</span>
+                    <span style={{ ...styles.kpiValue, color: currentOrders.length > 0 ? "#16a34a" : "#94a3b8" }}>{currentOrders.length}</span>
+                    <span style={styles.kpiSub}>{deliveryRate}% delivered · {deliveredOrders.length} done</span>
+                  </div>
+                </div>
+
+                {/* ── Flavour performance (full width) ── */}
+                <div style={styles.kpiCard}>
+                  <span style={styles.kpiLabel}>Flavour Performance</span>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 4 }}>
+                    <div>
+                      <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>🏆 Best seller</span>
+                      {topFlavour && topFlavourCount > 0 ? (
+                        <div style={{ fontSize: 14, fontWeight: 900, color: topFlavour.color, marginTop: 2 }}>{topFlavour.icon} {topFlavour.name} · {topFlavourCount}×</div>
+                      ) : <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>No orders yet</div>}
+                    </div>
+                    {leastFlavour && leastFlavourCount === 0 && totalOrders > 0 && (
+                      <div style={{ textAlign: "right" }}>
+                        <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>💡 Push this</span>
+                        <div style={{ fontSize: 14, fontWeight: 900, color: leastFlavour.color, marginTop: 2 }}>{leastFlavour.icon} {leastFlavour.name}</div>
+                      </div>
+                    )}
+                  </div>
+                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                    {sortedFlavours.map(f => {
+                      const count = flavourCounts[f.id] || 0;
+                      const pct = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
+                      return (
+                        <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                          <span style={{ fontSize: 11, width: 16 }}>{f.icon}</span>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: "#334155", width: 72, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
+                          <div style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: f.color, borderRadius: 99, transition: "width 0.4s ease" }} />
+                          </div>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: count > 0 ? f.color : "#cbd5e1", minWidth: 18, textAlign: "right" }}>{count}</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                  <span style={{ ...styles.kpiSub, marginTop: 6 }}>{activeFlavours} of {FLAVOURS.length} flavours ordered this session</span>
+                </div>
+
+              </div>}
+
+
+              {/* ── Accounting ── */}
+              <button onClick={() => setAccountingCollapsed(c => !c)} style={styles.collapsibleHeader}>
+                <span>💰 Accounting</span>
+                <span style={styles.collapseChevron}>{accountingCollapsed ? "▶" : "▼"}</span>
+              </button>
+              {!accountingCollapsed && (() => {
+                // Stock items as expense options — consumables first, then equipment
+                // Flavour sub-items expanded individually
+                const flavourItem = stock.find(i => i.name === "Flavour");
+                const stockExpenseOptions = [
+                  ...stock.filter(i => i.category === "consumable" && !i.subItems).map(i => ({
+                    key: i.name, label: i.name, icon: "📦", color: "#0369a1", bg: "#eff6ff",
+                  })),
+                  ...(flavourItem?.subItems ?? []).map(s => {
+                    const fl = FLAVOURS.find(f => f.id === s.id);
+                    return { key: `Flavour-${s.id}`, label: `${fl?.name ?? s.name}`, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc" };
+                  }),
+                  ...stock.filter(i => i.category === "equipment").map(i => ({
+                    key: i.name, label: i.name, icon: "🛠️", color: "#334155", bg: "#f1f5f9",
+                  })),
+                ];
+                const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+                const profit = totals.gross - totalExpenses;
+                const margin = totals.gross > 0 ? Math.round((profit / totals.gross) * 100) : 0;
+                const profitColor = profit >= 0 ? "#16a34a" : "#dc2626";
+
+                const buildAccountingReport = () => {
+                  const lines = [`Accounting Report · ${todayLabel}`, ""];
+                  lines.push(`REVENUE`);
+                  lines.push(`  Card:  R${totals.card}`);
+                  lines.push(`  Cash:  R${totals.cash}`);
+                  lines.push(`  Total: R${totals.gross}`);
+                  lines.push("");
+                  lines.push(`EXPENSES`);
+                  expenses.forEach(e => {
+                    const opt = stockExpenseOptions.find(o => o.key === e.category);
+                    lines.push(`  ${opt?.icon ?? "📦"} ${opt?.label ?? e.category}${e.qty ? ` ×${e.qty}` : ""}: R${e.amount}`);
+                  });
+                  lines.push(`  Total: R${totalExpenses}`);
+                  lines.push("");
+                  lines.push(`NET ${profit >= 0 ? "PROFIT" : "LOSS"}: R${Math.abs(profit)} (${margin}% margin)`);
+                  return lines.join("\n");
+                };
+
+                const commitExpense = () => {
+                  const amt = Number(newExpenseAmt);
+                  const qty = Number(newExpenseDesc) || 0;
+                  if (amt <= 0) return;
+                  setExpenses(prev => [...prev, { id: Date.now(), category: newExpenseCat, qty: qty || null, amount: amt, time: new Date().toISOString() }]);
+                  // Auto-increment stock if a qty was given for a stock item
+                  if (qty > 0) {
+                    if (newExpenseCat.startsWith("Flavour-")) {
+                      const subId = newExpenseCat.replace("Flavour-", "");
+                      setStock(prev => prev.map(i => i.name === "Flavour" && i.subItems
+                        ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: s.quantity + qty } : s) }
+                        : i
+                      ));
+                    } else {
+                      const packDef = RESTOCK_PACK[newExpenseCat];
+                      setStock(prev => prev.map(i => i.name === newExpenseCat
+                        ? { ...i, quantity: i.quantity + (packDef ? qty * packDef.size : qty) }
+                        : i
+                      ));
+                    }
+                  }
+                  setNewExpenseDesc(""); setNewExpenseAmt("");
+                };
+
+                return (
+                  <>
+                    <div style={styles.summaryDivider}>
+                      <div style={styles.summaryDividerLine} />
+                      <span style={styles.summaryDividerLabel}>Accounting</span>
+                      <div style={styles.summaryDividerLine} />
+                    </div>
+
+                    {/* P&L Card */}
+                    <div style={{ ...styles.kpiCard, gap: 0 }}>
+                      <span style={styles.kpiLabel}>Profit & Loss</span>
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Revenue</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#16a34a" }}>+ {formatCurrency(totals.gross)}</span>
+                        </div>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Expenses</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#dc2626" }}>− {formatCurrency(totalExpenses)}</span>
+                        </div>
+                        <div style={{ height: 1, background: "rgba(0,0,0,0.08)", margin: "4px 0" }} />
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>Net {profit >= 0 ? "Profit" : "Loss"}</span>
+                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: profitColor, background: profit >= 0 ? "#dcfce7" : "#fee2e2", padding: "2px 8px", borderRadius: 99 }}>{margin}%</span>
+                            <span style={{ fontSize: 18, fontWeight: 900, color: profitColor }}>{profit >= 0 ? "" : "−"}{formatCurrency(Math.abs(profit))}</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Expense entries */}
+                    <button onClick={() => setExpensesCollapsed(c => !c)} style={{ ...styles.collapsibleHeader, marginTop: 4 }}>
+                      <span>Expenses {expenses.length > 0 ? `(${expenses.length})` : ""}</span>
+                      <span style={styles.collapseChevron}>{expensesCollapsed ? "▶" : "▼"}</span>
+                    </button>
+                    {!expensesCollapsed && expenses.length > 0 && (
+                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{expenses.length} {expenses.length === 1 ? "entry" : "entries"}</span>
+                          <button onClick={() => setExpenses([])} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
+                        </div>
+                        {[...expenses].reverse().map(exp => {
+                          const extraOpts = { Wages: { icon: "👥", label: "Wages", color: "#7c3aed", bg: "#f5f3ff" }, Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" } };
+                          const opt = stockExpenseOptions.find(o => o.key === exp.category) ?? extraOpts[exp.category] ?? { icon: "📦", label: exp.category, color: "#64748b", bg: "#f8fafc" };
+                          return (
+                            <div key={exp.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
+                              <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
+                              {exp.qty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>×{exp.qty}</span>}
+                              <span style={{ fontSize: 13, fontWeight: 900, color: "#dc2626", marginLeft: "auto", whiteSpace: "nowrap" }}>−{formatCurrency(exp.amount)}</span>
+                              <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(exp.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                              <button onClick={() => setExpenses(prev => prev.filter(e => e.id !== exp.id))} style={{ fontSize: 14, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>×</button>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
+
+                    {/* Add expense */}
+                    {!expensesCollapsed && (() => {
+                      const isNonStock = ["Wages", "Transport"].includes(newExpenseCat);
+                      const expPack = RESTOCK_PACK[newExpenseCat];
+                      const expOpt = stockExpenseOptions.find(o => o.key === newExpenseCat) ?? EXTRA_EXPENSE_OPTS[newExpenseCat];
+                      const qtyNum = Number(newExpenseDesc) || 0;
+                      const qtyUnit = expPack ? expPack.plural : newExpenseCat.startsWith("Flavour-") ? "boxes" : "units";
+                      const stockPreview = (() => {
+                        if (isNonStock || !qtyNum) return null;
+                        if (expPack) return `+${qtyNum * expPack.size} ${expPack.unit === "box" ? "pieces" : "pieces"} to stock`;
+                        if (newExpenseCat.startsWith("Flavour-")) return `+${qtyNum} box${qtyNum !== 1 ? "es" : ""} to stock`;
+                        return `+${qtyNum} ${qtyUnit} to stock`;
+                      })();
+                      return (
+                        <div style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                          <select
+                            value={newExpenseCat}
+                            onChange={e => { setNewExpenseCat(e.target.value); setNewExpenseDesc(""); }}
+                            style={{ ...styles.stockSelectInput, margin: 0 }}
+                          >
+                            <optgroup label="──────────">
+                              <option value="Wages">👥 Wages</option>
+                              <option value="Transport">🚗 Transport</option>
+                            </optgroup>
+                            <optgroup label="🔥 Consumables">
+                              {stockExpenseOptions.filter(o => !o.key.startsWith("Flavour-") && stock.find(i => i.name === o.key)?.category === "consumable").map(o =>
+                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
+                              )}
+                            </optgroup>
+                            <optgroup label="🌿 Flavour">
+                              {stockExpenseOptions.filter(o => o.key.startsWith("Flavour-")).map(o =>
+                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
+                              )}
+                            </optgroup>
+                            <optgroup label="🛠️ Equipment">
+                              {stockExpenseOptions.filter(o => stock.find(i => i.name === o.key)?.category === "equipment").map(o =>
+                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
+                              )}
+                            </optgroup>
+                          </select>
+
+                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                            {!isNonStock && (
+                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                                <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "capitalize" }}>{qtyUnit}</span>
+                                <div style={{ display: "flex", alignItems: "center", gap: 0, border: "1px solid rgba(203,213,225,0.6)", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                                  <button
+                                    onClick={() => setNewExpenseDesc(v => String(Math.max(0, (Number(v) || 0) - 1)))}
+                                    style={{ padding: "8px 12px", background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
+                                  >−</button>
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    value={newExpenseDesc}
+                                    onChange={e => setNewExpenseDesc(e.target.value)}
+                                    style={{ width: 40, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 800, color: "#0f172a", background: "transparent", padding: "8px 0" }}
+                                    placeholder="0"
+                                  />
+                                  <button
+                                    onClick={() => setNewExpenseDesc(v => String((Number(v) || 0) + 1))}
+                                    style={{ padding: "8px 12px", background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
+                                  >+</button>
+                                </div>
+                              </div>
+                            )}
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>Cost (R)</span>
+                              <input
+                                type="number"
+                                min="0"
+                                placeholder="0"
+                                value={newExpenseAmt}
+                                onChange={e => setNewExpenseAmt(e.target.value)}
+                                onKeyDown={e => { if (e.key === "Enter") commitExpense(); }}
+                                style={{ ...styles.userNameInput, margin: 0 }}
+                              />
+                            </div>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
+                              <span style={{ fontSize: 10, fontWeight: 700, color: "transparent" }}>·</span>
+                              <button onClick={commitExpense} style={{ ...styles.addUserBtn, alignSelf: "flex-end" }}>Add</button>
+                            </div>
+                          </div>
+
+                          {stockPreview && (
+                            <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ {stockPreview}</span>
+                          )}
+                        </div>
+                      );
+                    })()}
+
+                    <button
+                      onClick={async () => {
+                        const text = buildAccountingReport();
+                        if (navigator.share) { try { await navigator.share({ title: "Accounting Report", text }); return; } catch {} }
+                        navigator.clipboard?.writeText(text);
+                      }}
+                      style={styles.copyBtn}
+                    >
+                      Share Accounting Report
+                    </button>
+                  </>
+                );
+              })()}
             </div>
             );
+
           })()}
           {visibleTab === "stock" && (() => {
             const consumables = stock.filter(i => i.category === "consumable");
             const equipment   = stock.filter(i => i.category === "equipment");
-            const lowCount    = stock.filter(i => i.quantity <= i.lowThreshold).length;
+
+            // Flatten all trackable items (including flavour sub-items) for summary
+            const allFlatItems = stock.flatMap(i => {
+              if (i.subItems) return i.subItems.map(s => ({ ...s, lowThreshold: i.lowThreshold, unit: "boxes", parentName: i.name }));
+              return [i];
+            });
+            const outItems = allFlatItems.filter(i => i.quantity === 0);
+            const lowItems = allFlatItems.filter(i => i.quantity > 0 && i.quantity <= i.lowThreshold);
+            const lowCount = outItems.length + lowItems.length;
+
+            const buildStockReport = () => {
+              const lines = [`Stock Report · ${todayLabel}`, ""];
+              stock.forEach(item => {
+                if (item.subItems) {
+                  lines.push(`${item.name}:`);
+                  item.subItems.forEach(s => {
+                    const perSale = FLAVOUR_PER_SALE[s.id];
+                    const denom = perSale ? Math.round((1 / perSale) * 10) / 10 : null;
+                    const qty = Math.round(s.quantity * 1000) / 1000;
+                    const whole = Math.floor(qty);
+                    const openSales = denom ? Math.round((qty - whole) * denom * 10) / 10 : null;
+                    const openLabel = openSales !== null && openSales > 0
+                      ? ` + ${Number.isInteger(openSales) ? openSales : openSales.toFixed(1)}/${denom} open`
+                      : "";
+                    const flag = s.quantity === 0 ? " ❌ OUT" : s.quantity <= item.lowThreshold ? " ⚠ LOW" : "";
+                    lines.push(`  ${s.icon} ${s.name}: ${whole > 0 ? `${whole} box${whole !== 1 ? "es" : ""}` : ""}${openLabel}${flag}`);
+                  });
+                } else {
+                  const pack = RESTOCK_PACK[item.name];
+                  const packInfo = pack ? ` (${Math.floor(item.quantity / pack.size)} ${pack.plural} + ${item.quantity % pack.size} pcs)` : "";
+                  const flag = item.quantity === 0 ? " ❌ OUT" : item.quantity <= item.lowThreshold ? " ⚠ LOW" : "";
+                  lines.push(`${item.name}: ${item.quantity} ${item.unit}${packInfo}${flag}`);
+                }
+              });
+              return lines.join("\n");
+            };
 
             const adjustQty = (id, delta) =>
               setStock(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i));
@@ -618,6 +988,11 @@ export default function App() {
             const adjustSubQty = (stockId, subId, delta) =>
               setStock(prev => prev.map(i => i.id === stockId
                 ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: Math.max(0, s.quantity + delta) } : s) }
+                : i));
+
+            const setSubQtyAbsolute = (stockId, subId, value) =>
+              setStock(prev => prev.map(i => i.id === stockId
+                ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: Math.max(0, value) } : s) }
                 : i));
 
             const toggleStockExpand = (id) => setExpandedStockIds(prev => {
@@ -630,8 +1005,39 @@ export default function App() {
                 const target = stock.find(i => i.id === id);
                 const pack = target ? RESTOCK_PACK[target.name] : null;
                 adjustQty(id, pack ? n * pack.size : n);
+                setRestockLog(prev => [...prev, {
+                  id: Date.now(),
+                  name: target?.name ?? "Item",
+                  icon: null,
+                  color: "#334155",
+                  bg: "#f1f5f9",
+                  qty: n,
+                  unit: pack ? pack.plural : target?.unit ?? "units",
+                  pcs: pack ? n * pack.size : null,
+                  time: new Date().toISOString(),
+                }]);
               }
               setRestockId(null); setRestockQty("");
+            };
+
+            const confirmSubRestock = (stockId, subId) => {
+              const n = Number(restockQty);
+              if (n > 0) {
+                adjustSubQty(stockId, subId, n);
+                const flavour = FLAVOURS.find(f => f.id === subId);
+                setRestockLog(prev => [...prev, {
+                  id: Date.now(),
+                  name: flavour?.name ?? subId,
+                  icon: flavour?.icon ?? null,
+                  color: flavour?.color ?? "#334155",
+                  bg: flavour?.bg ?? "#f1f5f9",
+                  qty: n,
+                  unit: n === 1 ? "box" : "boxes",
+                  pcs: null,
+                  time: new Date().toISOString(),
+                }]);
+              }
+              setRestockSubId(null); setRestockQty("");
             };
 
             const renderItem = (item) => {
@@ -654,7 +1060,6 @@ export default function App() {
                         </div>
                       </div>
                       <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginRight: 4 }}>{isOpen ? "▲ Hide" : "▼ Show"}</span>
-                      <button onClick={e => { e.stopPropagation(); setStock(prev => prev.filter(i => i.id !== item.id)); }} style={styles.userDeleteBtn}>×</button>
                     </div>
                     {isOpen && (
                       <div style={styles.subItemList}>
@@ -666,30 +1071,119 @@ export default function App() {
                               <span style={{ ...styles.subItemTag, background: f.bg, color: f.color }}>{f.icon} {f.name}</span>
                               {fOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca", fontSize: 9 }}>Out</span>}
                               {fLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", borderColor: "#fde68a", fontSize: 9 }}>Low</span>}
-                              <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                                {(() => {
-                                  const perSale = FLAVOUR_PER_SALE[f.id];
-                                  if (!perSale) return <span style={{ fontSize: 12, color: "#94a3b8" }}>{f.quantity.toFixed(2)} bx</span>;
-                                  const denom = Math.round((1 / perSale) * 10) / 10;
-                                  const qty = Math.round(f.quantity * 1000) / 1000;
-                                  const wholeBoxes = Math.floor(qty);
-                                  const servingsInOpen = Math.round((qty - wholeBoxes) * denom * 10) / 10;
-                                  const openLabel = Number.isInteger(servingsInOpen) ? String(servingsInOpen) : servingsInOpen.toFixed(1);
-                                  if (qty === 0) return <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>–</span>;
-                                  return <>
-                                    {wholeBoxes > 0 && (
-                                      <span style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", background: "rgba(15,23,42,0.07)", padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                        📦 {wholeBoxes} {wholeBoxes === 1 ? "box" : "boxes"}
-                                      </span>
-                                    )}
-                                    {servingsInOpen > 0 && (
-                                      <span style={{ fontSize: 11, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                        {openLabel}/{denom} open
-                                      </span>
-                                    )}
-                                  </>;
-                                })()}
-                              </div>
+
+                              {restockSubId?.stockId === item.id && restockSubId?.subId === f.id ? (
+                                <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                    <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>Boxes:</span>
+                                    <input
+                                      type="number"
+                                      autoFocus
+                                      min="1"
+                                      value={restockQty}
+                                      onChange={e => setRestockQty(e.target.value)}
+                                      onKeyDown={e => {
+                                        if (e.key === "Enter") confirmSubRestock(item.id, f.id);
+                                        if (e.key === "Escape") { setRestockSubId(null); setRestockQty(""); }
+                                      }}
+                                      style={{ ...styles.restockInput, width: 52 }}
+                                      placeholder="0"
+                                    />
+                                    <button onClick={() => confirmSubRestock(item.id, f.id)} style={styles.restockConfirmBtn}>✓</button>
+                                    <button onClick={() => { setRestockSubId(null); setRestockQty(""); }} style={styles.restockCancelBtn}>✕</button>
+                                  </div>
+                                  {Number(restockQty) > 0 && (
+                                    <span style={{ fontSize: 10, color: f.color, fontWeight: 700 }}>
+                                      + {Number(restockQty)} {Number(restockQty) === 1 ? "box" : "boxes"} added
+                                    </span>
+                                  )}
+                                </div>
+                              ) : (
+                                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                                    {(() => {
+                                      const perSale = FLAVOUR_PER_SALE[f.id];
+                                      if (!perSale) return <span style={{ fontSize: 12, color: "#94a3b8" }}>{f.quantity.toFixed(2)} bx</span>;
+                                      const denom = Math.round((1 / perSale) * 10) / 10;
+                                      const qty = Math.round(f.quantity * 1000) / 1000;
+                                      const wholeBoxes = Math.floor(qty);
+                                      const fraction = qty - wholeBoxes;
+                                      const servingsInOpen = Math.round(fraction * denom * 10) / 10;
+                                      const openLabel = Number.isInteger(servingsInOpen) ? String(servingsInOpen) : servingsInOpen.toFixed(1);
+                                      const isEditing = editSubId?.stockId === item.id && editSubId?.subId === f.id;
+                                      if (qty === 0 && !isEditing) return (
+                                        <span
+                                          onClick={() => { setEditSubId({ stockId: item.id, subId: f.id }); setEditSubQty("0"); }}
+                                          style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, cursor: "pointer" }}
+                                        >–</span>
+                                      );
+                                      return <>
+                                        {isEditing ? (
+                                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
+                                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                                            <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>📦</span>
+                                            <input
+                                              type="number"
+                                              autoFocus
+                                              min="0"
+                                              value={editSubQty}
+                                              onChange={e => setEditSubQty(e.target.value)}
+                                              onKeyDown={e => {
+                                                if (e.key === "Enter") {
+                                                  const n = Number(editSubQty); const cost = Number(editSubCost);
+                                                  if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
+                                                    if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
+                                                  }
+                                                  setEditSubId(null); setEditSubQty(""); setEditSubCost("");
+                                                }
+                                                if (e.key === "Escape") { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }
+                                              }}
+                                              style={{ ...styles.restockInput, width: 48 }}
+                                              placeholder="boxes"
+                                            />
+                                            <input
+                                              type="number"
+                                              min="0"
+                                              value={editSubCost}
+                                              onChange={e => setEditSubCost(e.target.value)}
+                                              style={{ ...styles.restockInput, width: 60 }}
+                                              placeholder="R cost"
+                                            />
+                                            <button
+                                              onClick={() => {
+                                                const n = Number(editSubQty); const cost = Number(editSubCost);
+                                                if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
+                                                  if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
+                                                }
+                                                setEditSubId(null); setEditSubQty(""); setEditSubCost("");
+                                              }}
+                                              style={styles.restockConfirmBtn}
+                                            >✓</button>
+                                            <button onClick={() => { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }} style={styles.restockCancelBtn}>✕</button>
+                                            </div>
+                                            {Number(editSubQty) > 0 && Number(editSubCost) > 0 && (
+                                              <span style={{ fontSize: 10, color: f.color, fontWeight: 700 }}>+{editSubQty} boxes · −R{editSubCost} logged</span>
+                                            )}
+                                          </div>
+                                        ) : (
+                                          <span
+                                            onClick={() => { setEditSubId({ stockId: item.id, subId: f.id }); setEditSubQty(String(wholeBoxes)); }}
+                                            style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", background: "rgba(15,23,42,0.07)", padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap", cursor: "pointer" }}
+                                            title="Tap to edit"
+                                          >
+                                            📦 {wholeBoxes} {wholeBoxes === 1 ? "box" : "boxes"}
+                                          </span>
+                                        )}
+                                        {servingsInOpen > 0 && !isEditing && (
+                                          <span style={{ fontSize: 11, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                                            {openLabel}/{denom} open
+                                          </span>
+                                        )}
+                                      </>;
+                                    })()}
+                                  </div>
+                                </div>
+                              )}
                             </div>
                           );
                         })}
@@ -721,41 +1215,72 @@ export default function App() {
                     </div>
                   </div>
 
-                  {isRestocking ? (
-                    <div style={{ ...styles.restockRow, flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  {editStockId === item.id ? (
+                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
                       <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        <span style={{ ...styles.stockUnit, fontWeight: 700 }}>
-                          {pack ? `${pack.plural[0].toUpperCase()}${pack.plural.slice(1)}:` : "Add:"}
-                        </span>
+                        {pack && <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>{pack.plural[0].toUpperCase() + pack.plural.slice(1)}:</span>}
                         <input
                           type="number"
                           autoFocus
-                          min="1"
-                          value={restockQty}
-                          onChange={e => setRestockQty(e.target.value)}
-                          onKeyDown={e => { if (e.key === "Enter") confirmRestock(item.id); if (e.key === "Escape") { setRestockId(null); setRestockQty(""); } }}
+                          min="0"
+                          value={editStockQty}
+                          onChange={e => setEditStockQty(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") document.getElementById(`cost-${item.id}`)?.focus();
+                            if (e.key === "Escape") { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }
+                          }}
                           style={styles.restockInput}
-                          placeholder="0"
+                          placeholder={pack ? pack.unit : "qty"}
                         />
-                        <button onClick={() => confirmRestock(item.id)} style={styles.restockConfirmBtn}>✓</button>
-                        <button onClick={() => { setRestockId(null); setRestockQty(""); }} style={styles.restockCancelBtn}>✕</button>
+                        <input
+                          id={`cost-${item.id}`}
+                          type="number"
+                          min="0"
+                          value={editStockCost}
+                          onChange={e => setEditStockCost(e.target.value)}
+                          onKeyDown={e => {
+                            if (e.key === "Enter") {
+                              const n = Number(editStockQty); const cost = Number(editStockCost);
+                              if (n >= 0) {
+                                setStock(prev => prev.map(i => i.id === item.id ? { ...i, quantity: pack ? i.quantity + n * pack.size : n } : i));
+                                if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: item.name, qty: n, amount: cost, time: new Date().toISOString() }]);
+                              }
+                              setEditStockId(null); setEditStockQty(""); setEditStockCost("");
+                            }
+                            if (e.key === "Escape") { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }
+                          }}
+                          style={{ ...styles.restockInput, width: 64 }}
+                          placeholder="R cost"
+                        />
+                        <button
+                          onClick={() => {
+                            const n = Number(editStockQty); const cost = Number(editStockCost);
+                            if (n >= 0) {
+                              setStock(prev => prev.map(i => i.id === item.id ? { ...i, quantity: pack ? i.quantity + n * pack.size : n } : i));
+                              if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: item.name, qty: n, amount: cost, time: new Date().toISOString() }]);
+                            }
+                            setEditStockId(null); setEditStockQty(""); setEditStockCost("");
+                          }}
+                          style={styles.restockConfirmBtn}
+                        >✓</button>
+                        <button onClick={() => { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }} style={styles.restockCancelBtn}>✕</button>
                       </div>
-                      {pack && Number(restockQty) > 0 && (
+                      {Number(editStockQty) > 0 && (
                         <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
-                          = {Number(restockQty) * pack.size} {item.unit} added
+                          + {pack ? `${Number(editStockQty) * pack.size} ${item.unit}` : `${editStockQty} ${item.unit}`}
+                          {Number(editStockCost) > 0 ? ` · −R${editStockCost} logged` : ""}
                         </span>
                       )}
                     </div>
                   ) : (
-                    <div style={styles.stockControls}>
-                      <span style={styles.stockQty}>{item.quantity}</span>
-                      <button onClick={() => { setRestockId(item.id); setRestockQty(""); }} style={styles.restockBtn}>
-                        {pack ? `+ ${pack.unit}` : "Restock"}
-                      </button>
-                    </div>
+                    <span
+                      onClick={() => { setEditStockId(item.id); setEditStockQty(""); setEditStockCost(""); }}
+                      style={{ ...styles.stockQty, cursor: "pointer" }}
+                    >
+                      {item.quantity}
+                    </span>
                   )}
 
-                  <button onClick={() => setStock(prev => prev.filter(i => i.id !== item.id))} style={styles.userDeleteBtn}>×</button>
                 </div>
               );
             };
@@ -766,92 +1291,134 @@ export default function App() {
                   <div style={styles.totalLeft}>
                     <span style={styles.totalLabel}>Stock</span>
                     <span style={styles.totalSub}>
-                      {lowCount > 0 ? `⚠ ${lowCount} item${lowCount > 1 ? "s" : ""} running low` : "All items stocked"} · {todayLabel}
+                      {lowCount > 0 ? `⚠ ${lowCount} item${lowCount > 1 ? "s" : ""} need attention` : "All items stocked"} · {todayLabel}
                     </span>
                   </div>
                 </div>
 
                 {consumables.length > 0 && (
                   <>
-                    <div style={styles.stockCategoryHeader}>🔥 Consumables</div>
-                    <div style={styles.stockList}>{consumables.map(renderItem)}</div>
+                    <button onClick={() => setConsumablesCollapsed(c => !c)} style={styles.collapsibleHeader}>
+                      <span>🔥 Consumables <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({consumables.length})</span></span>
+                      <span style={styles.collapseChevron}>{consumablesCollapsed ? "▶" : "▼"}</span>
+                    </button>
+                    {!consumablesCollapsed && <div style={styles.stockList}>{consumables.map(renderItem)}</div>}
                   </>
                 )}
 
                 {equipment.length > 0 && (
                   <>
-                    <div style={styles.stockCategoryHeader}>🛠️ Equipment</div>
-                    <div style={styles.stockList}>{equipment.map(renderItem)}</div>
+                    <button onClick={() => setEquipmentCollapsed(c => !c)} style={styles.collapsibleHeader}>
+                      <span>🛠️ Equipment <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({equipment.length})</span></span>
+                      <span style={styles.collapseChevron}>{equipmentCollapsed ? "▶" : "▼"}</span>
+                    </button>
+                    {!equipmentCollapsed && <div style={styles.stockList}>{equipment.map(renderItem)}</div>}
                   </>
                 )}
 
-                <div style={styles.settingsSectionLabel}>Add Item</div>
 
-                {/* Preset dropdown */}
-                <select
-                  value={newStockName}
-                  onChange={e => {
-                    const val = e.target.value;
-                    setNewStockName(val);
-                    if (val && val !== "__custom__") {
-                      const preset = STOCK_PRESETS.find(p => p.name === val);
-                      if (preset) {
-                        setNewStockCategory(preset.category);
-                        setNewStockUnit(preset.unit);
-                        setNewStockThreshold(String(preset.lowThreshold));
-                      }
-                    } else if (val === "__custom__") {
-                      setNewStockCategory("consumable");
-                      setNewStockUnit("units");
-                      setNewStockThreshold("");
-                    }
-                  }}
-                  style={styles.stockSelectInput}
-                >
-                  <option value="">— Select an item —</option>
-                  {["consumable", "equipment"].map(cat => {
-                    const items = STOCK_PRESETS.filter(p => p.category === cat && !stock.some(s => s.name === p.name));
-                    if (!items.length) return null;
-                    return (
-                      <optgroup key={cat} label={cat === "consumable" ? "🔥 Consumables" : "🛠️ Equipment"}>
-                        {items.map(p => <option key={p.name} value={p.name}>{p.name}</option>)}
-                      </optgroup>
-                    );
-                  })}
-                  <optgroup label="──────────">
-                    <option value="__custom__">+ Custom item</option>
-                  </optgroup>
-                </select>
+                {/* ── Stock Summary ── */}
+                <button onClick={() => setStockSummaryCollapsed(c => !c)} style={styles.collapsibleHeader}>
+                  <span>📊 Summary</span>
+                  <span style={styles.collapseChevron}>{stockSummaryCollapsed ? "▶" : "▼"}</span>
+                </button>
 
-                {/* Custom name input */}
-                {newStockName === "__custom__" && (
-                  <input
-                    type="text"
-                    placeholder="Enter custom item name"
-                    value={newStockCustomName}
-                    onChange={e => setNewStockCustomName(e.target.value)}
-                    style={styles.userNameInput}
-                    autoFocus
-                  />
-                )}
+                {!stockSummaryCollapsed && (
+                  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 2px" }}>
 
-                {/* Qty / unit / threshold / add — shown once a preset or custom name exists */}
-                {(newStockName && newStockName !== "__custom__") || (newStockName === "__custom__" && newStockCustomName.trim()) ? (
-                  <div style={styles.stockAddForm}>
-                    <input type="number" min="0" placeholder="Qty" value={newStockQty} onChange={e => setNewStockQty(e.target.value)} style={{ ...styles.userNameInput, width: 72, flex: "none" }} />
-                    <input type="text" placeholder="Unit" value={newStockUnit} onChange={e => setNewStockUnit(e.target.value)} style={{ ...styles.userNameInput, width: 90, flex: "none" }} />
-                    <input type="number" min="0" placeholder="Low at" value={newStockThreshold} onChange={e => setNewStockThreshold(e.target.value)} style={{ ...styles.userNameInput, width: 72, flex: "none" }} />
-                    <button
-                      onClick={() => {
-                        const name = newStockName === "__custom__" ? newStockCustomName.trim() : newStockName;
-                        if (!name) return;
-                        setStock(prev => [...prev, { id: Date.now(), name, category: newStockCategory, quantity: Number(newStockQty) || 0, unit: newStockUnit.trim() || "units", lowThreshold: Number(newStockThreshold) || 0 }]);
-                        setNewStockName(""); setNewStockQty(""); setNewStockUnit("units"); setNewStockThreshold(""); setNewStockCategory("consumable"); setNewStockCustomName("");
-                      }}
-                      style={styles.addUserBtn}
-                    >Add</button>
+                    {(outItems.length > 0 || lowItems.length > 0) && (
+                      <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Needs Attention</span>
+                        {outItems.map(i => (
+                          <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "#fef2f2", padding: "2px 8px", borderRadius: 20 }}>Out of stock</span>
+                          </div>
+                        ))}
+                        {lowItems.map(i => (
+                          <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309", background: "#fffbeb", padding: "2px 8px", borderRadius: 20 }}>Low</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    {outItems.length === 0 && lowItems.length === 0 && (
+                      <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "#16a34a" }}>
+                        ✓ All items are well stocked
+                      </div>
+                    )}
+
+                    {restockLog.length > 0 && (
+                      <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Restock History</span>
+                          <button
+                            onClick={() => { setRestockLog([]); localStorage.removeItem("pos_restock_log"); }}
+                            style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
+                          >
+                            Clear
+                          </button>
+                        </div>
+                        {[...restockLog].reverse().map(entry => (
+                          <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: entry.color, background: entry.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                              {entry.icon ? `${entry.icon} ` : ""}{entry.name}
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                              +{entry.qty} {entry.unit}{entry.pcs ? ` (${entry.pcs} pcs)` : ""}
+                            </span>
+                            <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
+                              {new Date(entry.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+
+                    <div style={{ position: "relative" }}>
+                      <button
+                        onClick={async () => {
+                          const text = buildStockReport();
+                          if (navigator.share) {
+                            try { await navigator.share({ title: "Stock Report", text }); return; } catch {}
+                          }
+                          setShowShareMenu(s => !s);
+                        }}
+                        style={styles.copyBtn}
+                      >
+                        Share Stock Report
+                      </button>
+                      {showShareMenu && (
+                        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, boxShadow: "0 8px 24px rgba(15,23,42,0.12)", overflow: "hidden", zIndex: 10 }}>
+                          <a
+                            href={`https://wa.me/?text=${encodeURIComponent(buildStockReport())}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            onClick={() => setShowShareMenu(false)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                          >
+                            <span style={{ fontSize: 20 }}>💬</span> WhatsApp
+                          </a>
+                          <a
+                            href={`mailto:?subject=Stock Report · ${todayLabel}&body=${encodeURIComponent(buildStockReport())}`}
+                            onClick={() => setShowShareMenu(false)}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                          >
+                            <span style={{ fontSize: 20 }}>✉️</span> Email
+                          </a>
+                          <button
+                            onClick={() => { navigator.clipboard?.writeText(buildStockReport()); setShowShareMenu(false); }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", width: "100%", background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, color: "#0f172a", fontFamily: "inherit" }}
+                          >
+                            <span style={{ fontSize: 20 }}>📋</span> Copy to clipboard
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
-                ) : null}
+                )}
               </div>
             );
           })()}
@@ -2209,6 +2776,37 @@ const styles = {
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.85)",
     borderRadius: 9,
+  },
+  kpiCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    padding: "12px 14px",
+    background: "rgba(255,255,255,0.7)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
+    border: "1px solid rgba(255,255,255,0.85)",
+    borderRadius: 12,
+  },
+  kpiLabel: {
+    fontSize: 10,
+    fontWeight: 800,
+    color: "#64748b",
+    textTransform: "uppercase",
+    letterSpacing: "0.1em",
+  },
+  kpiValue: {
+    fontSize: 24,
+    fontWeight: 900,
+    color: "#0f172a",
+    lineHeight: 1.1,
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+  },
+  kpiSub: {
+    fontSize: 10,
+    fontWeight: 600,
+    color: "#94a3b8",
+    marginTop: 1,
   },
   settingValue: {
     fontSize: 20,
