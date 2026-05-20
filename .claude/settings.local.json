@@ -2,7 +2,8 @@
   "permissions": {
     "allow": [
       "Bash(npm run *)",
-      "Bash(curl -s http://localhost:5173)"
+      "Bash(curl -s http://localhost:5173)",
+      "Bash(grep -n \"return.*<.*>$\\\\|<div\\\\|</div>\" \"/Users/koketsom/Desktop/HTML/Shisha POS/src/App.jsx\")"
     ]
   }
 }

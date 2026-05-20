@@ -1,5 +1,12 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import chillPipeLogo from "./assets/The_Chill_Pipe.png";
+import { supabase } from "./supabase";
+import {
+  fetchUsers, syncUsers,
+  fetchStock, syncStock,
+  fetchOrders, insertOrder, updateOrder, deleteOrder,
+  fetchExpenses, syncExpenses,
+} from "./db";
 
 const FLAVOURS = [
   { id: "lk", name: "Lady Killer", short: "LK", icon: "🌹", bg: "#fff1f2", color: "#be123c", border: "#fecdd3" },
@@ -31,20 +38,6 @@ const RESTOCK_PACK = {
   "Mouth Pieces": { size: 50, unit: "pack", plural: "packs" },
 };
 
-const STOCK_PRESETS = [
-  { name: "Coal",         category: "consumable", unit: "pieces", lowThreshold: 144 },
-  { name: "Flavour",      category: "consumable", unit: "boxes",  lowThreshold: 2  },
-  { name: "Mouth Pieces", category: "consumable", unit: "pieces", lowThreshold: 50 },
-  { name: "Kops",          category: "equipment",  unit: "units",   lowThreshold: 10 },
-  { name: "Rotas",         category: "equipment",  unit: "units",   lowThreshold: 10 },
-  { name: "Rota Tops",     category: "equipment",  unit: "units",   lowThreshold: 10 },
-  { name: "Stove",         category: "equipment",  unit: "units",   lowThreshold: 1 },
-  { name: "2 Pipe Hookah",    category: "equipment",  unit: "units",   lowThreshold: 7 },
-  { name: "Blower",    category: "equipment",  unit: "units",   lowThreshold: 1 },
-  { name: "Tongs",    category: "equipment",  unit: "units",   lowThreshold: 4 },
-  { name: "Extension Cord",    category: "equipment",  unit: "units",   lowThreshold: 0 },
-
-];
 const LOGO_SRC = chillPipeLogo;
 
 function formatTime(date) {
@@ -59,6 +52,7 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
+  const [dbReady, setDbReady] = useState(false);
   const [users, setUsers] = useState(() => {
     try {
       const s = localStorage.getItem("pos_users");
@@ -112,12 +106,6 @@ export default function App() {
       return [...merged, ...missing];
     } catch { return defaults; }
   });
-  const [newStockName, setNewStockName] = useState("");
-  const [newStockQty, setNewStockQty] = useState("");
-  const [newStockUnit, setNewStockUnit] = useState("units");
-  const [newStockThreshold, setNewStockThreshold] = useState("");
-  const [newStockCategory, setNewStockCategory] = useState("consumable");
-  const [newStockCustomName, setNewStockCustomName] = useState("");
   const [usersCollapsed, setUsersCollapsed] = useState(false);
   const [consumablesCollapsed, setConsumablesCollapsed] = useState(true);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(true);
@@ -125,20 +113,13 @@ export default function App() {
   const [kpisCollapsed, setKpisCollapsed] = useState(true);
   const [accountingCollapsed, setAccountingCollapsed] = useState(true);
   const [expensesCollapsed, setExpensesCollapsed] = useState(true);
-  const [expandedUsers, setExpandedUsers] = useState(new Set());
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
-  const [restockId, setRestockId] = useState(null);
-  const [restockSubId, setRestockSubId] = useState(null); // { stockId, subId }
-  const [restockQty, setRestockQty] = useState("");
   const [editSubId, setEditSubId] = useState(null); // { stockId, subId }
   const [editSubQty, setEditSubQty] = useState("");
   const [editStockId, setEditStockId] = useState(null);
   const [editStockQty, setEditStockQty] = useState("");
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [restockLog, setRestockLog] = useState(() => {
-    try { const s = localStorage.getItem("pos_restock_log"); return s ? JSON.parse(s) : []; } catch { return []; }
-  });
   const [expenses, setExpenses] = useState(() => {
     try { const s = localStorage.getItem("pos_expenses"); return s ? JSON.parse(s) : []; } catch { return []; }
   });
@@ -157,21 +138,37 @@ export default function App() {
     }
   }, [orders]);
 
+  // ── On mount: load from Supabase, fall back to localStorage ──
+  useEffect(() => {
+    async function load() {
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(),
+      ]);
+      if (remoteUsers)   { setUsers(remoteUsers);     localStorage.setItem("pos_users", JSON.stringify(remoteUsers)); }
+      if (remoteStock)   { setStock(remoteStock);     localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
+      if (remoteOrders)  { setOrders(remoteOrders); }
+      if (remoteExpenses){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
+      setDbReady(true);
+    }
+    if (supabase) { load(); } else { setDbReady(true); }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // ── Sync to localStorage + Supabase on every change ──
   useEffect(() => {
     localStorage.setItem("pos_users", JSON.stringify(users));
-  }, [users]);
+    if (dbReady) syncUsers(users);
+  }, [users]); // eslint-disable-line
 
   useEffect(() => {
     localStorage.setItem("pos_stock", JSON.stringify(stock));
-  }, [stock]);
-
-  useEffect(() => {
-    localStorage.setItem("pos_restock_log", JSON.stringify(restockLog));
-  }, [restockLog]);
+    if (dbReady) syncStock(stock);
+  }, [stock]); // eslint-disable-line
 
   useEffect(() => {
     localStorage.setItem("pos_expenses", JSON.stringify(expenses));
-  }, [expenses]);
+    if (dbReady) syncExpenses(expenses);
+  }, [expenses]); // eslint-disable-line
 
 
   const confirmOrder = useCallback(() => {
@@ -188,6 +185,7 @@ export default function App() {
     };
 
     setOrders((prev) => [...prev, order]);
+    insertOrder(order);
 
     // Auto-deduct stock
     const flavourId = selectedFlavour.id;
@@ -240,18 +238,22 @@ export default function App() {
   const undoLast = useCallback(() => {
     if (!undoTarget) return;
     setOrders((prev) => prev.filter((o) => o.id !== undoTarget));
+    deleteOrder(undoTarget);
     setUndoTarget(null);
     clearTimeout(undoTimer.current);
   }, [undoTarget]);
 
   const removeOrder = useCallback((id) => {
     setOrders((prev) => prev.filter((o) => o.id !== id));
+    deleteOrder(id);
   }, []);
 
   const markDelivered = useCallback((id) => {
+    const deliveredAt = new Date();
     setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt: new Date() } : o))
+      prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt } : o))
     );
+    updateOrder(id, { status: "delivered", deliveredAt });
   }, []);
 
   const currentOrders = orders.filter((o) => o.status !== "delivered");
@@ -587,6 +589,60 @@ export default function App() {
                 </div>
               </div>
 
+              {/* ── Always-visible order summary ── */}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {/* Revenue + orders row */}
+                <div style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <div>
+                    <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Total Revenue</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1.1, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(totals.gross)}</div>
+                  </div>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {todayLabel}</span>
+                    <div style={{ display: "flex", gap: 10 }}>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(totals.card)}</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(totals.cash)}</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Stat chips */}
+                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
+                  {[
+                    { label: "Active", value: currentOrders.length, color: currentOrders.length > 0 ? "#16a34a" : "#0f172a", bg: currentOrders.length > 0 ? "rgba(22,163,74,0.08)" : "rgba(255,255,255,0.7)", border: currentOrders.length > 0 ? "rgba(22,163,74,0.2)" : "rgba(255,255,255,0.85)" },
+                    { label: "Delivered", value: deliveredOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
+                    { label: "Pipes", value: newPipeOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
+                    { label: "Refills", value: refillOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
+                  ].map(s => (
+                    <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
+                      <span style={{ fontSize: 20, fontWeight: 900, color: s.color, lineHeight: 1, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{s.value}</span>
+                      <span style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{s.label}</span>
+                    </div>
+                  ))}
+                </div>
+
+                {/* Top flavour bar */}
+                {totalOrders > 0 && (
+                  <div style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
+                    {sortedFlavours.filter(f => (flavourCounts[f.id] || 0) > 0).map(f => {
+                      const count = flavourCounts[f.id] || 0;
+                      const pct = (count / totalOrders) * 100;
+                      return (
+                        <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span style={{ fontSize: 13 }}>{f.icon}</span>
+                          <span style={{ fontSize: 12, fontWeight: 700, color: "#334155", width: 90, flexShrink: 0 }}>{f.name}</span>
+                          <div style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
+                            <div style={{ height: "100%", width: `${pct}%`, background: f.color, borderRadius: 99 }} />
+                          </div>
+                          <span style={{ fontSize: 12, fontWeight: 900, color: f.color, minWidth: 20, textAlign: "right" }}>{count}</span>
+                        </div>
+                      );
+                    })}
+                    {activeFlavours === 0 && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>No orders yet</span>}
+                  </div>
+                )}
+              </div>
+
               {/* ── KPIs ── */}
               <button onClick={() => setKpisCollapsed(c => !c)} style={styles.collapsibleHeader}>
                 <span>📊 KPIs</span>
@@ -715,21 +771,20 @@ export default function App() {
                 <span style={styles.collapseChevron}>{accountingCollapsed ? "▶" : "▼"}</span>
               </button>
               {!accountingCollapsed && (() => {
-                // Stock items as expense options — consumables first, then equipment
-                // Flavour sub-items expanded individually
-                const flavourItem = stock.find(i => i.name === "Flavour");
-                const stockExpenseOptions = [
-                  ...stock.filter(i => i.category === "consumable" && !i.subItems).map(i => ({
-                    key: i.name, label: i.name, icon: "📦", color: "#0369a1", bg: "#eff6ff",
-                  })),
-                  ...(flavourItem?.subItems ?? []).map(s => {
-                    const fl = FLAVOURS.find(f => f.id === s.id);
-                    return { key: `Flavour-${s.id}`, label: `${fl?.name ?? s.name}`, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc" };
-                  }),
-                  ...stock.filter(i => i.category === "equipment").map(i => ({
-                    key: i.name, label: i.name, icon: "🛠️", color: "#334155", bg: "#f1f5f9",
-                  })),
-                ];
+                // Single source of truth: mirrors stock tab order exactly
+                const stockExpenseOptions = stock.flatMap(i => {
+                  if (i.subItems) {
+                    return i.subItems.map(s => {
+                      const fl = FLAVOURS.find(f => f.id === s.id);
+                      return { key: `Flavour-${s.id}`, label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc", group: "flavour" };
+                    });
+                  }
+                  return [{ key: i.name, label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#334155" : "#0369a1", bg: i.category === "equipment" ? "#f1f5f9" : "#eff6ff", group: i.category }];
+                });
+                const EXTRA_EXPENSE_OPTS = {
+                  Wages:     { icon: "👥", label: "Wages",     color: "#7c3aed", bg: "#f5f3ff" },
+                  Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" },
+                };
                 const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
                 const profit = totals.gross - totalExpenses;
                 const margin = totals.gross > 0 ? Math.round((profit / totals.gross) * 100) : 0;
@@ -744,7 +799,7 @@ export default function App() {
                   lines.push("");
                   lines.push(`EXPENSES`);
                   expenses.forEach(e => {
-                    const opt = stockExpenseOptions.find(o => o.key === e.category);
+                    const opt = stockExpenseOptions.find(o => o.key === e.category) ?? EXTRA_EXPENSE_OPTS[e.category];
                     lines.push(`  ${opt?.icon ?? "📦"} ${opt?.label ?? e.category}${e.qty ? ` ×${e.qty}` : ""}: R${e.amount}`);
                   });
                   lines.push(`  Total: R${totalExpenses}`);
@@ -820,8 +875,7 @@ export default function App() {
                           <button onClick={() => setExpenses([])} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
                         </div>
                         {[...expenses].reverse().map(exp => {
-                          const extraOpts = { Wages: { icon: "👥", label: "Wages", color: "#7c3aed", bg: "#f5f3ff" }, Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" } };
-                          const opt = stockExpenseOptions.find(o => o.key === exp.category) ?? extraOpts[exp.category] ?? { icon: "📦", label: exp.category, color: "#64748b", bg: "#f8fafc" };
+                          const opt = stockExpenseOptions.find(o => o.key === exp.category) ?? EXTRA_EXPENSE_OPTS[exp.category] ?? { icon: "📦", label: exp.category, color: "#64748b", bg: "#f8fafc" };
                           return (
                             <div key={exp.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
                               <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
@@ -860,17 +914,17 @@ export default function App() {
                               <option value="Transport">🚗 Transport</option>
                             </optgroup>
                             <optgroup label="🔥 Consumables">
-                              {stockExpenseOptions.filter(o => !o.key.startsWith("Flavour-") && stock.find(i => i.name === o.key)?.category === "consumable").map(o =>
+                              {stockExpenseOptions.filter(o => o.group === "consumable").map(o =>
                                 <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
                               )}
                             </optgroup>
                             <optgroup label="🌿 Flavour">
-                              {stockExpenseOptions.filter(o => o.key.startsWith("Flavour-")).map(o =>
+                              {stockExpenseOptions.filter(o => o.group === "flavour").map(o =>
                                 <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
                               )}
                             </optgroup>
                             <optgroup label="🛠️ Equipment">
-                              {stockExpenseOptions.filter(o => stock.find(i => i.name === o.key)?.category === "equipment").map(o =>
+                              {stockExpenseOptions.filter(o => o.group === "equipment").map(o =>
                                 <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
                               )}
                             </optgroup>
@@ -982,14 +1036,6 @@ export default function App() {
               return lines.join("\n");
             };
 
-            const adjustQty = (id, delta) =>
-              setStock(prev => prev.map(i => i.id === id ? { ...i, quantity: Math.max(0, i.quantity + delta) } : i));
-
-            const adjustSubQty = (stockId, subId, delta) =>
-              setStock(prev => prev.map(i => i.id === stockId
-                ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: Math.max(0, s.quantity + delta) } : s) }
-                : i));
-
             const setSubQtyAbsolute = (stockId, subId, value) =>
               setStock(prev => prev.map(i => i.id === stockId
                 ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: Math.max(0, value) } : s) }
@@ -999,46 +1045,6 @@ export default function App() {
               const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
             });
 
-            const confirmRestock = (id) => {
-              const n = Number(restockQty);
-              if (n > 0) {
-                const target = stock.find(i => i.id === id);
-                const pack = target ? RESTOCK_PACK[target.name] : null;
-                adjustQty(id, pack ? n * pack.size : n);
-                setRestockLog(prev => [...prev, {
-                  id: Date.now(),
-                  name: target?.name ?? "Item",
-                  icon: null,
-                  color: "#334155",
-                  bg: "#f1f5f9",
-                  qty: n,
-                  unit: pack ? pack.plural : target?.unit ?? "units",
-                  pcs: pack ? n * pack.size : null,
-                  time: new Date().toISOString(),
-                }]);
-              }
-              setRestockId(null); setRestockQty("");
-            };
-
-            const confirmSubRestock = (stockId, subId) => {
-              const n = Number(restockQty);
-              if (n > 0) {
-                adjustSubQty(stockId, subId, n);
-                const flavour = FLAVOURS.find(f => f.id === subId);
-                setRestockLog(prev => [...prev, {
-                  id: Date.now(),
-                  name: flavour?.name ?? subId,
-                  icon: flavour?.icon ?? null,
-                  color: flavour?.color ?? "#334155",
-                  bg: flavour?.bg ?? "#f1f5f9",
-                  qty: n,
-                  unit: n === 1 ? "box" : "boxes",
-                  pcs: null,
-                  time: new Date().toISOString(),
-                }]);
-              }
-              setRestockSubId(null); setRestockQty("");
-            };
 
             const renderItem = (item) => {
               // Sub-items (e.g. Flavour with individual flavour quantities)
@@ -1072,34 +1078,7 @@ export default function App() {
                               {fOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca", fontSize: 9 }}>Out</span>}
                               {fLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", borderColor: "#fde68a", fontSize: 9 }}>Low</span>}
 
-                              {restockSubId?.stockId === item.id && restockSubId?.subId === f.id ? (
-                                <div style={{ marginLeft: "auto", display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                                  <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                    <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>Boxes:</span>
-                                    <input
-                                      type="number"
-                                      autoFocus
-                                      min="1"
-                                      value={restockQty}
-                                      onChange={e => setRestockQty(e.target.value)}
-                                      onKeyDown={e => {
-                                        if (e.key === "Enter") confirmSubRestock(item.id, f.id);
-                                        if (e.key === "Escape") { setRestockSubId(null); setRestockQty(""); }
-                                      }}
-                                      style={{ ...styles.restockInput, width: 52 }}
-                                      placeholder="0"
-                                    />
-                                    <button onClick={() => confirmSubRestock(item.id, f.id)} style={styles.restockConfirmBtn}>✓</button>
-                                    <button onClick={() => { setRestockSubId(null); setRestockQty(""); }} style={styles.restockCancelBtn}>✕</button>
-                                  </div>
-                                  {Number(restockQty) > 0 && (
-                                    <span style={{ fontSize: 10, color: f.color, fontWeight: 700 }}>
-                                      + {Number(restockQty)} {Number(restockQty) === 1 ? "box" : "boxes"} added
-                                    </span>
-                                  )}
-                                </div>
-                              ) : (
-                                <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
+                              <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
                                     {(() => {
                                       const perSale = FLAVOUR_PER_SALE[f.id];
@@ -1183,7 +1162,6 @@ export default function App() {
                                     })()}
                                   </div>
                                 </div>
-                              )}
                             </div>
                           );
                         })}
@@ -1196,7 +1174,6 @@ export default function App() {
               const isOut = item.quantity === 0;
               const isLow = !isOut && item.quantity <= item.lowThreshold;
               const rowStyle = isOut ? styles.stockRowCritical : isLow ? styles.stockRowLow : styles.stockRow;
-              const isRestocking = restockId === item.id;
               const pack = RESTOCK_PACK[item.name];
 
               return (
@@ -1350,32 +1327,38 @@ export default function App() {
                       </div>
                     )}
 
-                    {restockLog.length > 0 && (
-                      <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    {(() => {
+                      const stockExpenses = expenses.filter(e => !["Wages", "Transport"].includes(e.category));
+                      if (!stockExpenses.length) return null;
+                      const RESTOCK_OPT_MAP = Object.fromEntries(
+                        stock.flatMap(i => i.subItems
+                          ? i.subItems.map(s => { const fl = FLAVOURS.find(f => f.id === s.id); return [`Flavour-${s.id}`, { label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc" }]; })
+                          : [[i.name, { label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#334155" : "#0369a1", bg: i.category === "equipment" ? "#f1f5f9" : "#eff6ff" }]]
+                        )
+                      );
+                      return (
+                        <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
                           <span style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Restock History</span>
-                          <button
-                            onClick={() => { setRestockLog([]); localStorage.removeItem("pos_restock_log"); }}
-                            style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "2px 4px" }}
-                          >
-                            Clear
-                          </button>
+                          {[...stockExpenses].reverse().map(e => {
+                            const opt = RESTOCK_OPT_MAP[e.category] ?? { label: e.category, icon: "📦", color: "#334155", bg: "#f1f5f9" };
+                            const pack = RESTOCK_PACK[e.category];
+                            return (
+                              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                                  {opt.icon} {opt.label}
+                                </span>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                                  +{e.qty ?? "?"} {pack ? pack.plural : "units"}{pack && e.qty ? ` (${e.qty * pack.size} pcs)` : ""}
+                                </span>
+                                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
+                                  {new Date(e.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
+                                </span>
+                              </div>
+                            );
+                          })}
                         </div>
-                        {[...restockLog].reverse().map(entry => (
-                          <div key={entry.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: entry.color, background: entry.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                              {entry.icon ? `${entry.icon} ` : ""}{entry.name}
-                            </span>
-                            <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
-                              +{entry.qty} {entry.unit}{entry.pcs ? ` (${entry.pcs} pcs)` : ""}
-                            </span>
-                            <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
-                              {new Date(entry.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     <div style={{ position: "relative" }}>
                       <button
@@ -1605,43 +1588,49 @@ export default function App() {
               )}
 
               {isAdmin && (
-                <div style={styles.addUserForm}>
+                <div style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Add User</span>
                   <input
                     type="text"
                     placeholder="Full name"
                     value={newUserName}
                     onChange={(e) => setNewUserName(e.target.value)}
-                    style={styles.userNameInput}
+                    onKeyDown={(e) => e.key === "Enter" && document.getElementById("new-user-pin")?.focus()}
+                    style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
                   />
-                  <select
-                    value={newUserRole}
-                    onChange={(e) => setNewUserRole(e.target.value)}
-                    style={styles.userRoleSelect}
-                  >
-                    <option value="Staff">Staff</option>
-                    <option value="Admin">Admin</option>
-                  </select>
-                  <input
-                    type="password"
-                    placeholder="Password"
-                    value={newUserPin}
-                    onChange={(e) => setNewUserPin(e.target.value)}
-                    style={styles.userPinInput}
-                  />
-                  <button
-                    onClick={() => {
-                      if (!newUserName.trim() || !newUserPin) return;
-                      const defaultPerms = newUserRole === "Admin"
-                        ? { delivered: true, stock: true, management: true, settings: true }
-                        : { delivered: true, stock: false, management: false, settings: false };
-                      setUsers((prev) => [...prev, { id: Date.now(), name: newUserName.trim(), role: newUserRole, pin: newUserPin, permissions: defaultPerms }]);
-                      setNewUserName("");
-                      setNewUserPin("");
-                    }}
-                    style={styles.addUserBtn}
-                  >
-                    Add
-                  </button>
+                  <div style={{ display: "flex", gap: 8 }}>
+                    <select
+                      value={newUserRole}
+                      onChange={(e) => setNewUserRole(e.target.value)}
+                      style={{ ...styles.userRoleSelect, flex: 1 }}
+                    >
+                      <option value="Staff">Staff</option>
+                      <option value="Admin">Admin</option>
+                    </select>
+                    <input
+                      id="new-user-pin"
+                      type="password"
+                      placeholder="Password"
+                      value={newUserPin}
+                      onChange={(e) => setNewUserPin(e.target.value)}
+                      style={{ ...styles.userNameInput, flex: 1 }}
+                    />
+                    <button
+                      onClick={() => {
+                        if (!newUserName.trim() || !newUserPin) return;
+                        const defaultPerms = newUserRole === "Admin"
+                          ? { delivered: true, stock: true, management: true, settings: true }
+                          : { delivered: true, stock: false, management: false, settings: false };
+                        setUsers((prev) => [...prev, { id: Date.now(), name: newUserName.trim(), role: newUserRole, pin: newUserPin, permissions: defaultPerms }]);
+                        setNewUserName("");
+                        setNewUserPin("");
+                        setNewUserRole("Staff");
+                      }}
+                      style={styles.addUserBtn}
+                    >
+                      Add
+                    </button>
+                  </div>
                 </div>
               )}
               </>}
@@ -1721,33 +1710,32 @@ export default function App() {
 const styles = {
   container: {
     fontFamily: "'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
-    minHeight: "100vh",
-    padding: 16,
+    minHeight: "100dvh",
+    padding: 0,
     background: "transparent",
     color: "#111827",
   },
   appChrome: {
     maxWidth: 560,
-    minHeight: "calc(100vh - 32px)",
+    minHeight: "100dvh",
     margin: "0 auto",
-    padding: 14,
+    padding: "12px 12px 0",
     display: "flex",
     flexDirection: "column",
-    gap: 12,
+    gap: 10,
     background: "transparent",
-    borderRadius: 12,
   },
   topBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    padding: "10px 10px 12px",
+    padding: "12px 14px",
     background: "rgba(255,255,255,0.7)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 10,
+    borderRadius: 14,
   },
   mainContent: {
     flex: 1,
@@ -1756,6 +1744,8 @@ const styles = {
     flexDirection: "column",
     gap: 12,
     overflowY: "auto",
+    WebkitOverflowScrolling: "touch",
+    paddingBottom: 8,
   },
   brandLockup: {
     display: "flex",
@@ -1808,12 +1798,12 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 10,
-    padding: 12,
+    padding: 14,
     background: "rgba(255,255,255,0.65)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     border: "1px solid rgba(255,255,255,0.8)",
-    borderRadius: 10,
+    borderRadius: 14,
   },
   sectionHeaderLabel: {
     fontSize: 11,
@@ -1959,71 +1949,71 @@ const styles = {
   receiptPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    padding: 10,
-    background: "rgba(241,245,249,0.6)",
+    gap: 10,
+    padding: 14,
+    background: "rgba(255,255,255,0.55)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 14,
   },
   deliveredPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    padding: 10,
-    background: "rgba(241,245,249,0.6)",
+    gap: 10,
+    padding: 14,
+    background: "rgba(255,255,255,0.55)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 14,
   },
   settingsPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    padding: 10,
-    background: "rgba(248,250,252,0.6)",
+    gap: 10,
+    padding: 14,
+    background: "rgba(255,255,255,0.55)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 14,
   },
   totalBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "rgba(15,23,42,0.82)",
+    background: "rgba(15,23,42,0.88)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
-    padding: "13px 15px",
-    borderRadius: 9,
+    padding: "14px 16px",
+    borderRadius: 10,
   },
   deliveredBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "rgba(15,23,42,0.82)",
+    background: "rgba(15,23,42,0.88)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
-    padding: "13px 15px",
-    borderRadius: 9,
+    padding: "14px 16px",
+    borderRadius: 10,
   },
   settingsBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "rgba(51,65,85,0.82)",
+    background: "rgba(15,23,42,0.88)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
-    padding: "13px 15px",
-    borderRadius: 9,
+    padding: "14px 16px",
+    borderRadius: 10,
   },
   totalLeft: {
     display: "flex",
@@ -2100,7 +2090,7 @@ const styles = {
   userCard: {
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 10,
+    borderRadius: 12,
     overflow: "hidden",
   },
   userPermissions: {
@@ -2188,12 +2178,14 @@ const styles = {
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
+    minHeight: 44,
     background: "none",
     border: "none",
-    padding: "2px 2px",
+    outline: "none",
+    padding: "8px 4px",
     cursor: "pointer",
     fontFamily: "inherit",
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
@@ -2283,13 +2275,13 @@ const styles = {
   stockPanel: {
     display: "flex",
     flexDirection: "column",
-    gap: 8,
-    padding: 10,
-    background: "rgba(248,250,252,0.6)",
+    gap: 10,
+    padding: 14,
+    background: "rgba(255,255,255,0.55)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 10,
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderRadius: 14,
   },
   stockCategoryHeader: {
     fontSize: 11,
@@ -2309,28 +2301,28 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "10px 12px",
+    padding: "12px 14px",
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 9,
+    borderRadius: 10,
   },
   stockRowLow: {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "10px 12px",
+    padding: "12px 14px",
     background: "rgba(255,251,235,0.88)",
     border: "1px solid rgba(253,230,138,0.7)",
-    borderRadius: 9,
+    borderRadius: 10,
   },
   stockRowCritical: {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "10px 12px",
+    padding: "12px 14px",
     background: "rgba(254,242,242,0.88)",
     border: "1px solid rgba(254,202,202,0.7)",
-    borderRadius: 9,
+    borderRadius: 10,
   },
   stockInfo: {
     flex: 1,
@@ -2424,13 +2416,13 @@ const styles = {
     gap: 6,
   },
   restockInput: {
-    width: 60,
-    height: 32,
+    width: 64,
+    minHeight: 44,
     border: "1px solid #cbd5e1",
     borderRadius: 8,
     background: "rgba(255,255,255,0.8)",
     color: "#0f172a",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 900,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     textAlign: "center",
@@ -2438,28 +2430,34 @@ const styles = {
     padding: "0 6px",
   },
   restockConfirmBtn: {
-    width: 32,
-    height: 32,
+    minWidth: 44,
+    minHeight: 44,
     border: "none",
     borderRadius: 8,
     background: "#16a34a",
     color: "#fff",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 900,
     cursor: "pointer",
     fontFamily: "inherit",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   restockCancelBtn: {
-    width: 32,
-    height: 32,
+    minWidth: 44,
+    minHeight: 44,
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.7)",
     color: "#64748b",
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: 900,
     cursor: "pointer",
     fontFamily: "inherit",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   subItemList: {
     display: "flex",
@@ -2625,8 +2623,8 @@ const styles = {
   loginInput: {
     border: "none",
     borderBottom: "1.5px solid rgba(15,23,42,0.15)",
-    padding: "10px 0",
-    fontSize: 14,
+    padding: "12px 0",
+    fontSize: 16,
     color: "#0f172a",
     outline: "none",
     background: "transparent",
@@ -2731,33 +2729,33 @@ const styles = {
   },
   userNameInput: {
     flex: 1,
-    minHeight: 40,
-    padding: "8px 10px",
+    minHeight: 44,
+    padding: "10px 12px",
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.6)",
     color: "#0f172a",
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 700,
     fontFamily: "inherit",
     outline: "none",
   },
   userRoleSelect: {
-    minHeight: 40,
-    padding: "8px 10px",
+    minHeight: 44,
+    padding: "10px 12px",
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.6)",
     color: "#0f172a",
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: 700,
     fontFamily: "inherit",
     outline: "none",
     cursor: "pointer",
   },
   addUserBtn: {
-    minHeight: 40,
-    padding: "0 16px",
+    minHeight: 44,
+    padding: "0 18px",
     border: "none",
     borderRadius: 8,
     background: "#0f172a",
@@ -2873,20 +2871,20 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "9px 10px",
+    padding: "12px 12px",
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 13,
   },
   deliveredRow: {
     display: "flex",
     alignItems: "center",
     gap: 8,
-    padding: "9px 10px",
+    padding: "12px 12px",
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 8,
+    borderRadius: 10,
     fontSize: 13,
   },
   orderIndex: {
@@ -2922,29 +2920,33 @@ const styles = {
     color: "#111827",
   },
   deleteBtn: {
-    width: 28,
-    height: 28,
+    minWidth: 44,
+    minHeight: 44,
     background: "#fff1f2",
     border: "1px solid #fecdd3",
-    borderRadius: 7,
+    borderRadius: 8,
     color: "#e11d48",
     fontSize: 18,
     cursor: "pointer",
     padding: 0,
     lineHeight: 1,
     fontFamily: "inherit",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
   },
   deliverBtn: {
-    height: 28,
+    minHeight: 44,
     background: "#dcfce7",
     border: "1px solid #86efac",
-    borderRadius: 7,
+    borderRadius: 8,
     color: "#166534",
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: 900,
     cursor: "pointer",
-    padding: "0 9px",
+    padding: "0 12px",
     fontFamily: "inherit",
+    whiteSpace: "nowrap",
   },
   summaryHeader: {
     display: "flex",
@@ -3083,30 +3085,35 @@ const styles = {
   footer: {
     display: "flex",
     alignItems: "center",
-    gap: 6,
-    padding: 6,
-    background: "rgba(255,255,255,0.5)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.7)",
-    borderRadius: 10,
+    gap: 4,
+    padding: "6px 6px",
+    paddingBottom: "max(10px, env(safe-area-inset-bottom))",
+    background: "rgba(255,255,255,0.6)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    border: "1px solid rgba(255,255,255,0.8)",
+    borderTop: "1px solid rgba(255,255,255,0.9)",
+    borderRadius: "14px 14px 0 0",
+    marginTop: "auto",
   },
   footerTab: {
     flex: 1,
-    minHeight: 44,
+    minHeight: 52,
     display: "flex",
+    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
+    gap: 3,
     border: "1px solid transparent",
     borderRadius: 8,
     background: "transparent",
     color: "#64748b",
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: 900,
     cursor: "pointer",
     fontFamily: "inherit",
     textAlign: "center",
+    padding: "6px 2px",
   },
   footerTabActive: {
     background: "rgba(255,255,255,0.75)",
