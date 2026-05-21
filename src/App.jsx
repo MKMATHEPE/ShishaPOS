@@ -1107,51 +1107,45 @@ export default function App() {
                                       );
                                       return <>
                                         {isEditing ? (
-                                          <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                                            <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                                            <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>📦</span>
-                                            <input
-                                              type="number"
-                                              autoFocus
-                                              min="0"
-                                              value={editSubQty}
-                                              onChange={e => setEditSubQty(e.target.value)}
-                                              onKeyDown={e => {
-                                                if (e.key === "Enter") {
+                                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                                              <input
+                                                type="number"
+                                                autoFocus
+                                                min="0"
+                                                value={editSubQty}
+                                                onChange={e => setEditSubQty(e.target.value)}
+                                                onKeyDown={e => {
+                                                  if (e.key === "Enter") {
+                                                    const n = Number(editSubQty); const cost = Number(editSubCost);
+                                                    if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
+                                                      if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
+                                                    }
+                                                    setEditSubId(null); setEditSubQty(""); setEditSubCost("");
+                                                  }
+                                                  if (e.key === "Escape") { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }
+                                                }}
+                                                style={styles.restockInput}
+                                                placeholder="boxes"
+                                              />
+                                              <input
+                                                type="number"
+                                                min="0"
+                                                value={editSubCost}
+                                                onChange={e => setEditSubCost(e.target.value)}
+                                                style={{ ...styles.restockInput, width: 80 }}
+                                                placeholder="R cost"
+                                              />
+                                              <button
+                                                onClick={() => {
                                                   const n = Number(editSubQty); const cost = Number(editSubCost);
                                                   if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
                                                     if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
                                                   }
                                                   setEditSubId(null); setEditSubQty(""); setEditSubCost("");
-                                                }
-                                                if (e.key === "Escape") { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }
-                                              }}
-                                              style={{ ...styles.restockInput, width: 48 }}
-                                              placeholder="boxes"
-                                            />
-                                            <input
-                                              type="number"
-                                              min="0"
-                                              value={editSubCost}
-                                              onChange={e => setEditSubCost(e.target.value)}
-                                              style={{ ...styles.restockInput, width: 60 }}
-                                              placeholder="R cost"
-                                            />
-                                            <button
-                                              onClick={() => {
-                                                const n = Number(editSubQty); const cost = Number(editSubCost);
-                                                if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
-                                                  if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
-                                                }
-                                                setEditSubId(null); setEditSubQty(""); setEditSubCost("");
-                                              }}
-                                              style={styles.restockConfirmBtn}
-                                            >✓</button>
-                                            <button onClick={() => { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }} style={styles.restockCancelBtn}>✕</button>
-                                            </div>
-                                            {Number(editSubQty) > 0 && Number(editSubCost) > 0 && (
-                                              <span style={{ fontSize: 10, color: f.color, fontWeight: 700 }}>+{editSubQty} boxes · −R{editSubCost} logged</span>
-                                            )}
+                                                }}
+                                                style={styles.restockConfirmBtn}
+                                              >✓</button>
+                                              <button onClick={() => { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }} style={styles.restockCancelBtn}>✕</button>
                                           </div>
                                         ) : (
                                           <span
@@ -1202,9 +1196,7 @@ export default function App() {
                   </div>
 
                   {editStockId === item.id ? (
-                    <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
-                      <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-                        {pack && <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>{pack.plural[0].toUpperCase() + pack.plural.slice(1)}:</span>}
+                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                         <input
                           type="number"
                           autoFocus
@@ -1235,7 +1227,7 @@ export default function App() {
                             }
                             if (e.key === "Escape") { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }
                           }}
-                          style={{ ...styles.restockInput, width: 64 }}
+                          style={{ ...styles.restockInput, width: 80 }}
                           placeholder="R cost"
                         />
                         <button
@@ -1250,13 +1242,6 @@ export default function App() {
                           style={styles.restockConfirmBtn}
                         >✓</button>
                         <button onClick={() => { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }} style={styles.restockCancelBtn}>✕</button>
-                      </div>
-                      {Number(editStockQty) > 0 && (
-                        <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>
-                          + {pack ? `${Number(editStockQty) * pack.size} ${item.unit}` : `${editStockQty} ${item.unit}`}
-                          {Number(editStockCost) > 0 ? ` · −R${editStockCost} logged` : ""}
-                        </span>
-                      )}
                     </div>
                   ) : (
                     <span
@@ -1728,23 +1713,31 @@ const styles = {
     maxWidth: 560,
     minHeight: "100dvh",
     margin: "0 auto",
-    padding: "12px 12px 0",
+    padding: "72px 12px 80px",
     display: "flex",
     flexDirection: "column",
     gap: 10,
     background: "transparent",
   },
   topBar: {
+    position: "fixed",
+    top: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
+    maxWidth: 560,
+    margin: "0 auto",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
     padding: "12px 14px",
-    background: "rgba(255,255,255,0.7)",
-    backdropFilter: "blur(12px)",
-    WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 14,
+    background: "rgba(255,255,255,0.85)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
+    borderBottom: "1px solid rgba(255,255,255,0.9)",
+    borderRadius: "0 0 14px 14px",
+    boxShadow: "0 4px 24px rgba(15,23,42,0.08)",
   },
   mainContent: {
     flex: 1,
@@ -2425,43 +2418,45 @@ const styles = {
     gap: 6,
   },
   restockInput: {
-    width: 64,
-    minHeight: 44,
-    border: "1px solid #cbd5e1",
+    width: 56,
+    height: 32,
+    border: "1.5px solid #e2e8f0",
     borderRadius: 8,
-    background: "rgba(255,255,255,0.8)",
+    background: "#fff",
     color: "#0f172a",
-    fontSize: 16,
-    fontWeight: 900,
+    fontSize: 13,
+    fontWeight: 700,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     textAlign: "center",
     outline: "none",
     padding: "0 6px",
   },
   restockConfirmBtn: {
-    minWidth: 44,
-    minHeight: 44,
+    height: 32,
+    padding: "0 14px",
     border: "none",
     borderRadius: 8,
-    background: "#16a34a",
+    background: "linear-gradient(135deg,#22c55e,#16a34a)",
     color: "#fff",
-    fontSize: 16,
-    fontWeight: 900,
+    fontSize: 12,
+    fontWeight: 800,
     cursor: "pointer",
     fontFamily: "inherit",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+    boxShadow: "0 1px 4px rgba(22,163,74,0.3)",
+    letterSpacing: "0.02em",
   },
   restockCancelBtn: {
-    minWidth: 44,
-    minHeight: 44,
-    border: "1px solid rgba(203,213,225,0.6)",
+    height: 32,
+    padding: "0 10px",
+    border: "1.5px solid #e2e8f0",
     borderRadius: 8,
-    background: "rgba(255,255,255,0.7)",
-    color: "#64748b",
-    fontSize: 16,
-    fontWeight: 900,
+    background: "#f8fafc",
+    color: "#94a3b8",
+    fontSize: 12,
+    fontWeight: 700,
     cursor: "pointer",
     fontFamily: "inherit",
     display: "flex",
@@ -3092,18 +3087,22 @@ const styles = {
     objectFit: "contain",
   },
   footer: {
+    position: "fixed",
+    bottom: 0,
+    left: 0,
+    right: 0,
+    zIndex: 100,
     display: "flex",
     alignItems: "center",
     gap: 4,
     padding: "6px 6px",
     paddingBottom: "max(10px, env(safe-area-inset-bottom))",
-    background: "rgba(255,255,255,0.6)",
-    backdropFilter: "blur(16px)",
-    WebkitBackdropFilter: "blur(16px)",
-    border: "1px solid rgba(255,255,255,0.8)",
+    background: "rgba(255,255,255,0.85)",
+    backdropFilter: "blur(20px)",
+    WebkitBackdropFilter: "blur(20px)",
     borderTop: "1px solid rgba(255,255,255,0.9)",
     borderRadius: "14px 14px 0 0",
-    marginTop: "auto",
+    boxShadow: "0 -4px 24px rgba(15,23,42,0.08)",
   },
   footerTab: {
     flex: 1,
