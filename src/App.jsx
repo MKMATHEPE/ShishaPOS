@@ -144,10 +144,19 @@ export default function App() {
       const [remoteUsers, remoteStock, remoteOrders, remoteExpenses] = await Promise.all([
         fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(),
       ]);
-      if (remoteUsers)   { setUsers(remoteUsers);     localStorage.setItem("pos_users", JSON.stringify(remoteUsers)); }
-      if (remoteStock)   { setStock(remoteStock);     localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
-      if (remoteOrders)  { setOrders(remoteOrders); }
-      if (remoteExpenses){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
+      if (remoteUsers && remoteUsers.length > 0) {
+        setUsers(remoteUsers);
+        localStorage.setItem("pos_users", JSON.stringify(remoteUsers));
+      } else if (remoteUsers && remoteUsers.length === 0) {
+        // Supabase is empty — seed it with current defaults
+        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: "1234", permissions: { delivered: true, stock: true, management: true, settings: true } }];
+        setUsers(defaults);
+        localStorage.setItem("pos_users", JSON.stringify(defaults));
+        syncUsers(defaults);
+      }
+      if (remoteStock && remoteStock.length > 0) { setStock(remoteStock); localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
+      if (remoteOrders && remoteOrders.length > 0)  { setOrders(remoteOrders); }
+      if (remoteExpenses && remoteExpenses.length > 0){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
       setDbReady(true);
     }
     if (supabase) { load(); } else { setDbReady(true); }
