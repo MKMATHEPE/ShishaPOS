@@ -405,7 +405,7 @@ export default function App() {
 
         <main style={styles.mainContent}>
           {visibleTab === "pos" && (
-            <>
+            <div key="pos" className="tab-enter">
         <div style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
@@ -493,7 +493,7 @@ export default function App() {
               <div style={styles.emptyState}>No items on this receipt yet</div>
             )}
             {currentOrders.map((o, i) => (
-              <div key={o.id} style={styles.orderRow}>
+              <div key={o.id} className="card-enter" style={{ ...styles.orderRow, animationDelay: `${i * 0.07}s` }}>
                 <span style={styles.orderIndex}>{String(i + 1).padStart(2, "0")}</span>
                 <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
                   {o.flavour.icon} {o.flavour.short}
@@ -509,11 +509,11 @@ export default function App() {
             ))}
           </div>
         </div>
-            </>
+            </div>
           )}
 
           {visibleTab === "delivered" && (
-            <div style={styles.deliveredPanel}>
+            <div key="delivered" className="tab-enter" style={styles.deliveredPanel}>
               <div style={styles.deliveredBar}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Orders Delivered</span>
@@ -590,7 +590,7 @@ export default function App() {
               : { label: "Slow", color: "#dc2626", bg: "#fee2e2" };
 
             return (
-            <div style={styles.settingsPanel}>
+            <div key="management" className="tab-enter" style={styles.settingsPanel}>
               <div style={styles.settingsBar}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
@@ -1257,7 +1257,7 @@ export default function App() {
             };
 
             return (
-              <div style={styles.stockPanel}>
+              <div key="stock" className="tab-enter" style={styles.stockPanel}>
                 <div style={styles.settingsBar}>
                   <div style={styles.totalLeft}>
                     <span style={styles.totalLabel}>Stock</span>
@@ -1401,7 +1401,7 @@ export default function App() {
           })()}
 
           {visibleTab === "settings" && (
-            <div style={styles.settingsPanel}>
+            <div key="settings" className="tab-enter" style={styles.settingsPanel}>
               <div style={styles.settingsBar}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Settings</span>
@@ -1653,46 +1653,27 @@ export default function App() {
         )}
 
         <footer style={styles.footer}>
-          <button
-            onClick={() => setActiveTab("pos")}
-            style={{ ...styles.footerTab, ...(visibleTab === "pos" ? styles.footerTabActive : {}) }}
-          >
-            POS
-            <span style={styles.footerBadge}>{currentOrders.length}</span>
-          </button>
-          {canAccess("delivered") && (
-            <button
-              onClick={() => setActiveTab("delivered")}
-              style={{ ...styles.footerTab, ...(visibleTab === "delivered" ? styles.footerTabActive : {}) }}
-            >
-              Orders Delivered
-              <span style={styles.footerBadge}>{deliveredOrders.length}</span>
-            </button>
-          )}
-          {canAccess("stock") && (
-            <button
-              onClick={() => setActiveTab("stock")}
-              style={{ ...styles.footerTab, ...(visibleTab === "stock" ? styles.footerTabActive : {}) }}
-            >
-              Stock
-            </button>
-          )}
-          {canAccess("management") && (
-            <button
-              onClick={() => setActiveTab("management")}
-              style={{ ...styles.footerTab, ...(visibleTab === "management" ? styles.footerTabActive : {}) }}
-            >
-              Management
-            </button>
-          )}
-          {canAccess("settings") && (
-            <button
-              onClick={() => setActiveTab("settings")}
-              style={{ ...styles.footerTab, ...(visibleTab === "settings" ? styles.footerTabActive : {}) }}
-            >
-              Settings
-            </button>
-          )}
+          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#0f172a", borderRadius: 20, padding: "5px 5px", width: "100%", boxSizing: "border-box" }}>
+          {[
+            { key: "pos",        label: "POS",      badge: currentOrders.length,   access: true },
+            { key: "delivered",  label: "Orders",   badge: deliveredOrders.length, access: canAccess("delivered") },
+            { key: "stock",      label: "Stock",    badge: 0,                      access: canAccess("stock") },
+            { key: "management", label: "Manage",   badge: 0,                      access: canAccess("management") },
+            { key: "settings",   label: "Settings", badge: 0,                      access: canAccess("settings") },
+          ].filter(t => t.access).map(t => {
+            const active = visibleTab === t.key;
+            return (
+              <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: active ? "#fff" : "transparent", borderRadius: 14, padding: "7px 10px", flex: active ? "1.6" : "1", transition: "all 0.2s ease" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
+                  <span style={{ fontSize: 11, fontWeight: 800, color: active ? "#0f172a" : "rgba(255,255,255,0.4)", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{t.label}</span>
+                  {t.badge > 0 && (
+                    <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0f172a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
+                  )}
+                </div>
+              </button>
+            );
+          })}
+          </div>
         </footer>
         </>
         )}
@@ -3094,54 +3075,24 @@ const styles = {
     zIndex: 100,
     display: "flex",
     alignItems: "center",
-    gap: 4,
-    padding: "6px 6px",
-    paddingBottom: "max(10px, env(safe-area-inset-bottom))",
-    background: "rgba(255,255,255,0.85)",
-    backdropFilter: "blur(20px)",
-    WebkitBackdropFilter: "blur(20px)",
-    borderTop: "1px solid rgba(255,255,255,0.9)",
-    borderRadius: "14px 14px 0 0",
-    boxShadow: "0 -4px 24px rgba(15,23,42,0.08)",
+    padding: "8px 12px",
+    paddingBottom: "max(14px, env(safe-area-inset-bottom))",
+    background: "transparent",
   },
   footerTab: {
     flex: 1,
-    minHeight: 52,
+    minHeight: 44,
     display: "flex",
-    flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
-    gap: 3,
-    border: "1px solid transparent",
-    borderRadius: 8,
+    border: "none",
     background: "transparent",
-    color: "#64748b",
-    fontSize: 10,
-    fontWeight: 900,
     cursor: "pointer",
     fontFamily: "inherit",
-    textAlign: "center",
-    padding: "6px 2px",
+    touchAction: "manipulation",
   },
-  footerTabActive: {
-    background: "rgba(255,255,255,0.75)",
-    borderColor: "rgba(255,255,255,0.9)",
-    color: "#0f172a",
-    boxShadow: "0 4px 12px rgba(15,23,42,0.08)",
-  },
-  footerBadge: {
-    minWidth: 20,
-    height: 20,
-    padding: "0 6px",
-    borderRadius: 999,
-    display: "inline-flex",
-    alignItems: "center",
-    justifyContent: "center",
-    background: "#0f172a",
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: 900,
-  },
+  footerTabActive: {},
+  footerBadge: {},
   summaryDivider: {
     display: "flex",
     alignItems: "center",
