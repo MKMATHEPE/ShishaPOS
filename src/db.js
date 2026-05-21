@@ -98,6 +98,25 @@ export async function deleteOrder(id) {
   if (error) console.error('deleteOrder', error)
 }
 
+// ── Historical revenue (past sessions avg) ────────────
+export async function fetchHistoricalRevenue() {
+  if (!ok()) return null
+  const today = new Date().toISOString().slice(0, 10)
+  const { data, error } = await supabase
+    .from('pos_orders')
+    .select('session_date, price')
+    .neq('session_date', today)
+  if (error) { console.error('fetchHistoricalRevenue', error); return null }
+  if (!data.length) return null
+  // Group by session_date and sum price per day
+  const byDay = {}
+  data.forEach(r => {
+    byDay[r.session_date] = (byDay[r.session_date] ?? 0) + Number(r.price)
+  })
+  const dailyTotals = Object.values(byDay)
+  return dailyTotals.reduce((a, b) => a + b, 0) / dailyTotals.length
+}
+
 // ── Expenses ──────────────────────────────────────────
 export async function fetchExpenses() {
   if (!ok()) return null

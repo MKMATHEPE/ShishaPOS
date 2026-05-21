@@ -6,6 +6,7 @@ import {
   fetchStock, syncStock,
   fetchOrders, insertOrder, updateOrder, deleteOrder,
   fetchExpenses, syncExpenses,
+  fetchHistoricalRevenue,
 } from "./db";
 
 const FLAVOURS = [
@@ -53,6 +54,7 @@ export default function App() {
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
+  const [avgDailyRevenue, setAvgDailyRevenue] = useState(null);
   const [users, setUsers] = useState(() => {
     try {
       const s = localStorage.getItem("pos_users");
@@ -83,8 +85,7 @@ export default function App() {
       { id: 10, name: "Rotas",        category: "equipment",  quantity: 8,  unit: "units",   lowThreshold: 2 },
       { id: 11, name: "Rota Tops",    category: "equipment",  quantity: 8,  unit: "units",   lowThreshold: 2 },
       { id: 12, name: "Stove",        category: "equipment",  quantity: 2,  unit: "units",   lowThreshold: 1 },
-      { id: 13, name: "New Hookah",   category: "equipment",  quantity: 3,  unit: "units",   lowThreshold: 1 },
-    ];
+          ];
     try {
       const s = localStorage.getItem("pos_stock");
       if (!s) return defaults;
@@ -141,9 +142,10 @@ export default function App() {
   // ── On mount: load from Supabase, fall back to localStorage ──
   useEffect(() => {
     async function load() {
-      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses] = await Promise.all([
-        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(),
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(),
       ]);
+      if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
         localStorage.setItem("pos_users", JSON.stringify(remoteUsers));
@@ -253,15 +255,33 @@ export default function App() {
   }, [undoTarget]);
 
   const removeOrder = useCallback((id) => {
-    setOrders((prev) => prev.filter((o) => o.id !== id));
+    setOrders((prev) => {
+      const order = prev.find(o => o.id === id);
+      if (order?.type === "full" && order?.status === "delivered") {
+        setStock(s => s.map(item =>
+          item.category === "equipment" && item.name.toLowerCase().includes("hookah")
+            ? { ...item, quantity: item.quantity + 1 }
+            : item
+        ));
+      }
+      return prev.filter((o) => o.id !== id);
+    });
     deleteOrder(id);
   }, []);
 
   const markDelivered = useCallback((id) => {
     const deliveredAt = new Date();
-    setOrders((prev) =>
-      prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt } : o))
-    );
+    setOrders((prev) => {
+      const order = prev.find(o => o.id === id);
+      if (order?.type === "full") {
+        setStock(s => s.map(item =>
+          item.category === "equipment" && item.name.toLowerCase().includes("hookah")
+            ? { ...item, quantity: Math.max(0, item.quantity - 1) }
+            : item
+        ));
+      }
+      return prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt } : o));
+    });
     updateOrder(id, { status: "delivered", deliveredAt });
   }, []);
 
@@ -603,53 +623,22 @@ export default function App() {
                 {/* Revenue + orders row */}
                 <div style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
-                    <div style={{ fontSize: 10, fontWeight: 700, color: "rgba(255,255,255,0.5)", textTransform: "uppercase", letterSpacing: "0.1em" }}>Total Revenue</div>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1.1, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(totals.gross)}</div>
+                    <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 2 }}>Total Revenue</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(totals.gross)}</div>
                   </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 4 }}>
+                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
                     <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {todayLabel}</span>
-                    <div style={{ display: "flex", gap: 10 }}>
+                    <div style={{ display: "flex", gap: 8 }}>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(totals.card)}</span>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(totals.cash)}</span>
                     </div>
-                  </div>
-                </div>
-
-                {/* Stat chips */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr 1fr", gap: 8 }}>
-                  {[
-                    { label: "Active", value: currentOrders.length, color: currentOrders.length > 0 ? "#16a34a" : "#0f172a", bg: currentOrders.length > 0 ? "rgba(22,163,74,0.08)" : "rgba(255,255,255,0.7)", border: currentOrders.length > 0 ? "rgba(22,163,74,0.2)" : "rgba(255,255,255,0.85)" },
-                    { label: "Delivered", value: deliveredOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
-                    { label: "Pipes", value: newPipeOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
-                    { label: "Refills", value: refillOrders.length, color: "#0f172a", bg: "rgba(255,255,255,0.7)", border: "rgba(255,255,255,0.85)" },
-                  ].map(s => (
-                    <div key={s.label} style={{ background: s.bg, border: `1px solid ${s.border}`, borderRadius: 10, padding: "10px 8px", display: "flex", flexDirection: "column", alignItems: "center", gap: 2, backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)" }}>
-                      <span style={{ fontSize: 20, fontWeight: 900, color: s.color, lineHeight: 1, fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{s.value}</span>
-                      <span style={{ fontSize: 9, fontWeight: 800, color: "#94a3b8", textTransform: "uppercase", letterSpacing: "0.08em" }}>{s.label}</span>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🪄 {newPipeOrders.length} pipes</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🔄 {refillOrders.length} refills</span>
                     </div>
-                  ))}
+                  </div>
                 </div>
 
-                {/* Top flavour bar */}
-                {totalOrders > 0 && (
-                  <div style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: "10px 14px", display: "flex", flexDirection: "column", gap: 6 }}>
-                    {sortedFlavours.filter(f => (flavourCounts[f.id] || 0) > 0).map(f => {
-                      const count = flavourCounts[f.id] || 0;
-                      const pct = (count / totalOrders) * 100;
-                      return (
-                        <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                          <span style={{ fontSize: 13 }}>{f.icon}</span>
-                          <span style={{ fontSize: 12, fontWeight: 700, color: "#334155", width: 90, flexShrink: 0 }}>{f.name}</span>
-                          <div style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${pct}%`, background: f.color, borderRadius: 99 }} />
-                          </div>
-                          <span style={{ fontSize: 12, fontWeight: 900, color: f.color, minWidth: 20, textAlign: "right" }}>{count}</span>
-                        </div>
-                      );
-                    })}
-                    {activeFlavours === 0 && <span style={{ fontSize: 12, color: "#94a3b8", fontWeight: 600 }}>No orders yet</span>}
-                  </div>
-                )}
               </div>
 
               {/* ── KPIs ── */}
@@ -659,42 +648,6 @@ export default function App() {
               </button>
 
               {!kpisCollapsed && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-
-                {/* ── Revenue at a glance (full width) ── */}
-                <div style={styles.revenueHero}>
-                  <div style={styles.revenueHeroTop}>
-                    <div>
-                      <div style={styles.revenueHeroLabel}>Total Revenue</div>
-                      <div style={styles.revenueHeroAmount}>{formatCurrency(totals.gross)}</div>
-                    </div>
-                    <div style={styles.revenueHeroMeta}>{orders.length} {orders.length === 1 ? "order" : "orders"} · {todayLabel}</div>
-                  </div>
-                  <div style={styles.revenueStatRow}>
-                    <div style={styles.revenueStat}>
-                      <span style={styles.revenueStatIcon}>💳</span>
-                      <span style={styles.revenueStatLabel}>Card</span>
-                      <span style={styles.revenueStatValue}>{formatCurrency(totals.card)}</span>
-                    </div>
-                    <div style={styles.revenueStatDivider} />
-                    <div style={styles.revenueStat}>
-                      <span style={styles.revenueStatIcon}>💵</span>
-                      <span style={styles.revenueStatLabel}>Cash</span>
-                      <span style={styles.revenueStatValue}>{formatCurrency(totals.cash)}</span>
-                    </div>
-                    <div style={styles.revenueStatDivider} />
-                    <div style={styles.revenueStat}>
-                      <span style={styles.revenueStatIcon}>🪈</span>
-                      <span style={styles.revenueStatLabel}>Pipes</span>
-                      <span style={styles.revenueStatValue}>{newPipeOrders.length}</span>
-                    </div>
-                    <div style={styles.revenueStatDivider} />
-                    <div style={styles.revenueStat}>
-                      <span style={styles.revenueStatIcon}>🔄</span>
-                      <span style={styles.revenueStatLabel}>Refills</span>
-                      <span style={styles.revenueStatValue}>{refillOrders.length}</span>
-                    </div>
-                  </div>
-                </div>
 
                 {/* ── Row: Avg Value + Refill Rate ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
@@ -770,6 +723,54 @@ export default function App() {
                   </div>
                   <span style={{ ...styles.kpiSub, marginTop: 6 }}>{activeFlavours} of {FLAVOURS.length} flavours ordered this session</span>
                 </div>
+
+                {/* ── Row: Expected Revenue + Hubbly Capacity ── */}
+                {(() => {
+                  const coalItem      = stock.find(i => i.name === "Coal");
+                  const mouthItem     = stock.find(i => i.name === "Mouth Pieces");
+                  const flavourItem   = stock.find(i => i.subItems);
+                  const COAL_PER_ORDER = 3;
+                  const capCoal  = coalItem  ? Math.floor(coalItem.quantity / COAL_PER_ORDER) : Infinity;
+                  const capMouth = mouthItem ? Math.floor(mouthItem.quantity)                 : Infinity;
+                  const capFlavour = flavourItem
+                    ? Math.floor(flavourItem.subItems.reduce((sum, s) => sum + s.quantity / (FLAVOUR_PER_SALE[s.id] ?? (1/4)), 0))
+                    : Infinity;
+                  const remaining = Math.min(capCoal, capMouth, capFlavour === Infinity ? 0 : capFlavour);
+                  const limitedBy = capCoal <= capMouth && capCoal <= capFlavour ? "coal"
+                    : capMouth <= capCoal && capMouth <= capFlavour ? "mouth pieces" : "flavour";
+                  const progressPct = avgDailyRevenue ? Math.min((totals.gross / avgDailyRevenue) * 100, 100) : 0;
+                  const onTrack = avgDailyRevenue && totals.gross >= avgDailyRevenue * 0.75;
+                  return (
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <div style={styles.kpiCard}>
+                        <span style={styles.kpiLabel}>Expected Today</span>
+                        <span style={styles.kpiValue}>{avgDailyRevenue ? formatCurrency(Math.round(avgDailyRevenue)) : "—"}</span>
+                        {avgDailyRevenue ? <>
+                          <div style={{ height: 4, borderRadius: 99, background: "rgba(0,0,0,0.07)", overflow: "hidden", marginTop: 6 }}>
+                            <div style={{ height: "100%", width: `${progressPct}%`, background: onTrack ? "#16a34a" : "#f59e0b", borderRadius: 99, transition: "width 0.4s ease" }} />
+                          </div>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: onTrack ? "#16a34a" : "#b45309", background: onTrack ? "rgba(22,163,74,0.08)" : "#fffbeb", padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 4 }}>{Math.round(progressPct)}% of avg</span>
+                          <span style={styles.kpiSub}>Based on past session history</span>
+                        </> : <span style={styles.kpiSub}>No history yet — run a few sessions first</span>}
+                      </div>
+                      <div style={styles.kpiCard}>
+                        <span style={styles.kpiLabel}>Hubblys</span>
+                        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
+                          <span style={styles.kpiValue}>{totalOrders}</span>
+                          <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>served</span>
+                        </div>
+                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
+                          <span style={{ fontSize: 18, fontWeight: 900, color: remaining > 10 ? "#16a34a" : remaining > 3 ? "#f59e0b" : "#dc2626", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{remaining}</span>
+                          <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, lineHeight: 1.2 }}>left in<br/>stock</span>
+                        </div>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: remaining > 10 ? "#16a34a" : remaining > 3 ? "#b45309" : "#dc2626", background: remaining > 10 ? "rgba(22,163,74,0.08)" : remaining > 3 ? "#fffbeb" : "#fef2f2", padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>
+                          {remaining > 10 ? "Well stocked" : remaining > 3 ? `Low — restock soon` : remaining === 0 ? "Out of stock" : "Critical — restock now"}
+                        </span>
+                        <span style={styles.kpiSub}>Limited by {limitedBy}</span>
+                      </div>
+                    </div>
+                  );
+                })()}
 
               </div>}
 
