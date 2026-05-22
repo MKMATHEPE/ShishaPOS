@@ -1,4 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+
+async function hashPin(pin) {
+  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
+  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
+}
+// Pre-computed SHA-256("1234") for the sync useState initializer
+const HASH_1234 = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
 import chillPipeLogo from "./assets/The_Chill_Pipe.png";
 import { supabase } from "./supabase";
 import {
@@ -58,8 +65,8 @@ export default function App() {
   const [users, setUsers] = useState(() => {
     try {
       const s = localStorage.getItem("pos_users");
-      return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: "1234", permissions: { delivered: true, stock: true, management: true, settings: true } }];
-    } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: "1234", permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
+      return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }];
+    } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
   });
   const [activeUser, setActiveUser] = useState(null);
   const [loginUsername, setLoginUsername] = useState("");
@@ -151,7 +158,7 @@ export default function App() {
         localStorage.setItem("pos_users", JSON.stringify(remoteUsers));
       } else if (remoteUsers && remoteUsers.length === 0) {
         // Supabase is empty — seed it with current defaults
-        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: "1234", permissions: { delivered: true, stock: true, management: true, settings: true } }];
+        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }];
         setUsers(defaults);
         localStorage.setItem("pos_users", JSON.stringify(defaults));
         syncUsers(defaults);
@@ -231,9 +238,10 @@ export default function App() {
     }));
   }, []);
 
-  const handleLogin = useCallback(() => {
+  const handleLogin = useCallback(async () => {
+    const hashed = await hashPin(loginPassword);
     const match = users.find(
-      (u) => u.name.toLowerCase() === loginUsername.trim().toLowerCase() && u.pin === loginPassword
+      (u) => u.name.toLowerCase() === loginUsername.trim().toLowerCase() && u.pin === hashed
     );
     if (match) {
       setActiveUser(match);
@@ -468,7 +476,7 @@ export default function App() {
                   ...styles.flavourBtn,
                   background: flash === f.id ? f.color : selectedFlavour?.id === f.id ? f.color : f.bg,
                   color: flash === f.id ? "#fff" : selectedFlavour?.id === f.id ? "#fff" : "#111827",
-                  borderColor: selectedFlavour?.id === f.id ? f.color : f.border,
+                  border: `1px solid ${selectedFlavour?.id === f.id ? f.color : f.border}`,
                   transform: selectedFlavour?.id === f.id ? "translateY(-2px)" : "translateY(0)",
                 }}
               >
@@ -1071,8 +1079,8 @@ export default function App() {
                         <span style={styles.stockName}>{item.name}</span>
                         <div style={styles.stockMeta}>
                           <span style={styles.stockUnit}>{Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2)} {item.unit} total</span>
-                          {anyOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca" }}>Out of stock</span>}
-                          {anyLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", borderColor: "#fde68a" }}>Low</span>}
+                          {anyOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
+                          {anyLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
                         </div>
                       </div>
                       <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginRight: 4 }}>{isOpen ? "▲ Hide" : "▼ Show"}</span>
@@ -1085,8 +1093,8 @@ export default function App() {
                           return (
                             <div key={f.id} style={styles.subItemRow}>
                               <span style={{ ...styles.subItemTag, background: f.bg, color: f.color }}>{f.icon} {f.name}</span>
-                              {fOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca", fontSize: 9 }}>Out</span>}
-                              {fLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", borderColor: "#fde68a", fontSize: 9 }}>Low</span>}
+                              {fOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: 9 }}>Out</span>}
+                              {fLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 9 }}>Low</span>}
 
                               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
@@ -1191,8 +1199,8 @@ export default function App() {
                           · {Math.floor(item.quantity / pack.size)} {pack.plural} + {item.quantity % pack.size} pcs
                         </span>
                       )}
-                      {isOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", borderColor: "#fecaca" }}>Out of stock</span>}
-                      {isLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", borderColor: "#fde68a" }}>Low</span>}
+                      {isOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
+                      {isLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
                     </div>
                   </div>
 
@@ -1600,6 +1608,7 @@ export default function App() {
                       style={{ ...styles.userRoleSelect, flex: 1 }}
                     >
                       <option value="Staff">Staff</option>
+                      <option value="Manager">Manager</option>
                       <option value="Admin">Admin</option>
                     </select>
                     <input
@@ -1611,12 +1620,15 @@ export default function App() {
                       style={{ ...styles.userNameInput, flex: 1 }}
                     />
                     <button
-                      onClick={() => {
+                      onClick={async () => {
                         if (!newUserName.trim() || !newUserPin) return;
+                        const hashedPin = await hashPin(newUserPin);
                         const defaultPerms = newUserRole === "Admin"
                           ? { delivered: true, stock: true, management: true, settings: true }
+                          : newUserRole === "Manager"
+                          ? { delivered: true, stock: true, management: true, settings: false }
                           : { delivered: true, stock: false, management: false, settings: false };
-                        setUsers((prev) => [...prev, { id: Date.now(), name: newUserName.trim(), role: newUserRole, pin: newUserPin, permissions: defaultPerms }]);
+                        setUsers((prev) => [...prev, { id: Date.now(), name: newUserName.trim(), role: newUserRole, pin: hashedPin, permissions: defaultPerms }]);
                         setNewUserName("");
                         setNewUserPin("");
                         setNewUserRole("Staff");
@@ -1841,7 +1853,7 @@ const styles = {
   },
   toggleActive: {
     background: "#0f172a",
-    borderColor: "#0f172a",
+    border: "1px solid #0f172a",
     color: "#ffffff",
     boxShadow: "0 6px 16px rgba(15,23,42,0.18)",
   },
@@ -2098,12 +2110,12 @@ const styles = {
   },
   permissionPillOn: {
     background: "#0f172a",
-    borderColor: "#0f172a",
+    border: "1px solid #0f172a",
     color: "#ffffff",
   },
   permissionPillAlwaysOn: {
     background: "rgba(15,23,42,0.08)",
-    borderColor: "rgba(15,23,42,0.15)",
+    border: "1px solid rgba(15,23,42,0.15)",
     color: "#64748b",
     cursor: "default",
   },
@@ -2812,7 +2824,7 @@ const styles = {
     outline: "none",
   },
   priceInputDirty: {
-    borderColor: "#f59e0b",
+    border: "1px solid #f59e0b",
     background: "#fffbeb",
   },
   priceConfirmRow: {

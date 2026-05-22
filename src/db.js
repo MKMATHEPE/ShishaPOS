@@ -15,15 +15,17 @@ export async function fetchUsers() {
 
 export async function syncUsers(users) {
   if (!ok()) return
-  // Replace all rows with current state
-  await supabase.from('pos_users').delete().neq('id', 0)
   if (users.length) {
     const rows = users.map(u => ({
       id: u.id, name: u.name, role: u.role, pin: u.pin,
       permissions: u.permissions,
     }))
-    const { error } = await supabase.from('pos_users').insert(rows)
-    if (error) console.error('syncUsers', error)
+    const { error } = await supabase.from('pos_users').upsert(rows, { onConflict: 'id' })
+    if (error) { console.error('syncUsers', error); return }
+    const { error: delError } = await supabase.from('pos_users').delete().not('id', 'in', `(${users.map(u => u.id).join(',')})`)
+    if (delError) console.error('syncUsers delete', delError)
+  } else {
+    await supabase.from('pos_users').delete().neq('id', 0)
   }
 }
 
@@ -41,15 +43,18 @@ export async function fetchStock() {
 
 export async function syncStock(stock) {
   if (!ok()) return
-  await supabase.from('pos_stock').delete().neq('id', 0)
   if (stock.length) {
     const rows = stock.map(i => ({
       id: i.id, name: i.name, category: i.category,
       quantity: i.quantity, unit: i.unit, low_threshold: i.lowThreshold,
       sub_items: i.subItems ?? null,
     }))
-    const { error } = await supabase.from('pos_stock').insert(rows)
-    if (error) console.error('syncStock', error)
+    const { error } = await supabase.from('pos_stock').upsert(rows, { onConflict: 'id' })
+    if (error) { console.error('syncStock', error); return }
+    const { error: delError } = await supabase.from('pos_stock').delete().not('id', 'in', `(${stock.map(i => i.id).join(',')})`)
+    if (delError) console.error('syncStock delete', delError)
+  } else {
+    await supabase.from('pos_stock').delete().neq('id', 0)
   }
 }
 
@@ -130,13 +135,16 @@ export async function fetchExpenses() {
 
 export async function syncExpenses(expenses) {
   if (!ok()) return
-  await supabase.from('pos_expenses').delete().neq('id', 0)
   if (expenses.length) {
     const rows = expenses.map(e => ({
       id: e.id, category: e.category, qty: e.qty ?? null,
       amount: e.amount, time: e.time,
     }))
-    const { error } = await supabase.from('pos_expenses').insert(rows)
-    if (error) console.error('syncExpenses', error)
+    const { error } = await supabase.from('pos_expenses').upsert(rows, { onConflict: 'id' })
+    if (error) { console.error('syncExpenses', error); return }
+    const { error: delError } = await supabase.from('pos_expenses').delete().not('id', 'in', `(${expenses.map(e => e.id).join(',')})`)
+    if (delError) console.error('syncExpenses delete', delError)
+  } else {
+    await supabase.from('pos_expenses').delete().neq('id', 0)
   }
 }
