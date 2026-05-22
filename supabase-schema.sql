@@ -33,8 +33,12 @@ create table if not exists pos_orders (
   time timestamptz not null,
   delivered_at timestamptz,
   session_date date not null default current_date,
+  sold_by text,
   created_at timestamptz default now()
 );
+
+-- Migration: add sold_by to existing pos_orders table
+-- alter table pos_orders add column if not exists sold_by text;
 
 -- Expenses
 create table if not exists pos_expenses (

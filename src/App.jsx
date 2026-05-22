@@ -200,6 +200,7 @@ export default function App() {
       price: prices[orderType],
       time: new Date(),
       status: "active",
+      soldBy: activeUser?.name ?? "Unknown",
     };
 
     setOrders((prev) => [...prev, order]);
@@ -563,6 +564,7 @@ export default function App() {
                       <strong>{o.flavour.name}</strong>
                       <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · ordered {formatTime(o.time)} · delivered {formatTime(o.deliveredAt)}</small>
                     </span>
+                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto", flexShrink: 0 }}>{o.soldBy}</span>}
                   </div>
                 ))}
               </div>

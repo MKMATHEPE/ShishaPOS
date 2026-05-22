@@ -1,17 +1,51 @@
-# React + Vite
+# The Chill Pipe · POS
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+A point-of-sale system built for The Chill Pipe shisha lounge. Runs in the browser, syncs to Supabase in real time, and falls back to localStorage when offline.
 
-Currently, two official plugins are available:
+---
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Features
 
-## React Compiler
+- **POS** — Place new pipe or refill orders, choose flavour, set payment method (card / cash), and confirm in one tap.
+- **Orders Delivered** — Track fulfilled orders with timestamps and payment breakdown.
+- **Management** — Live session KPIs: revenue, order counts, average spend, flavour popularity, and historical daily averages.
+- **Stock** — Manage consumables and equipment inventory. Low-stock and out-of-stock alerts per item and per flavour.
+- **Settings** — Add / remove staff, set per-user permissions, and configure pipe prices.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+## Roles & Permissions
 
-## Expanding the ESLint configuration
+| Permission | Staff | Manager | Admin |
+|---|:---:|:---:|:---:|
+| POS | ✓ | ✓ | ✓ |
+| Orders Delivered | ✓ | ✓ | ✓ |
+| Stock | | ✓ | ✓ |
+| Management | | ✓ | ✓ |
+| Settings | | | ✓ |
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
-# ShishaPOS
+Permissions are per-user and can be toggled by an Admin from the Settings tab.
+
+## Getting Started
+
+```bash
+npm install
+npm run dev
+```
+
+Open `http://localhost:5173` in your browser. Default login: **Admin / 1234**.
+
+## Tech Stack
+
+- [React 19](https://react.dev) + [Vite](https://vite.dev)
+- [Supabase](https://supabase.com) — Postgres database with real-time sync
+- localStorage — offline fallback, no data loss if Supabase is unreachable
+
+## Environment Variables
+
+Create a `.env` file in the project root:
+
+```
+VITE_SUPABASE_URL=https://<your-project>.supabase.co
+VITE_SUPABASE_ANON_KEY=<your-anon-key>
+```
+
+Without these the app runs in local-only mode (no sync between devices).

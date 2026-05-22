@@ -74,6 +74,7 @@ export async function fetchOrders() {
     payment: r.payment, price: r.price, status: r.status,
     time: new Date(r.time),
     deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
+    soldBy: r.sold_by ?? null,
   }))
 }
 
@@ -84,6 +85,7 @@ export async function insertOrder(order) {
     id: order.id, flavour: order.flavour, type: order.type,
     payment: order.payment, price: order.price, status: order.status,
     time: order.time.toISOString(), session_date: today,
+    sold_by: order.soldBy ?? null,
   })
   if (error) console.error('insertOrder', error)
 }
