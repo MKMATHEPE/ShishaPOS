@@ -165,6 +165,8 @@ export default function App() {
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [managementDateFrom, setManagementDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
   const [managementDateTo, setManagementDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [managementTimeFrom, setManagementTimeFrom] = useState("00:00");
+  const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
   const [sessionDates, setSessionDates] = useState([]);
@@ -245,19 +247,21 @@ export default function App() {
     fetchSessionDates().then(dates => { if (dates) setSessionDates(dates); });
   }, [activeTab]); // eslint-disable-line
 
-  // Fetch orders when the management date range changes
+  // Fetch orders when the management date/time range changes
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
     if (managementDateFrom === todayStr && managementDateTo === todayStr) {
-      setManagementOrders([]); return;
+      setManagementOrders([]); return; // today filtered client-side from live orders
     }
     if (!supabase) return;
     setManagementLoading(true);
-    fetchOrdersByDateRange(managementDateFrom, managementDateTo).then(o => {
+    const from = new Date(`${managementDateFrom}T${managementTimeFrom}:00`).toISOString();
+    const to   = new Date(`${managementDateTo}T${managementTimeTo}:59`).toISOString();
+    fetchOrdersByDateRange(from, to).then(o => {
       setManagementOrders(o ?? []);
       setManagementLoading(false);
     });
-  }, [managementDateFrom, managementDateTo]); // eslint-disable-line
+  }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]); // eslint-disable-line
 
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
@@ -670,7 +674,17 @@ export default function App() {
           {visibleTab === "management" && (() => {
             const todayStr = new Date().toISOString().slice(0, 10);
             const isViewingToday = managementDateFrom === todayStr && managementDateTo === todayStr;
-            const displayOrders = isViewingToday ? orders : managementOrders;
+            const [ffh, ffm] = managementTimeFrom.split(":").map(Number);
+            const [fth, ftm] = managementTimeTo.split(":").map(Number);
+            const fromMin = ffh * 60 + ffm;
+            const toMin   = fth * 60 + ftm;
+            const displayOrders = isViewingToday
+              ? orders.filter(o => {
+                  const t = o.time instanceof Date ? o.time : new Date(o.time);
+                  const m = t.getHours() * 60 + t.getMinutes();
+                  return m >= fromMin && m <= toMin;
+                })
+              : managementOrders;
             const displayTotals = displayOrders.reduce((acc, o) => {
               acc.gross += o.price;
               if (o.payment === "card") acc.card += o.price; else acc.cash += o.price;
@@ -740,7 +754,7 @@ export default function App() {
                   <span style={styles.totalSub}>Terminal 01 · {mgmtDateLabel}</span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "8px 12px", flexShrink: 0 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
                     <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>From</span>
                     <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                       <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateFrom)}</span>
@@ -749,15 +763,29 @@ export default function App() {
                         style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
                       />
                     </div>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      {managementTimeFrom !== "00:00" && <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{managementTimeFrom}</span>}
+                      <input type="time" value={managementTimeFrom}
+                        onChange={e => { if (e.target.value) setManagementTimeFrom(e.target.value); }}
+                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", minWidth: 32, minHeight: 16, height: "100%" }}
+                      />
+                    </div>
                   </div>
                   <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontWeight: 700 }}>→</span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
                     <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>To</span>
                     <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
                       <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateTo)}</span>
                       <input type="date" value={managementDateTo} min={managementDateFrom} max={todayStr}
                         onChange={e => { if (e.target.value) setManagementDateTo(e.target.value); }}
                         style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                      />
+                    </div>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      {managementTimeTo !== "23:59" && <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{managementTimeTo}</span>}
+                      <input type="time" value={managementTimeTo}
+                        onChange={e => { if (e.target.value) setManagementTimeTo(e.target.value); }}
+                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", minWidth: 32, minHeight: 16, height: "100%" }}
                       />
                     </div>
                   </div>

@@ -113,8 +113,8 @@ export async function fetchOrdersByDateRange(from, to) {
   const { data, error } = await supabase
     .from('pos_orders')
     .select('*')
-    .gte('session_date', from)
-    .lte('session_date', to)
+    .gte('time', from)
+    .lte('time', to)
     .order('time', { ascending: true })
   if (error) { console.error('fetchOrdersByDateRange', error); return null }
   return data.map(r => ({
