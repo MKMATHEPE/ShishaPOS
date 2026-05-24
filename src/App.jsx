@@ -953,7 +953,7 @@ export default function App() {
                   const coalItem      = stock.find(i => i.name === "Coal");
                   const mouthItem     = stock.find(i => i.name === "Mouth Pieces");
                   const flavourItem   = stock.find(i => i.subItems);
-                  const COAL_PER_ORDER = 3;
+                  const COAL_PER_ORDER = 2;
                   const capCoal  = coalItem  ? Math.floor(coalItem.quantity / COAL_PER_ORDER) : Infinity;
                   const capMouth = mouthItem ? Math.floor(mouthItem.quantity)                 : Infinity;
                   const capFlavour = flavourItem
