@@ -107,6 +107,36 @@ export async function deleteOrder(id) {
   if (error) console.error('deleteOrder', error)
 }
 
+// ── Orders by date (for management date filter) ───────
+export async function fetchOrdersByDate(date) {
+  if (!ok()) return null
+  const { data, error } = await supabase
+    .from('pos_orders')
+    .select('*')
+    .eq('session_date', date)
+    .order('time', { ascending: true })
+  if (error) { console.error('fetchOrdersByDate', error); return null }
+  return data.map(r => ({
+    id: r.id, flavour: r.flavour, type: r.type,
+    payment: r.payment, price: r.price, status: r.status,
+    time: new Date(r.time),
+    deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
+    soldBy: r.sold_by ?? null,
+    pipeReturned: r.pipe_returned ?? false,
+  }))
+}
+
+// ── Session dates list ─────────────────────────────────
+export async function fetchSessionDates() {
+  if (!ok()) return null
+  const { data, error } = await supabase
+    .from('pos_orders')
+    .select('session_date')
+    .order('session_date', { ascending: false })
+  if (error) { console.error('fetchSessionDates', error); return null }
+  return [...new Set(data.map(r => r.session_date))]
+}
+
 // ── Historical revenue (past sessions avg) ────────────
 export async function fetchHistoricalRevenue() {
   if (!ok()) return null

@@ -14,6 +14,7 @@ import {
   fetchOrders, insertOrder, updateOrder, deleteOrder,
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
+  fetchOrdersByDate, fetchSessionDates,
 } from "./db";
 
 const FLAVOURS = [
@@ -57,6 +58,11 @@ const isPipeEquipment = (item) =>
 
 function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
+}
+
+function formatSessionDate(dateStr) {
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
 }
 
 function formatCurrency(n) {
@@ -151,6 +157,10 @@ export default function App() {
   const [editStockCost, setEditStockCost] = useState("");
   const [editSubCost, setEditSubCost] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
+  const [managementDate, setManagementDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [managementOrders, setManagementOrders] = useState([]);
+  const [managementLoading, setManagementLoading] = useState(false);
+  const [sessionDates, setSessionDates] = useState([]);
   const listRef = useRef(null);
   const undoTimer = useRef(null);
 
@@ -222,6 +232,23 @@ export default function App() {
     refresh();
   }, [activeTab]); // eslint-disable-line
 
+  // Fetch session dates list once management tab is opened
+  useEffect(() => {
+    if (activeTab !== "management" || !supabase || sessionDates.length > 0) return;
+    fetchSessionDates().then(dates => { if (dates) setSessionDates(dates); });
+  }, [activeTab]); // eslint-disable-line
+
+  // Fetch historical orders when management date changes
+  useEffect(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    if (managementDate === todayStr) { setManagementOrders([]); return; }
+    if (!supabase) return;
+    setManagementLoading(true);
+    fetchOrdersByDate(managementDate).then(o => {
+      setManagementOrders(o ?? []);
+      setManagementLoading(false);
+    });
+  }, [managementDate]); // eslint-disable-line
 
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
@@ -632,33 +659,48 @@ export default function App() {
           )}
 
           {visibleTab === "management" && (() => {
-            const newPipeOrders = orders.filter((o) => o.type === "full");
-            const refillOrders = orders.filter((o) => o.type === "refill");
-            const maxFlavourCount = Math.max(...FLAVOURS.map((f) => flavourCounts[f.id] || 0), 1);
+            const todayStr = new Date().toISOString().slice(0, 10);
+            const isViewingToday = managementDate === todayStr;
+            const displayOrders = isViewingToday ? orders : managementOrders;
+            const displayTotals = displayOrders.reduce((acc, o) => {
+              acc.gross += o.price;
+              if (o.payment === "card") acc.card += o.price; else acc.cash += o.price;
+              return acc;
+            }, { gross: 0, card: 0, cash: 0 });
+            const displayFlavourCounts = displayOrders.reduce((acc, o) => {
+              acc[o.flavour.id] = (acc[o.flavour.id] || 0) + 1; return acc;
+            }, {});
+            const displayDeliveredOrders = displayOrders.filter((o) => o.status === "delivered");
+            const displayCurrentOrders   = displayOrders.filter((o) => o.status !== "delivered");
+
+            const newPipeOrders = displayOrders.filter((o) => o.type === "full");
+            const refillOrders  = displayOrders.filter((o) => o.type === "refill");
+            const maxFlavourCount = Math.max(...FLAVOURS.map((f) => displayFlavourCounts[f.id] || 0), 1);
 
             // KPIs
-            const totalOrders = orders.length;
-            const avgOrderValue = totalOrders > 0 ? totals.gross / totalOrders : 0;
+            const totalOrders = displayOrders.length;
+            const avgOrderValue = totalOrders > 0 ? displayTotals.gross / totalOrders : 0;
             const refillRate = totalOrders > 0 ? Math.round((refillOrders.length / totalOrders) * 100) : 0;
-            const cardPct = totals.gross > 0 ? Math.round((totals.card / totals.gross) * 100) : 0;
+            const cardPct = displayTotals.gross > 0 ? Math.round((displayTotals.card / displayTotals.gross) * 100) : 0;
             const cashPct = 100 - cardPct;
 
-            const sortedFlavours = [...FLAVOURS].sort((a, b) => (flavourCounts[b.id] || 0) - (flavourCounts[a.id] || 0));
+            const sortedFlavours = [...FLAVOURS].sort((a, b) => (displayFlavourCounts[b.id] || 0) - (displayFlavourCounts[a.id] || 0));
             const topFlavour = totalOrders > 0 ? sortedFlavours[0] : null;
-            const topFlavourCount = topFlavour ? (flavourCounts[topFlavour.id] || 0) : 0;
+            const topFlavourCount = topFlavour ? (displayFlavourCounts[topFlavour.id] || 0) : 0;
             const leastFlavour = totalOrders > 0 ? sortedFlavours[sortedFlavours.length - 1] : null;
-            const leastFlavourCount = leastFlavour ? (flavourCounts[leastFlavour.id] || 0) : 0;
-            const activeFlavours = FLAVOURS.filter(f => (flavourCounts[f.id] || 0) > 0).length;
+            const leastFlavourCount = leastFlavour ? (displayFlavourCounts[leastFlavour.id] || 0) : 0;
+            const activeFlavours = FLAVOURS.filter(f => (displayFlavourCounts[f.id] || 0) > 0).length;
 
             const sessionMins = (() => {
-              if (orders.length < 2) return null;
-              const times = orders.map(o => new Date(o.time).getTime());
+              if (displayOrders.length < 2) return null;
+              const times = displayOrders.map(o => new Date(o.time).getTime());
               return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
             })();
             const ordersPerHour = sessionMins > 0 ? ((totalOrders / sessionMins) * 60).toFixed(1) : null;
-            const revenuePerHour = sessionMins > 0 ? Math.round((totals.gross / sessionMins) * 60) : null;
+            const revenuePerHour = sessionMins > 0 ? Math.round((displayTotals.gross / sessionMins) * 60) : null;
 
-            const deliveryRate = totalOrders > 0 ? Math.round((deliveredOrders.length / totalOrders) * 100) : 0;
+            const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
+            const mgmtDateLabel = isViewingToday ? todayLabel : formatSessionDate(managementDate);
 
             // Status helpers
             const refillStatus = refillRate >= 40
@@ -681,12 +723,22 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
-              <div style={styles.settingsBar}>
+              <div style={{ ...styles.settingsBar, justifyContent: "space-between" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
-                  <span style={styles.totalSub}>Terminal 01 · {todayLabel}</span>
+                  <span style={styles.totalSub}>Terminal 01 · {mgmtDateLabel}</span>
                 </div>
+                <input
+                  type="date"
+                  value={managementDate}
+                  max={new Date().toISOString().slice(0, 10)}
+                  onChange={e => { if (e.target.value) setManagementDate(e.target.value); }}
+                  style={{ border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.12)", cursor: "pointer", fontFamily: "inherit", outline: "none", colorScheme: "dark" }}
+                />
               </div>
+              {managementLoading && (
+                <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
+              )}
 
               {/* ── Always-visible order summary ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -694,13 +746,13 @@ export default function App() {
                 <div style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 2 }}>Total Revenue</div>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(totals.gross)}</div>
+                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(displayTotals.gross)}</div>
                   </div>
                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {todayLabel}</span>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {mgmtDateLabel}</span>
                     <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(totals.card)}</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(totals.cash)}</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(displayTotals.card)}</span>
+                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(displayTotals.cash)}</span>
                     </div>
                     <div style={{ display: "flex", gap: 8 }}>
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🪄 {newPipeOrders.length} pipes</span>
@@ -751,10 +803,10 @@ export default function App() {
                     {ordersPerHour && <span style={{ fontSize: 10, fontWeight: 800, color: paceStatus.color, background: paceStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{paceStatus.label}</span>}
                     <span style={styles.kpiSub}>{sessionMins ? `${sessionMins} min session · ${totalOrders} orders` : "Not enough data yet"}</span>
                   </div>
-                  <div style={{ ...styles.kpiCard, background: currentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: currentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
-                    <span style={styles.kpiLabel}>Active Now</span>
-                    <span style={{ ...styles.kpiValue, color: currentOrders.length > 0 ? "#16a34a" : "#94a3b8" }}>{currentOrders.length}</span>
-                    <span style={styles.kpiSub}>{deliveryRate}% delivered · {deliveredOrders.length} done</span>
+                  <div style={{ ...styles.kpiCard, background: displayCurrentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: displayCurrentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
+                    <span style={styles.kpiLabel}>{isViewingToday ? "Active Now" : "Active"}</span>
+                    <span style={{ ...styles.kpiValue, color: displayCurrentOrders.length > 0 ? "#16a34a" : "#94a3b8" }}>{displayCurrentOrders.length}</span>
+                    <span style={styles.kpiSub}>{deliveryRate}% delivered · {displayDeliveredOrders.length} done</span>
                   </div>
                 </div>
 
@@ -777,7 +829,7 @@ export default function App() {
                   </div>
                   <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
                     {sortedFlavours.map(f => {
-                      const count = flavourCounts[f.id] || 0;
+                      const count = displayFlavourCounts[f.id] || 0;
                       const pct = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
                       return (
                         <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -808,8 +860,8 @@ export default function App() {
                   const remaining = Math.min(capCoal, capMouth, capFlavour === Infinity ? 0 : capFlavour);
                   const limitedBy = capCoal <= capMouth && capCoal <= capFlavour ? "coal"
                     : capMouth <= capCoal && capMouth <= capFlavour ? "mouth pieces" : "flavour";
-                  const progressPct = avgDailyRevenue ? Math.min((totals.gross / avgDailyRevenue) * 100, 100) : 0;
-                  const onTrack = avgDailyRevenue && totals.gross >= avgDailyRevenue * 0.75;
+                  const progressPct = avgDailyRevenue ? Math.min((displayTotals.gross / avgDailyRevenue) * 100, 100) : 0;
+                  const onTrack = avgDailyRevenue && displayTotals.gross >= avgDailyRevenue * 0.75;
                   return (
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <div style={styles.kpiCard}>
@@ -866,16 +918,16 @@ export default function App() {
                   Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" },
                 };
                 const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
-                const profit = totals.gross - totalExpenses;
-                const margin = totals.gross > 0 ? Math.round((profit / totals.gross) * 100) : 0;
+                const profit = displayTotals.gross - totalExpenses;
+                const margin = displayTotals.gross > 0 ? Math.round((profit / displayTotals.gross) * 100) : 0;
                 const profitColor = profit >= 0 ? "#16a34a" : "#dc2626";
 
                 const buildAccountingReport = () => {
-                  const lines = [`Accounting Report · ${todayLabel}`, ""];
+                  const lines = [`Accounting Report · ${mgmtDateLabel}`, ""];
                   lines.push(`REVENUE`);
-                  lines.push(`  Card:  R${totals.card}`);
-                  lines.push(`  Cash:  R${totals.cash}`);
-                  lines.push(`  Total: R${totals.gross}`);
+                  lines.push(`  Card:  R${displayTotals.card}`);
+                  lines.push(`  Cash:  R${displayTotals.cash}`);
+                  lines.push(`  Total: R${displayTotals.gross}`);
                   lines.push("");
                   lines.push(`EXPENSES`);
                   expenses.forEach(e => {
@@ -926,7 +978,7 @@ export default function App() {
                       <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Revenue</span>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: "#16a34a" }}>+ {formatCurrency(totals.gross)}</span>
+                          <span style={{ fontSize: 15, fontWeight: 900, color: "#16a34a" }}>+ {formatCurrency(displayTotals.gross)}</span>
                         </div>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                           <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Expenses</span>
