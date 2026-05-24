@@ -695,6 +695,11 @@ export default function App() {
             }, {});
             const displayDeliveredOrders = displayOrders.filter((o) => o.status === "delivered");
             const displayCurrentOrders   = displayOrders.filter((o) => o.status !== "delivered");
+            const displayExpenses = expenses.filter(e => {
+              const d = new Date(e.time);
+              const eDate = [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
+              return eDate >= managementDateFrom && eDate <= managementDateTo;
+            });
 
             const newPipeOrders = displayOrders.filter((o) => o.type === "full");
             const refillOrders  = displayOrders.filter((o) => o.type === "refill");
@@ -973,7 +978,7 @@ export default function App() {
                   Wages:     { icon: "👥", label: "Wages",     color: "#7c3aed", bg: "#f5f3ff" },
                   Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" },
                 };
-                const totalExpenses = expenses.reduce((s, e) => s + e.amount, 0);
+                const totalExpenses = displayExpenses.reduce((s, e) => s + e.amount, 0);
                 const profit = displayTotals.gross - totalExpenses;
                 const margin = displayTotals.gross > 0 ? Math.round((profit / displayTotals.gross) * 100) : 0;
                 const profitColor = profit >= 0 ? "#16a34a" : "#dc2626";
@@ -986,7 +991,7 @@ export default function App() {
                   lines.push(`  Total: R${displayTotals.gross}`);
                   lines.push("");
                   lines.push(`EXPENSES`);
-                  expenses.forEach(e => {
+                  displayExpenses.forEach(e => {
                     const opt = stockExpenseOptions.find(o => o.key === e.category) ?? EXTRA_EXPENSE_OPTS[e.category];
                     lines.push(`  ${opt?.icon ?? "📦"} ${opt?.label ?? e.category}${e.qty ? ` ×${e.qty}` : ""}: R${e.amount}`);
                   });
@@ -1056,26 +1061,44 @@ export default function App() {
                       <span>Expenses {expenses.length > 0 ? `(${expenses.length})` : ""}</span>
                       <span style={styles.collapseChevron}>{expensesCollapsed ? "▶" : "▼"}</span>
                     </button>
-                    {!expensesCollapsed && expenses.length > 0 && (
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{expenses.length} {expenses.length === 1 ? "entry" : "entries"}</span>
-                          <button onClick={() => setExpenses([])} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
+                    {!expensesCollapsed && displayExpenses.length > 0 && (() => {
+                      const groups = [];
+                      const seen = new Map();
+                      [...displayExpenses].reverse().forEach(exp => {
+                        const day = new Date(exp.time).toISOString().slice(0, 10);
+                        const key = `${exp.category}::${day}`;
+                        if (seen.has(key)) {
+                          const g = seen.get(key);
+                          g.totalQty = (g.totalQty || 0) + (exp.qty || 0);
+                          g.totalAmount += exp.amount;
+                          g.ids.push(exp.id);
+                        } else {
+                          const g = { key, category: exp.category, time: exp.time, totalQty: exp.qty || 0, totalAmount: exp.amount, ids: [exp.id] };
+                          seen.set(key, g);
+                          groups.push(g);
+                        }
+                      });
+                      return (
+                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                            <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{groups.length} {groups.length === 1 ? "entry" : "entries"}</span>
+                            <button onClick={() => { const ids = new Set(displayExpenses.map(e => e.id)); setExpenses(prev => prev.filter(e => !ids.has(e.id))); }} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
+                          </div>
+                          {groups.map(g => {
+                            const opt = stockExpenseOptions.find(o => o.key === g.category) ?? EXTRA_EXPENSE_OPTS[g.category] ?? { icon: "📦", label: g.category, color: "#64748b", bg: "#f8fafc" };
+                            return (
+                              <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
+                                <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
+                                {g.totalQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>×{g.totalQty}</span>}
+                                <span style={{ fontSize: 13, fontWeight: 900, color: "#dc2626", marginLeft: "auto", whiteSpace: "nowrap" }}>−{formatCurrency(g.totalAmount)}</span>
+                                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(g.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
+                                <button onClick={() => setExpenses(prev => prev.filter(e => !g.ids.includes(e.id)))} style={{ fontSize: 14, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>×</button>
+                              </div>
+                            );
+                          })}
                         </div>
-                        {[...expenses].reverse().map(exp => {
-                          const opt = stockExpenseOptions.find(o => o.key === exp.category) ?? EXTRA_EXPENSE_OPTS[exp.category] ?? { icon: "📦", label: exp.category, color: "#64748b", bg: "#f8fafc" };
-                          return (
-                            <div key={exp.id} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
-                              <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
-                              {exp.qty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>×{exp.qty}</span>}
-                              <span style={{ fontSize: 13, fontWeight: 900, color: "#dc2626", marginLeft: "auto", whiteSpace: "nowrap" }}>−{formatCurrency(exp.amount)}</span>
-                              <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(exp.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-                              <button onClick={() => setExpenses(prev => prev.filter(e => e.id !== exp.id))} style={{ fontSize: 14, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>×</button>
-                            </div>
-                          );
-                        })}
-                      </div>
-                    )}
+                      );
+                    })()}
 
                     {/* Add expense */}
                     {!expensesCollapsed && (() => {
