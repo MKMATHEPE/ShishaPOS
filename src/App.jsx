@@ -75,7 +75,14 @@ export default function App() {
       return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }];
     } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
   });
-  const [activeUser, setActiveUser] = useState(null);
+  const [activeUser, setActiveUser] = useState(() => {
+    try { const s = localStorage.getItem("pos_active_user"); return s ? JSON.parse(s) : null; } catch { return null; }
+  });
+  useEffect(() => {
+    if (activeUser) localStorage.setItem("pos_active_user", JSON.stringify(activeUser));
+    else localStorage.removeItem("pos_active_user");
+  }, [activeUser]);
+
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
