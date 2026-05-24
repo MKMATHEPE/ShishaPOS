@@ -14,7 +14,7 @@ import {
   fetchOrders, insertOrder, updateOrder, deleteOrder,
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
-  fetchOrdersByDate, fetchSessionDates,
+  fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
 
 const FLAVOURS = [
@@ -63,6 +63,12 @@ function formatTime(date) {
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
+}
+
+function formatDateShort(dateStr) {
+  if (!dateStr) return "—";
+  const d = new Date(dateStr + "T12:00:00");
+  return d.toLocaleDateString("en-ZA", { day: "2-digit", month: "short" });
 }
 
 function formatCurrency(n) {
@@ -157,7 +163,8 @@ export default function App() {
   const [editStockCost, setEditStockCost] = useState("");
   const [editSubCost, setEditSubCost] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [managementDate, setManagementDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [managementDateFrom, setManagementDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
+  const [managementDateTo, setManagementDateTo] = useState(() => new Date().toISOString().slice(0, 10));
   const [managementOrders, setManagementOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
   const [sessionDates, setSessionDates] = useState([]);
@@ -238,17 +245,19 @@ export default function App() {
     fetchSessionDates().then(dates => { if (dates) setSessionDates(dates); });
   }, [activeTab]); // eslint-disable-line
 
-  // Fetch historical orders when management date changes
+  // Fetch orders when the management date range changes
   useEffect(() => {
     const todayStr = new Date().toISOString().slice(0, 10);
-    if (managementDate === todayStr) { setManagementOrders([]); return; }
+    if (managementDateFrom === todayStr && managementDateTo === todayStr) {
+      setManagementOrders([]); return;
+    }
     if (!supabase) return;
     setManagementLoading(true);
-    fetchOrdersByDate(managementDate).then(o => {
+    fetchOrdersByDateRange(managementDateFrom, managementDateTo).then(o => {
       setManagementOrders(o ?? []);
       setManagementLoading(false);
     });
-  }, [managementDate]); // eslint-disable-line
+  }, [managementDateFrom, managementDateTo]); // eslint-disable-line
 
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
@@ -660,7 +669,7 @@ export default function App() {
 
           {visibleTab === "management" && (() => {
             const todayStr = new Date().toISOString().slice(0, 10);
-            const isViewingToday = managementDate === todayStr;
+            const isViewingToday = managementDateFrom === todayStr && managementDateTo === todayStr;
             const displayOrders = isViewingToday ? orders : managementOrders;
             const displayTotals = displayOrders.reduce((acc, o) => {
               acc.gross += o.price;
@@ -700,7 +709,9 @@ export default function App() {
             const revenuePerHour = sessionMins > 0 ? Math.round((displayTotals.gross / sessionMins) * 60) : null;
 
             const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
-            const mgmtDateLabel = isViewingToday ? todayLabel : formatSessionDate(managementDate);
+            const mgmtDateLabel = isViewingToday ? todayLabel
+              : managementDateFrom === managementDateTo ? formatSessionDate(managementDateFrom)
+              : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
 
             // Status helpers
             const refillStatus = refillRate >= 40
@@ -723,19 +734,36 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
-              <div style={{ ...styles.settingsBar, justifyContent: "space-between" }}>
+              <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
                   <span style={styles.totalSub}>Terminal 01 · {mgmtDateLabel}</span>
                 </div>
-                <input
-                  type="date"
-                  value={managementDate}
-                  max={new Date().toISOString().slice(0, 10)}
-                  onChange={e => { if (e.target.value) setManagementDate(e.target.value); }}
-                  style={{ border: "1px solid rgba(255,255,255,0.25)", borderRadius: 10, padding: "6px 10px", fontSize: 12, fontWeight: 700, color: "#fff", background: "rgba(255,255,255,0.12)", cursor: "pointer", fontFamily: "inherit", outline: "none", colorScheme: "dark" }}
-                />
+                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "8px 12px", flexShrink: 0 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>From</span>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateFrom)}</span>
+                      <input type="date" value={managementDateFrom} max={managementDateTo}
+                        onChange={e => { if (e.target.value) setManagementDateFrom(e.target.value); }}
+                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                      />
+                    </div>
+                  </div>
+                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontWeight: 700 }}>→</span>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 2, alignItems: "flex-start" }}>
+                    <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>To</span>
+                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
+                      <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateTo)}</span>
+                      <input type="date" value={managementDateTo} min={managementDateFrom} max={todayStr}
+                        onChange={e => { if (e.target.value) setManagementDateTo(e.target.value); }}
+                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
+                      />
+                    </div>
+                  </div>
+                </div>
               </div>
+
               {managementLoading && (
                 <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
               )}

@@ -107,15 +107,16 @@ export async function deleteOrder(id) {
   if (error) console.error('deleteOrder', error)
 }
 
-// ── Orders by date (for management date filter) ───────
-export async function fetchOrdersByDate(date) {
+// ── Orders by date range (for management date filter) ─
+export async function fetchOrdersByDateRange(from, to) {
   if (!ok()) return null
   const { data, error } = await supabase
     .from('pos_orders')
     .select('*')
-    .eq('session_date', date)
+    .gte('session_date', from)
+    .lte('session_date', to)
     .order('time', { ascending: true })
-  if (error) { console.error('fetchOrdersByDate', error); return null }
+  if (error) { console.error('fetchOrdersByDateRange', error); return null }
   return data.map(r => ({
     id: r.id, flavour: r.flavour, type: r.type,
     payment: r.payment, price: r.price, status: r.status,
