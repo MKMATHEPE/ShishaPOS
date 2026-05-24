@@ -2,6 +2,11 @@ import { supabase } from './supabase'
 
 const ok = () => !!supabase
 
+function localDateStr() {
+  const d = new Date();
+  return [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
+}
+
 // ── Users ─────────────────────────────────────────────
 export async function fetchUsers() {
   if (!ok()) return null
@@ -61,8 +66,7 @@ export async function syncStock(stock) {
 // ── Orders ────────────────────────────────────────────
 export async function fetchOrders() {
   if (!ok()) return null
-  // Load today's orders only
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const { data, error } = await supabase
     .from('pos_orders')
     .select('*')
@@ -81,7 +85,7 @@ export async function fetchOrders() {
 
 export async function insertOrder(order) {
   if (!ok()) return
-  const today = new Date().toISOString().slice(0, 10)
+  const today = localDateStr()
   const { error } = await supabase.from('pos_orders').insert({
     id: order.id, flavour: order.flavour, type: order.type,
     payment: order.payment, price: order.price, status: order.status,

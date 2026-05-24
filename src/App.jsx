@@ -60,6 +60,11 @@ function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
 
+function localToday() {
+  const d = new Date();
+  return [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
+}
+
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
@@ -163,8 +168,13 @@ export default function App() {
   const [editStockCost, setEditStockCost] = useState("");
   const [editSubCost, setEditSubCost] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
-  const [managementDateFrom, setManagementDateFrom] = useState(() => new Date().toISOString().slice(0, 10));
-  const [managementDateTo, setManagementDateTo] = useState(() => new Date().toISOString().slice(0, 10));
+  const [currentTime, setCurrentTime] = useState(() => formatTime(new Date()));
+  useEffect(() => {
+    const id = setInterval(() => setCurrentTime(formatTime(new Date())), 60000);
+    return () => clearInterval(id);
+  }, []);
+  const [managementDateFrom, setManagementDateFrom] = useState(localToday);
+  const [managementDateTo, setManagementDateTo] = useState(localToday);
   const [managementTimeFrom, setManagementTimeFrom] = useState("00:00");
   const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
@@ -249,7 +259,7 @@ export default function App() {
 
   // Fetch orders when the management date/time range changes
   useEffect(() => {
-    const todayStr = new Date().toISOString().slice(0, 10);
+    const todayStr = localToday();
     if (managementDateFrom === todayStr && managementDateTo === todayStr) {
       setManagementOrders([]); return; // today filtered client-side from live orders
     }
@@ -375,6 +385,7 @@ export default function App() {
 
   const currentOrders = orders.filter((o) => o.status !== "delivered");
   const deliveredOrders = orders.filter((o) => o.status === "delivered");
+  const pipesOut = deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned).length;
 
   const totals = orders.reduce(
     (acc, o) => {
@@ -474,7 +485,7 @@ export default function App() {
 
               <button onClick={handleLogin} style={styles.loginSignInBtn}>Sign In</button>
 
-              <div style={styles.loginFooterNote}>{todayLabel} · Terminal 01</div>
+              <div style={styles.loginFooterNote}>{todayLabel} · {currentTime}</div>
             </div>
           </div>
         ) : (
@@ -485,7 +496,7 @@ export default function App() {
             <div>
               <div style={styles.kicker}>The Chill Pipe</div>
               <h1 style={styles.logo}>POS</h1>
-              <div style={styles.terminalMeta}>{todayLabel} · Terminal 01</div>
+              <div style={styles.terminalMeta}>{todayLabel} · {currentTime}</div>
             </div>
           </div>
           {confirmLogout ? (
@@ -635,10 +646,13 @@ export default function App() {
 
           {visibleTab === "delivered" && (
             <div key="delivered" className="tab-enter" style={styles.deliveredPanel}>
-              <div style={styles.deliveredBar}>
+              <div style={{ ...styles.deliveredBar, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Orders Delivered</span>
                   <span style={styles.totalSub}>{deliveredOrders.length} orders · Card {deliveredPaymentCounts.card} · Cash {deliveredPaymentCounts.cash}</span>
+                </div>
+                <div style={{ textAlign: "right", flexShrink: 0 }}>
+                  <span style={styles.totalSub}>{pipesOut} out · {hookahPipeQty} available</span>
                 </div>
               </div>
 
@@ -672,7 +686,7 @@ export default function App() {
           )}
 
           {visibleTab === "management" && (() => {
-            const todayStr = new Date().toISOString().slice(0, 10);
+            const todayStr = localToday();
             const isViewingToday = managementDateFrom === todayStr && managementDateTo === todayStr;
             const [ffh, ffm] = managementTimeFrom.split(":").map(Number);
             const [fth, ftm] = managementTimeTo.split(":").map(Number);
@@ -756,7 +770,13 @@ export default function App() {
               <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
-                  <span style={styles.totalSub}>Terminal 01 · {mgmtDateLabel}</span>
+                  <span style={styles.totalSub}>
+                    <span
+                      onClick={() => { setManagementDateFrom(localToday()); setManagementDateTo(localToday()); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59"); }}
+                      style={{ cursor: "pointer", borderBottom: "1px dotted rgba(255,255,255,0.3)" }}
+                    >{currentTime}</span>
+                    {" · "}{mgmtDateLabel}
+                  </span>
                 </div>
                 <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "8px 12px", flexShrink: 0 }}>
                   <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
@@ -1058,15 +1078,14 @@ export default function App() {
 
                     {/* Expense entries */}
                     <button onClick={() => setExpensesCollapsed(c => !c)} style={{ ...styles.collapsibleHeader, marginTop: 4 }}>
-                      <span>Expenses {expenses.length > 0 ? `(${expenses.length})` : ""}</span>
+                      <span>Expenses {displayExpenses.length > 0 ? `(${displayExpenses.length})` : ""}</span>
                       <span style={styles.collapseChevron}>{expensesCollapsed ? "▶" : "▼"}</span>
                     </button>
                     {!expensesCollapsed && displayExpenses.length > 0 && (() => {
                       const groups = [];
                       const seen = new Map();
                       [...displayExpenses].reverse().forEach(exp => {
-                        const day = new Date(exp.time).toISOString().slice(0, 10);
-                        const key = `${exp.category}::${day}`;
+                        const key = exp.category;
                         if (seen.has(key)) {
                           const g = seen.get(key);
                           g.totalQty = (g.totalQty || 0) + (exp.qty || 0);
@@ -1607,7 +1626,7 @@ export default function App() {
               <div style={styles.settingsBar}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Settings</span>
-                  <span style={styles.totalSub}>Terminal 01 · {todayLabel}</span>
+                  <span style={styles.totalSub}>{currentTime} · {todayLabel}</span>
                 </div>
               </div>
 
