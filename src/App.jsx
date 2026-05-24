@@ -1215,27 +1215,27 @@ export default function App() {
                             {!isNonStock && (
                               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "capitalize" }}>{qtyUnit}</span>
-                                <div style={{ display: "flex", alignItems: "center", gap: 0, border: "1px solid rgba(203,213,225,0.6)", borderRadius: 8, overflow: "hidden", background: "#fff" }}>
+                                <div style={{ display: "flex", alignItems: "center", gap: 0, border: "1px solid rgba(203,213,225,0.6)", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 44 }}>
                                   <button
                                     onClick={() => setNewExpenseDesc(v => String(Math.max(0, (Number(v) || 0) - 1)))}
-                                    style={{ padding: "8px 12px", background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
+                                    style={{ padding: "0 12px", height: 44, background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
                                   >−</button>
                                   <input
                                     type="number"
                                     min="0"
                                     value={newExpenseDesc}
                                     onChange={e => setNewExpenseDesc(e.target.value)}
-                                    style={{ width: 40, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 800, color: "#0f172a", background: "transparent", padding: "8px 0" }}
+                                    style={{ width: 40, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 800, color: "#0f172a", background: "transparent", padding: 0, height: 44 }}
                                     placeholder="0"
                                   />
                                   <button
                                     onClick={() => setNewExpenseDesc(v => String((Number(v) || 0) + 1))}
-                                    style={{ padding: "8px 12px", background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
+                                    style={{ padding: "0 12px", height: 44, background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
                                   >+</button>
                                 </div>
                               </div>
                             )}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1 }}>
+                            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, maxWidth: 120 }}>
                               <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>Cost (R)</span>
                               <input
                                 type="number"
