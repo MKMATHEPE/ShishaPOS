@@ -349,24 +349,51 @@ export default function App() {
     }
   }, [users, loginUsername, loginPassword]);  // eslint-disable-line
 
+  // Restores the 4 equipment items deducted by markDelivered.
+  // Must be called BEFORE the order is removed from state.
+  // Guard conditions prevent double-restoration and refill false-positives.
+  const restorePipeEquipment = useCallback((order) => {
+    if (
+      order?.type === "full" &&
+      order?.status === "delivered" &&
+      !order?.pipeReturned
+    ) {
+      setStock(s => s.map(item =>
+        isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item
+      ));
+    }
+  }, []);
+
   const undoLast = useCallback(() => {
     if (!undoTarget) return;
-    setOrders((prev) => prev.filter((o) => o.id !== undoTarget));
+    // Read current order state to check if it was marked delivered in the undo window.
+    // If it was, restorePipeEquipment handles the equipment reversal.
+    const order = orders.find(o => o.id === undoTarget);
+    if (order) restorePipeEquipment(order);
+    setOrders(prev => prev.filter(o => o.id !== undoTarget));
     deleteOrder(undoTarget);
     setUndoTarget(null);
     clearTimeout(undoTimer.current);
-  }, [undoTarget]);
+  }, [undoTarget, orders, restorePipeEquipment]);
 
-  const removeOrder = useCallback((id) => {
-    setOrders((prev) => {
-      const order = prev.find(o => o.id === id);
-      if (order?.type === "full" && order?.status === "delivered" && !order?.pipeReturned) {
-        setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item));
-      }
-      return prev.filter((o) => o.id !== id);
-    });
-    deleteOrder(id);
-  }, []);
+  // Accepts the full order object so there is no stale-closure risk when reading
+  // order.status / order.pipeReturned — we inspect before any state mutation.
+  const removeOrder = useCallback((order) => {
+    // 1. Restore equipment if the pipe was out when the order is cancelled
+    restorePipeEquipment(order);
+    // 2. Remove from local state
+    setOrders(prev => prev.filter(o => o.id !== order.id));
+    // 3. Hard-delete from DB
+    deleteOrder(order.id);
+  }, [restorePipeEquipment]);
+
+  // Removes a historical unreturned pipe (from a previous session).
+  // Equipment must be restored before deletion — pipe was never returned.
+  const removeUnreturnedPipe = useCallback((pipe) => {
+    restorePipeEquipment(pipe);
+    setUnreturnedPipes(prev => prev.filter(o => o.id !== pipe.id));
+    deleteOrder(pipe.id);
+  }, [restorePipeEquipment]);
 
   const returnPipe = useCallback((id) => {
     setOrders((prev) => prev.map((o) => o.id === id ? { ...o, pipeReturned: true } : o));
@@ -375,16 +402,19 @@ export default function App() {
     updateOrder(id, { pipeReturned: true });
   }, []);
 
-  const markDelivered = useCallback((id) => {
+  // Accepts the full order object to avoid reading order.type inside a state updater
+  // (calling setState inside setState updater is an anti-pattern — updaters must be pure).
+  const markDelivered = useCallback((order) => {
     const deliveredAt = new Date();
-    setOrders((prev) => {
-      const order = prev.find(o => o.id === id);
-      if (order?.type === "full") {
-        setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item));
-      }
-      return prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt } : o));
-    });
-    updateOrder(id, { status: "delivered", deliveredAt });
+    // Deduct one unit of each equipment item for new-pipe orders.
+    // This is reversed by returnPipe, or by removeOrder if the order is later cancelled.
+    if (order.type === "full") {
+      setStock(s => s.map(item =>
+        isPipeEquipment(item) ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item
+      ));
+    }
+    setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", deliveredAt } : o));
+    updateOrder(order.id, { status: "delivered", deliveredAt });
   }, []);
 
   const currentOrders = orders.filter((o) => o.status !== "delivered");
@@ -639,8 +669,8 @@ export default function App() {
                   <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {formatTime(o.time)}</small>
                 </span>
                 <span style={styles.orderPrice}>{formatCurrency(o.price)}</span>
-                <button onClick={() => markDelivered(o.id)} style={styles.deliverBtn}>Delivered</button>
-                <button onClick={() => removeOrder(o.id)} style={styles.deleteBtn}>×</button>
+                <button onClick={() => markDelivered(o)} style={styles.deliverBtn}>Delivered</button>
+                <button onClick={() => removeOrder(o)} style={styles.deleteBtn}>×</button>
               </div>
             ))}
           </div>
@@ -1181,7 +1211,7 @@ export default function App() {
                             </optgroup>
                           </select>
 
-                          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
                             {!isNonStock && (
                               <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
                                 <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "capitalize" }}>{qtyUnit}</span>
@@ -1217,10 +1247,7 @@ export default function App() {
                                 style={{ ...styles.userNameInput, margin: 0 }}
                               />
                             </div>
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "transparent" }}>·</span>
-                              <button onClick={commitExpense} style={{ ...styles.addUserBtn, alignSelf: "flex-end" }}>Add</button>
-                            </div>
+                            <button onClick={commitExpense} style={styles.addUserBtn}>Add</button>
                           </div>
 
                           {stockPreview && (
