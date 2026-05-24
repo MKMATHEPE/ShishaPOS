@@ -75,6 +75,7 @@ export async function fetchOrders() {
     time: new Date(r.time),
     deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
     soldBy: r.sold_by ?? null,
+    pipeReturned: r.pipe_returned ?? false,
   }))
 }
 
@@ -95,6 +96,7 @@ export async function updateOrder(id, updates) {
   const row = {}
   if (updates.status) row.status = updates.status
   if (updates.deliveredAt) row.delivered_at = updates.deliveredAt.toISOString()
+  if (updates.pipeReturned !== undefined) row.pipe_returned = updates.pipeReturned
   const { error } = await supabase.from('pos_orders').update(row).eq('id', id)
   if (error) console.error('updateOrder', error)
 }

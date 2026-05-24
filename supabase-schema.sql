@@ -34,11 +34,13 @@ create table if not exists pos_orders (
   delivered_at timestamptz,
   session_date date not null default current_date,
   sold_by text,
+  pipe_returned boolean not null default false,
   created_at timestamptz default now()
 );
 
--- Migration: add sold_by to existing pos_orders table
+-- Migrations: run these on existing databases
 -- alter table pos_orders add column if not exists sold_by text;
+-- alter table pos_orders add column if not exists pipe_returned boolean not null default false;
 
 -- Expenses
 create table if not exists pos_expenses (

@@ -48,6 +48,13 @@ const RESTOCK_PACK = {
 
 const LOGO_SRC = chillPipeLogo;
 
+const isPipeEquipment = (item) =>
+  item.category === "equipment" && (
+    item.name.toLowerCase().includes("hookah") ||
+    item.name.toLowerCase().includes("rota") ||
+    item.name.toLowerCase().includes("kop")
+  );
+
 function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
 }
@@ -188,9 +195,35 @@ export default function App() {
     if (dbReady) syncExpenses(expenses);
   }, [expenses]); // eslint-disable-line
 
+  // Re-fetch from Supabase whenever the user switches tabs
+  useEffect(() => {
+    if (!dbReady || !supabase) return;
+    async function refresh() {
+      const [remoteOrders, remoteStock, remoteExpenses] = await Promise.all([
+        fetchOrders(), fetchStock(), fetchExpenses(),
+      ]);
+      if (remoteOrders) setOrders(remoteOrders);
+      if (remoteStock && remoteStock.length > 0) {
+        setStock(remoteStock);
+        localStorage.setItem("pos_stock", JSON.stringify(remoteStock));
+      }
+      if (remoteExpenses) {
+        setExpenses(remoteExpenses);
+        localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses));
+      }
+    }
+    refresh();
+  }, [activeTab]); // eslint-disable-line
+
+
+  const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
+  const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
+  const rotaTopsQty   = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("rota top"))?.quantity ?? 0;
+  const kopsQty       = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("kop"))?.quantity ?? 0;
 
   const confirmOrder = useCallback(() => {
     if (!selectedFlavour) return;
+    if (orderType === "full" && (hookahPipeQty <= 1 || rotasQty <= 1 || rotaTopsQty <= 1 || kopsQty <= 1)) return;
 
     const order = {
       id: Date.now(),
@@ -201,6 +234,7 @@ export default function App() {
       time: new Date(),
       status: "active",
       soldBy: activeUser?.name ?? "Unknown",
+      pipeReturned: false,
     };
 
     setOrders((prev) => [...prev, order]);
@@ -229,7 +263,7 @@ export default function App() {
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
     setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices]);
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -253,7 +287,7 @@ export default function App() {
       setLoginError("Invalid username or password.");
       setLoginPassword("");
     }
-  }, [users, loginUsername, loginPassword]);
+  }, [users, loginUsername, loginPassword]);  // eslint-disable-line
 
   const undoLast = useCallback(() => {
     if (!undoTarget) return;
@@ -266,16 +300,18 @@ export default function App() {
   const removeOrder = useCallback((id) => {
     setOrders((prev) => {
       const order = prev.find(o => o.id === id);
-      if (order?.type === "full" && order?.status === "delivered") {
-        setStock(s => s.map(item =>
-          item.category === "equipment" && item.name.toLowerCase().includes("hookah")
-            ? { ...item, quantity: item.quantity + 1 }
-            : item
-        ));
+      if (order?.type === "full" && order?.status === "delivered" && !order?.pipeReturned) {
+        setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item));
       }
       return prev.filter((o) => o.id !== id);
     });
     deleteOrder(id);
+  }, []);
+
+  const returnPipe = useCallback((id) => {
+    setOrders((prev) => prev.map((o) => o.id === id ? { ...o, pipeReturned: true } : o));
+    setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item));
+    updateOrder(id, { pipeReturned: true });
   }, []);
 
   const markDelivered = useCallback((id) => {
@@ -283,11 +319,7 @@ export default function App() {
     setOrders((prev) => {
       const order = prev.find(o => o.id === id);
       if (order?.type === "full") {
-        setStock(s => s.map(item =>
-          item.category === "equipment" && item.name.toLowerCase().includes("hookah")
-            ? { ...item, quantity: Math.max(0, item.quantity - 1) }
-            : item
-        ));
+        setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item));
       }
       return prev.map((o) => (o.id === id ? { ...o, status: "delivered", deliveredAt } : o));
     });
@@ -495,11 +527,24 @@ export default function App() {
             ))}
           </div>
 
-          {selectedFlavour && (
-            <button onClick={confirmOrder} style={styles.confirmBtn}>
-              Add to order · {selectedFlavour.name} · {orderType === "full" ? "New Pipe" : "Refill"} · {formatCurrency(prices[orderType])}
-            </button>
-          )}
+          {selectedFlavour && (() => {
+            const blockedItem = orderType === "full"
+              ? (hookahPipeQty <= 1 ? "Hookah Pipe" : rotasQty <= 1 ? "Rotas" : rotaTopsQty <= 1 ? "Rota Tops" : kopsQty <= 1 ? "Kops" : null)
+              : null;
+            const blocked = !!blockedItem;
+            return (
+              <button
+                onClick={confirmOrder}
+                disabled={blocked}
+                style={{ ...styles.confirmBtn, ...(blocked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
+              >
+                {blocked
+                  ? `No ${blockedItem} available · ${selectedFlavour.name}`
+                  : `Add to order · ${selectedFlavour.name} · ${orderType === "full" ? "New Pipe" : "Refill"} · ${formatCurrency(prices[orderType])}`
+                }
+              </button>
+            );
+          })()}
 
           {undoTarget && (
             <div style={styles.undoBar}>
@@ -564,7 +609,15 @@ export default function App() {
                       <strong>{o.flavour.name}</strong>
                       <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · ordered {formatTime(o.time)} · delivered {formatTime(o.deliveredAt)}</small>
                     </span>
-                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", marginLeft: "auto", flexShrink: 0 }}>{o.soldBy}</span>}
+                    {o.type === "full" && (
+                      o.pipeReturned
+                        ? <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}>Returned</span>
+                        : <button
+                            onClick={() => returnPipe(o.id)}
+                            style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #cbd5e1", background: "transparent", color: "#64748b", cursor: "pointer", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}
+                          >Return Pipe</button>
+                    )}
+                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: o.type === "full" ? 0 : "auto" }}>{o.soldBy}</span>}
                   </div>
                 ))}
               </div>
