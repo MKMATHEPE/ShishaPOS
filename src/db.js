@@ -83,6 +83,29 @@ export async function fetchOrders() {
   }))
 }
 
+export async function fetchUnreturnedPipes() {
+  if (!ok()) return null
+  const today = localDateStr()
+  const { data, error } = await supabase
+    .from('pos_orders')
+    .select('*')
+    .eq('type', 'full')
+    .eq('status', 'delivered')
+    .eq('pipe_returned', false)
+    .neq('session_date', today)
+    .order('time', { ascending: true })
+  if (error) { console.error('fetchUnreturnedPipes', error); return null }
+  return data.map(r => ({
+    id: r.id, flavour: r.flavour, type: r.type,
+    payment: r.payment, price: r.price, status: r.status,
+    time: new Date(r.time),
+    deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
+    soldBy: r.sold_by ?? null,
+    pipeReturned: false,
+    sessionDate: r.session_date,
+  }))
+}
+
 export async function insertOrder(order) {
   if (!ok()) return
   const today = localDateStr()

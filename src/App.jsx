@@ -11,7 +11,7 @@ import { supabase } from "./supabase";
 import {
   fetchUsers, syncUsers,
   fetchStock, syncStock,
-  fetchOrders, insertOrder, updateOrder, deleteOrder,
+  fetchOrders, fetchUnreturnedPipes, insertOrder, updateOrder, deleteOrder,
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
   fetchOrdersByDateRange, fetchSessionDates,
@@ -82,6 +82,7 @@ function formatCurrency(n) {
 
 export default function App() {
   const [orders, setOrders] = useState([]);
+  const [unreturnedPipes, setUnreturnedPipes] = useState([]);
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
@@ -192,8 +193,8 @@ export default function App() {
   // ── On mount: load from Supabase, fall back to localStorage ──
   useEffect(() => {
     async function load() {
-      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue] = await Promise.all([
-        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(),
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue, remoteUnreturned] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(),
       ]);
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       if (remoteUsers && remoteUsers.length > 0) {
@@ -208,6 +209,7 @@ export default function App() {
       }
       if (remoteStock && remoteStock.length > 0) { setStock(remoteStock); localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
       if (remoteOrders && remoteOrders.length > 0)  { setOrders(remoteOrders); }
+      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned);
       if (remoteExpenses && remoteExpenses.length > 0){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
       setDbReady(true);
     }
@@ -235,10 +237,11 @@ export default function App() {
   useEffect(() => {
     if (!dbReady || !supabase) return;
     async function refresh() {
-      const [remoteOrders, remoteStock, remoteExpenses] = await Promise.all([
-        fetchOrders(), fetchStock(), fetchExpenses(),
+      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned] = await Promise.all([
+        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(),
       ]);
       if (remoteOrders) setOrders(remoteOrders);
+      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned);
       if (remoteStock && remoteStock.length > 0) {
         setStock(remoteStock);
         localStorage.setItem("pos_stock", JSON.stringify(remoteStock));
@@ -367,6 +370,7 @@ export default function App() {
 
   const returnPipe = useCallback((id) => {
     setOrders((prev) => prev.map((o) => o.id === id ? { ...o, pipeReturned: true } : o));
+    setUnreturnedPipes((prev) => prev.filter(o => o.id !== id));
     setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item));
     updateOrder(id, { pipeReturned: true });
   }, []);
@@ -385,7 +389,7 @@ export default function App() {
 
   const currentOrders = orders.filter((o) => o.status !== "delivered");
   const deliveredOrders = orders.filter((o) => o.status === "delivered");
-  const pipesOut = deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned).length;
+  const pipesOut = deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned).length + unreturnedPipes.length;
 
   const totals = orders.reduce(
     (acc, o) => {
@@ -657,12 +661,29 @@ export default function App() {
               </div>
 
               <div style={styles.deliveredList}>
-                {deliveredOrders.length === 0 && (
+                {deliveredOrders.length === 0 && unreturnedPipes.length === 0 && (
                   <div style={styles.emptyState}>No delivered orders yet</div>
                 )}
+                {unreturnedPipes.map((o, i) => (
+                  <div key={o.id} style={styles.deliveredRow}>
+                    <span style={styles.orderIndex}>{String(i + 1).padStart(2, "0")}</span>
+                    <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
+                      {o.flavour.icon} {o.flavour.short}
+                    </span>
+                    <span style={styles.orderMeta}>
+                      <strong>{o.flavour.name}</strong>
+                      <small>New Pipe · {o.payment === "card" ? "Card" : "Cash"} · {formatDateShort(o.sessionDate)} · delivered {formatTime(o.deliveredAt)}</small>
+                    </span>
+                    <button
+                      onClick={() => returnPipe(o.id)}
+                      style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #fca5a5", background: "#fef2f2", color: "#dc2626", cursor: "pointer", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}
+                    >Return Pipe</button>
+                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>{o.soldBy}</span>}
+                  </div>
+                ))}
                 {deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE).map((o, i) => (
                   <div key={o.id} style={styles.deliveredRow}>
-                    <span style={styles.orderIndex}>{String(safePage * PAGE_SIZE + i + 1).padStart(2, "0")}</span>
+                    <span style={styles.orderIndex}>{String(unreturnedPipes.length + safePage * PAGE_SIZE + i + 1).padStart(2, "0")}</span>
                     <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
                       {o.flavour.icon} {o.flavour.short}
                     </span>
