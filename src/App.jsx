@@ -1372,67 +1372,16 @@ export default function App() {
                                       const fraction = qty - wholeBoxes;
                                       const servingsInOpen = Math.round(fraction * denom * 10) / 10;
                                       const openLabel = Number.isInteger(servingsInOpen) ? String(servingsInOpen) : servingsInOpen.toFixed(1);
-                                      const isEditing = editSubId?.stockId === item.id && editSubId?.subId === f.id;
-                                      if (qty === 0 && !isEditing) return (
-                                        <span
-                                          onClick={() => { setEditSubId({ stockId: item.id, subId: f.id }); setEditSubQty("0"); }}
-                                          style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, cursor: "pointer" }}
-                                        >–</span>
+                                      if (qty === 0) return (
+                                        <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>–</span>
                                       );
                                       return <>
-                                        {isEditing ? (
-                                          <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                                              <input
-                                                type="number"
-                                                autoFocus
-                                                min="0"
-                                                value={editSubQty}
-                                                onChange={e => setEditSubQty(e.target.value)}
-                                                onKeyDown={e => {
-                                                  if (e.key === "Enter") {
-                                                    const n = Number(editSubQty); const cost = Number(editSubCost);
-                                                    if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
-                                                      if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
-                                                    }
-                                                    setEditSubId(null); setEditSubQty(""); setEditSubCost("");
-                                                  }
-                                                  if (e.key === "Escape") { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }
-                                                }}
-                                                style={styles.restockInput}
-                                                placeholder="boxes"
-                                              />
-                                              <input
-                                                type="number"
-                                                min="0"
-                                                value={editSubCost}
-                                                onChange={e => setEditSubCost(e.target.value)}
-                                                style={{ ...styles.restockInput, width: 80 }}
-                                                placeholder="R cost"
-                                              />
-                                              <button
-                                                onClick={() => {
-                                                  const n = Number(editSubQty); const cost = Number(editSubCost);
-                                                  if (n >= 0) { setSubQtyAbsolute(item.id, f.id, n + fraction);
-                                                    if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: `Flavour-${f.id}`, qty: n, amount: cost, time: new Date().toISOString() }]);
-                                                  }
-                                                  setEditSubId(null); setEditSubQty(""); setEditSubCost("");
-                                                }}
-                                                style={styles.restockConfirmBtn}
-                                              >✓</button>
-                                              <button onClick={() => { setEditSubId(null); setEditSubQty(""); setEditSubCost(""); }} style={styles.restockCancelBtn}>✕</button>
-                                          </div>
-                                        ) : (
-                                          <span
-                                            onClick={() => { setEditSubId({ stockId: item.id, subId: f.id }); setEditSubQty(String(wholeBoxes)); }}
-                                            style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", background: "rgba(15,23,42,0.07)", padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap", cursor: "pointer" }}
-                                            title="Tap to edit"
-                                          >
-                                            📦 {wholeBoxes} {wholeBoxes === 1 ? "box" : "boxes"}
-                                          </span>
-                                        )}
-                                        {servingsInOpen > 0 && !isEditing && (
+                                        <span style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", background: "rgba(15,23,42,0.07)", padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                                          📦 {wholeBoxes} {wholeBoxes === 1 ? "box" : "boxes"}
+                                        </span>
+                                        {servingsInOpen > 0 && (
                                           <span style={{ fontSize: 11, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                            {openLabel}/{denom} open
+                                            {openLabel} orders left
                                           </span>
                                         )}
                                       </>;
@@ -1469,62 +1418,7 @@ export default function App() {
                     </div>
                   </div>
 
-                  {editStockId === item.id ? (
-                    <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                        <input
-                          type="number"
-                          autoFocus
-                          min="0"
-                          value={editStockQty}
-                          onChange={e => setEditStockQty(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") document.getElementById(`cost-${item.id}`)?.focus();
-                            if (e.key === "Escape") { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }
-                          }}
-                          style={styles.restockInput}
-                          placeholder={pack ? pack.unit : "qty"}
-                        />
-                        <input
-                          id={`cost-${item.id}`}
-                          type="number"
-                          min="0"
-                          value={editStockCost}
-                          onChange={e => setEditStockCost(e.target.value)}
-                          onKeyDown={e => {
-                            if (e.key === "Enter") {
-                              const n = Number(editStockQty); const cost = Number(editStockCost);
-                              if (n >= 0) {
-                                setStock(prev => prev.map(i => i.id === item.id ? { ...i, quantity: pack ? i.quantity + n * pack.size : n } : i));
-                                if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: item.name, qty: n, amount: cost, time: new Date().toISOString() }]);
-                              }
-                              setEditStockId(null); setEditStockQty(""); setEditStockCost("");
-                            }
-                            if (e.key === "Escape") { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }
-                          }}
-                          style={{ ...styles.restockInput, width: 80 }}
-                          placeholder="R cost"
-                        />
-                        <button
-                          onClick={() => {
-                            const n = Number(editStockQty); const cost = Number(editStockCost);
-                            if (n >= 0) {
-                              setStock(prev => prev.map(i => i.id === item.id ? { ...i, quantity: pack ? i.quantity + n * pack.size : n } : i));
-                              if (cost > 0 && n > 0) setExpenses(prev => [...prev, { id: Date.now(), category: item.name, qty: n, amount: cost, time: new Date().toISOString() }]);
-                            }
-                            setEditStockId(null); setEditStockQty(""); setEditStockCost("");
-                          }}
-                          style={styles.restockConfirmBtn}
-                        >✓</button>
-                        <button onClick={() => { setEditStockId(null); setEditStockQty(""); setEditStockCost(""); }} style={styles.restockCancelBtn}>✕</button>
-                    </div>
-                  ) : (
-                    <span
-                      onClick={() => { setEditStockId(item.id); setEditStockQty(""); setEditStockCost(""); }}
-                      style={{ ...styles.stockQty, cursor: "pointer" }}
-                    >
-                      {item.quantity}
-                    </span>
-                  )}
+                  <span style={styles.stockQty}>{item.quantity}</span>
 
                 </div>
               );
