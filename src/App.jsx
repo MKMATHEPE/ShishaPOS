@@ -90,8 +90,8 @@ export default function App() {
   const [users, setUsers] = useState(() => {
     try {
       const s = localStorage.getItem("pos_users");
-      return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }];
-    } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
+      return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }];
+    } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
   });
   const [activeUser, setActiveUser] = useState(() => {
     try { const s = localStorage.getItem("pos_active_user"); return s ? JSON.parse(s) : null; } catch { return null; }
@@ -202,7 +202,7 @@ export default function App() {
         localStorage.setItem("pos_users", JSON.stringify(remoteUsers));
       } else if (remoteUsers && remoteUsers.length === 0) {
         // Supabase is empty — seed it with current defaults
-        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, permissions: { delivered: true, stock: true, management: true, settings: true } }];
+        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }];
         setUsers(defaults);
         localStorage.setItem("pos_users", JSON.stringify(defaults));
         syncUsers(defaults);
@@ -339,10 +339,15 @@ export default function App() {
       (u) => u.name.toLowerCase() === loginUsername.trim().toLowerCase() && u.pin === hashed
     );
     if (match) {
-      setActiveUser(match);
-      setLoginUsername("");
-      setLoginPassword("");
-      setLoginError("");
+      if (match.paused) {
+        setLoginError("Account suspended. Contact your Admin.");
+        setLoginPassword("");
+      } else {
+        setActiveUser(match);
+        setLoginUsername("");
+        setLoginPassword("");
+        setLoginError("");
+      }
     } else {
       setLoginError("Invalid username or password.");
       setLoginPassword("");
@@ -1668,14 +1673,14 @@ export default function App() {
               {!usersCollapsed && (
                 <div style={styles.userList}>
                   {users.filter((u) => isAdmin || u.role !== "Admin").map((u) => (
-                    <div key={u.id} style={styles.userCard}>
+                    <div key={u.id} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
                       <div style={styles.userRow}>
-                        <div style={styles.userAvatar}>
+                        <div style={{ ...styles.userAvatar, background: u.paused ? "#94a3b8" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}
                         </div>
                         <div style={styles.userMeta}>
                           <strong style={styles.userName}>{u.name}</strong>
-                          <span style={styles.userRole}>{u.role}</span>
+                          <span style={styles.userRole}>{u.role}{u.paused ? " · Suspended" : ""}</span>
                         </div>
                         {isAdmin && (
                           deleteConfirmId === u.id ? (
@@ -1691,12 +1696,23 @@ export default function App() {
                               >No</button>
                             </div>
                           ) : (
-                            <button
-                              onClick={() => setDeleteConfirmId(u.id)}
-                              style={styles.userDeleteBtn}
-                            >
-                              ×
-                            </button>
+                            <div style={{ display: "flex", gap: 6 }}>
+                              {u.id !== activeUser?.id && (
+                                <button
+                                  onClick={() => setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, paused: !x.paused } : x))}
+                                  style={{ ...styles.userDeleteBtn, background: u.paused ? "rgba(22,163,74,0.1)" : "rgba(234,179,8,0.12)", color: u.paused ? "#16a34a" : "#b45309", borderColor: u.paused ? "rgba(22,163,74,0.25)" : "rgba(234,179,8,0.3)", fontSize: 15, padding: "2px 9px", borderRadius: 8 }}
+                                  title={u.paused ? "Unpause" : "Pause"}
+                                >
+                                  {u.paused ? "▶" : "⏸"}
+                                </button>
+                              )}
+                              <button
+                                onClick={() => setDeleteConfirmId(u.id)}
+                                style={styles.userDeleteBtn}
+                              >
+                                ×
+                              </button>
+                            </div>
                           )
                         )}
                       </div>
