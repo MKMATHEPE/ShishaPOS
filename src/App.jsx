@@ -26,6 +26,11 @@ const FLAVOURS = [
   { id: "hh", name: "Honey Hunter", short: "HH", icon: "🍯", bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
 ];
 
+function normalizeFlavour(f) {
+  if (f && typeof f === 'object') return f;
+  return FLAVOURS.find(fl => fl.name === f) ?? { id: 'unknown', name: f ?? 'Unknown', short: '?', icon: '🌿', bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
+}
+
 const DEFAULT_PRICES = { full: 170, refill: 120 };
 
 // Stock auto-deduction per sale
@@ -159,10 +164,6 @@ export default function App() {
   const [expensesCollapsed, setExpensesCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
-  const [editSubId, setEditSubId] = useState(null); // { stockId, subId }
-  const [editSubQty, setEditSubQty] = useState("");
-  const [editStockId, setEditStockId] = useState(null);
-  const [editStockQty, setEditStockQty] = useState("");
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState(() => {
     try { const s = localStorage.getItem("pos_expenses"); return s ? JSON.parse(s) : []; } catch { return []; }
@@ -170,8 +171,6 @@ export default function App() {
   const [newExpenseCat, setNewExpenseCat] = useState("Coal");
   const [newExpenseDesc, setNewExpenseDesc] = useState("");
   const [newExpenseAmt, setNewExpenseAmt] = useState("");
-  const [editStockCost, setEditStockCost] = useState("");
-  const [editSubCost, setEditSubCost] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => formatTime(new Date()));
   useEffect(() => {
@@ -212,8 +211,8 @@ export default function App() {
         syncUsers(defaults);
       }
       if (remoteStock && remoteStock.length > 0) { setStock(remoteStock); localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
-      if (remoteOrders && remoteOrders.length > 0)  { setOrders(remoteOrders); }
-      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned);
+      if (remoteOrders && remoteOrders.length > 0)  { setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) }))); }
+      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
       setDbReady(true);
     }
@@ -244,8 +243,8 @@ export default function App() {
       const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned] = await Promise.all([
         fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(),
       ]);
-      if (remoteOrders) setOrders(remoteOrders);
-      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned);
+      if (remoteOrders) setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
         setStock(remoteStock);
         localStorage.setItem("pos_stock", JSON.stringify(remoteStock));
@@ -275,7 +274,7 @@ export default function App() {
     const from = new Date(`${managementDateFrom}T${managementTimeFrom}:00`).toISOString();
     const to   = new Date(`${managementDateTo}T${managementTimeTo}:59`).toISOString();
     fetchOrdersByDateRange(from, to).then(o => {
-      setManagementOrders(o ?? []);
+      setManagementOrders((o ?? []).map(ord => ({ ...ord, flavour: normalizeFlavour(ord.flavour) })));
       setManagementLoading(false);
     });
   }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]); // eslint-disable-line
@@ -396,14 +395,6 @@ export default function App() {
     deleteOrder(order.id);
   }, [restorePipeEquipment]);
 
-  // Removes a historical unreturned pipe (from a previous session).
-  // Equipment must be restored before deletion — pipe was never returned.
-  const removeUnreturnedPipe = useCallback((pipe) => {
-    restorePipeEquipment(pipe);
-    setUnreturnedPipes(prev => prev.filter(o => o.id !== pipe.id));
-    deleteOrder(pipe.id);
-  }, [restorePipeEquipment]);
-
   const returnPipe = useCallback((id) => {
     setOrders((prev) => prev.map((o) => o.id === id ? { ...o, pipeReturned: true } : o));
     setUnreturnedPipes((prev) => prev.filter(o => o.id !== id));
@@ -430,15 +421,6 @@ export default function App() {
   const deliveredOrders = orders.filter((o) => o.status === "delivered");
   const pipesOut = deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned).length + unreturnedPipes.length;
 
-  const totals = orders.reduce(
-    (acc, o) => {
-      acc.gross += o.price;
-      if (o.payment === "card") acc.card += o.price;
-      else acc.cash += o.price;
-      return acc;
-    },
-    { gross: 0, card: 0, cash: 0 }
-  );
 
   const paymentCounts = currentOrders.reduce(
     (acc, o) => {
@@ -777,14 +759,11 @@ export default function App() {
 
             const newPipeOrders = displayOrders.filter((o) => o.type === "full");
             const refillOrders  = displayOrders.filter((o) => o.type === "refill");
-            const maxFlavourCount = Math.max(...FLAVOURS.map((f) => displayFlavourCounts[f.id] || 0), 1);
 
             // KPIs
             const totalOrders = displayOrders.length;
             const avgOrderValue = totalOrders > 0 ? displayTotals.gross / totalOrders : 0;
             const refillRate = totalOrders > 0 ? Math.round((refillOrders.length / totalOrders) * 100) : 0;
-            const cardPct = displayTotals.gross > 0 ? Math.round((displayTotals.card / displayTotals.gross) * 100) : 0;
-            const cashPct = 100 - cardPct;
 
             const sortedFlavours = [...FLAVOURS].sort((a, b) => (displayFlavourCounts[b.id] || 0) - (displayFlavourCounts[a.id] || 0));
             const topFlavour = totalOrders > 0 ? sortedFlavours[0] : null;
@@ -799,7 +778,6 @@ export default function App() {
               return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
             })();
             const ordersPerHour = sessionMins > 0 ? ((totalOrders / sessionMins) * 60).toFixed(1) : null;
-            const revenuePerHour = sessionMins > 0 ? Math.round((displayTotals.gross / sessionMins) * 60) : null;
 
             const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
             const mgmtDateLabel = isViewingToday ? todayLabel
@@ -1063,6 +1041,30 @@ export default function App() {
                 const margin = displayTotals.gross > 0 ? Math.round((profit / displayTotals.gross) * 100) : 0;
                 const profitColor = profit >= 0 ? "#16a34a" : "#dc2626";
 
+                const buildOrdersReport = () => {
+                  const lines = [`Orders Report · ${mgmtDateLabel}`, ""];
+                  lines.push(`SUMMARY`);
+                  lines.push(`  Orders:  ${totalOrders} (${newPipeOrders.length} new pipe · ${refillOrders.length} refill)`);
+                  lines.push(`  Revenue: R${displayTotals.gross} (💳 R${displayTotals.card} · 💵 R${displayTotals.cash})`);
+                  lines.push("");
+                  lines.push(`FLAVOURS`);
+                  [...FLAVOURS]
+                    .filter(f => (displayFlavourCounts[f.id] || 0) > 0)
+                    .sort((a, b) => (displayFlavourCounts[b.id] || 0) - (displayFlavourCounts[a.id] || 0))
+                    .forEach(f => lines.push(`  ${f.icon} ${f.name}: ${displayFlavourCounts[f.id]}`));
+                  lines.push("");
+                  lines.push(`ORDERS (${totalOrders})`);
+                  displayOrders.forEach((o, i) => {
+                    const fl = normalizeFlavour(o.flavour);
+                    const time = formatTime(new Date(o.time));
+                    const type = o.type === "full" ? "New Pipe" : "Refill";
+                    const pay = o.payment === "card" ? "💳" : "💵";
+                    const status = o.status === "delivered" ? "✓" : "·";
+                    lines.push(`  ${i + 1}. ${time} ${status} ${fl.icon} ${fl.name} — ${type} ${pay} R${o.price}${o.soldBy ? ` (${o.soldBy})` : ""}`);
+                  });
+                  return lines.join("\n");
+                };
+
                 const buildAccountingReport = () => {
                   const lines = [`Accounting Report · ${mgmtDateLabel}`, ""];
                   lines.push(`REVENUE`);
@@ -1188,7 +1190,6 @@ export default function App() {
                     {!expensesCollapsed && (() => {
                       const isNonStock = ["Wages", "Transport"].includes(newExpenseCat);
                       const expPack = RESTOCK_PACK[newExpenseCat];
-                      const expOpt = stockExpenseOptions.find(o => o.key === newExpenseCat) ?? EXTRA_EXPENSE_OPTS[newExpenseCat];
                       const qtyNum = Number(newExpenseDesc) || 0;
                       const qtyUnit = expPack ? expPack.plural : newExpenseCat.startsWith("Flavour-") ? "boxes" : "units";
                       const stockPreview = (() => {
@@ -1271,16 +1272,26 @@ export default function App() {
                       );
                     })()}
 
-                    <button
-                      onClick={async () => {
-                        const text = buildAccountingReport();
-                        if (navigator.share) { try { await navigator.share({ title: "Accounting Report", text }); return; } catch {} }
-                        navigator.clipboard?.writeText(text);
-                      }}
-                      style={styles.copyBtn}
-                    >
-                      Share Accounting Report
-                    </button>
+                    <div style={{ display: "flex", gap: 8 }}>
+                      <button
+                        onClick={async () => {
+                          const text = buildOrdersReport();
+                          if (navigator.share) { try { await navigator.share({ title: "Orders Report", text }); return; } catch { navigator.clipboard?.writeText(text); } } else { navigator.clipboard?.writeText(text); }
+                        }}
+                        style={{ ...styles.copyBtn, flex: 1 }}
+                      >
+                        Share Orders
+                      </button>
+                      <button
+                        onClick={async () => {
+                          const text = buildAccountingReport();
+                          if (navigator.share) { try { await navigator.share({ title: "Accounting Report", text }); return; } catch { navigator.clipboard?.writeText(text); } } else { navigator.clipboard?.writeText(text); }
+                        }}
+                        style={{ ...styles.copyBtn, flex: 1 }}
+                      >
+                        Share P&L
+                      </button>
+                    </div>
                   </>
                 );
               })()}
@@ -1327,11 +1338,6 @@ export default function App() {
               });
               return lines.join("\n");
             };
-
-            const setSubQtyAbsolute = (stockId, subId, value) =>
-              setStock(prev => prev.map(i => i.id === stockId
-                ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: Math.max(0, value) } : s) }
-                : i));
 
             const toggleStockExpand = (id) => setExpandedStockIds(prev => {
               const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
@@ -1536,7 +1542,7 @@ export default function App() {
                         onClick={async () => {
                           const text = buildStockReport();
                           if (navigator.share) {
-                            try { await navigator.share({ title: "Stock Report", text }); return; } catch {}
+                            try { await navigator.share({ title: "Stock Report", text }); return; } catch { navigator.clipboard?.writeText(text); }
                           }
                           setShowShareMenu(s => !s);
                         }}
@@ -2305,23 +2311,29 @@ const styles = {
   permissionToggleKnob: {},
   permissionStatus: {},
   userCard: {
-    background: "rgba(255,255,255,0.7)",
-    border: "1px solid rgba(255,255,255,0.85)",
-    borderRadius: 12,
+    background: "rgba(255,255,255,0.45)",
+    backdropFilter: "blur(16px)",
+    WebkitBackdropFilter: "blur(16px)",
+    border: "1px solid rgba(255,255,255,0.75)",
+    borderRadius: 16,
     overflow: "hidden",
+    boxShadow: "0 4px 16px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
   userPermissions: {
     display: "flex",
     gap: 6,
-    padding: "8px 12px 10px",
-    borderTop: "1px solid rgba(203,213,225,0.3)",
+    padding: "8px 12px 12px",
+    borderTop: "1px solid rgba(255,255,255,0.6)",
     flexWrap: "wrap",
+    background: "rgba(255,255,255,0.25)",
   },
   permissionPill: {
     padding: "4px 10px",
     borderRadius: 999,
-    border: "1px solid #cbd5e1",
+    border: "1px solid rgba(203,213,225,0.5)",
     background: "rgba(255,255,255,0.5)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
     color: "#94a3b8",
     fontSize: 11,
     fontWeight: 700,
@@ -2330,13 +2342,15 @@ const styles = {
     transition: "all 0.15s ease",
   },
   permissionPillOn: {
-    background: "#0f172a",
-    border: "1px solid #0f172a",
+    background: "rgba(15,23,42,0.85)",
+    backdropFilter: "blur(8px)",
+    WebkitBackdropFilter: "blur(8px)",
+    border: "1px solid rgba(15,23,42,0.7)",
     color: "#ffffff",
   },
   permissionPillAlwaysOn: {
-    background: "rgba(15,23,42,0.08)",
-    border: "1px solid rgba(15,23,42,0.15)",
+    background: "rgba(15,23,42,0.07)",
+    border: "1px solid rgba(15,23,42,0.1)",
     color: "#64748b",
     cursor: "default",
   },
@@ -2358,13 +2372,13 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 10,
-    padding: "10px 12px",
+    padding: "12px 14px",
   },
   userAvatar: {
-    width: 34,
-    height: 34,
+    width: 36,
+    height: 36,
     borderRadius: "50%",
-    background: "#0f172a",
+    background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
     color: "#ffffff",
     fontSize: 14,
     fontWeight: 900,
@@ -2372,6 +2386,8 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
+    boxShadow: "0 2px 8px rgba(15,23,42,0.25)",
+    border: "1px solid rgba(255,255,255,0.15)",
   },
   userMeta: {
     flex: 1,

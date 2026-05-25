@@ -110,7 +110,7 @@ export async function insertOrder(order) {
   if (!ok()) return
   const today = localDateStr()
   const { error } = await supabase.from('pos_orders').insert({
-    id: order.id, flavour: order.flavour, type: order.type,
+    id: order.id, flavour: typeof order.flavour === 'object' ? order.flavour?.name : order.flavour, type: order.type,
     payment: order.payment, price: order.price, status: order.status,
     time: order.time.toISOString(), session_date: today,
     sold_by: order.soldBy ?? null,
