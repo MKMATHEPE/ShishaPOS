@@ -468,11 +468,11 @@ export default function App() {
       <div style={styles.appChrome}>
         {!activeUser ? (
           <div style={styles.loginScreen}>
-            <div style={styles.loginOrb1} />
-            <div style={styles.loginOrb2} />
-            <div style={styles.loginOrb3} />
+            <div className="float-1" style={styles.loginOrb1} />
+            <div className="float-2" style={styles.loginOrb2} />
+            <div className="float-3" style={styles.loginOrb3} />
 
-            <div style={styles.loginCard}>
+            <div className="pop-enter" style={styles.loginCard}>
               <div style={styles.loginLogoWrap}>
                 <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.loginLogo} />
               </div>
@@ -584,16 +584,19 @@ export default function App() {
             <div style={styles.panelHint}>Select one item, then confirm</div>
           </div>
           <div style={styles.flavourGrid}>
-            {FLAVOURS.map((f) => (
+            {FLAVOURS.map((f, fi) => (
               <button
                 key={f.id}
                 onClick={() => setSelectedFlavour(f)}
+                className={`flavour-pop d-${fi}`}
                 style={{
                   ...styles.flavourBtn,
                   background: flash === f.id ? f.color : selectedFlavour?.id === f.id ? f.color : f.bg,
                   color: flash === f.id ? "#fff" : selectedFlavour?.id === f.id ? "#fff" : "#111827",
                   border: `1px solid ${selectedFlavour?.id === f.id ? f.color : f.border}`,
-                  transform: selectedFlavour?.id === f.id ? "translateY(-2px)" : "translateY(0)",
+                  transform: selectedFlavour?.id === f.id ? "translateY(-3px) scale(1.03)" : "translateY(0)",
+                  boxShadow: selectedFlavour?.id === f.id ? `0 6px 18px ${f.color}44` : undefined,
+                  transition: "all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)",
                 }}
               >
                 <span style={styles.flavourIcon}>{f.icon}</span>
@@ -619,6 +622,7 @@ export default function App() {
               <button
                 onClick={confirmOrder}
                 disabled={blocked}
+                className={!blocked ? "glow-active" : ""}
                 style={{ ...styles.confirmBtn, ...(blocked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
               >
                 {blocked
@@ -630,7 +634,7 @@ export default function App() {
           })()}
 
           {undoTarget && (
-            <div style={styles.undoBar}>
+            <div className="slide-up" style={styles.undoBar}>
               <span>Order added to receipt</span>
               <button onClick={undoLast} style={styles.undoBtn}>Undo</button>
             </div>
@@ -686,7 +690,7 @@ export default function App() {
                   <div style={styles.emptyState}>No delivered orders yet</div>
                 )}
                 {unreturnedPipes.map((o, i) => (
-                  <div key={o.id} style={styles.deliveredRow}>
+                  <div key={o.id} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${i * 0.05}s` }}>
                     <span style={styles.orderIndex}>{String(i + 1).padStart(2, "0")}</span>
                     <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
                       {o.flavour.icon} {o.flavour.short}
@@ -703,7 +707,7 @@ export default function App() {
                   </div>
                 ))}
                 {deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE).map((o, i) => (
-                  <div key={o.id} style={styles.deliveredRow}>
+                  <div key={o.id} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${(unreturnedPipes.length + i) * 0.05}s` }}>
                     <span style={styles.orderIndex}>{String(unreturnedPipes.length + safePage * PAGE_SIZE + i + 1).padStart(2, "0")}</span>
                     <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
                       {o.flavour.icon} {o.flavour.short}
@@ -862,7 +866,7 @@ export default function App() {
               {/* ── Always-visible order summary ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {/* Revenue + orders row */}
-                <div style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <div className="pop-enter" style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                   <div>
                     <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 2 }}>Total Revenue</div>
                     <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(displayTotals.gross)}</div>
@@ -888,17 +892,17 @@ export default function App() {
                 <span style={styles.collapseChevron}>{kpisCollapsed ? "▶" : "▼"}</span>
               </button>
 
-              {!kpisCollapsed && <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {!kpisCollapsed && <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
 
                 {/* ── Row: Avg Value + Refill Rate ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <div style={styles.kpiCard}>
+                  <div className="card-enter d-0" style={styles.kpiCard}>
                     <span style={styles.kpiLabel}>Avg Order Value</span>
                     <span style={styles.kpiValue}>{totalOrders > 0 ? formatCurrency(Math.round(avgOrderValue)) : "—"}</span>
                     <span style={{ fontSize: 10, fontWeight: 800, color: avgStatus.color, background: avgStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{avgStatus.label}</span>
                     <span style={styles.kpiSub}>{avgStatus.tip}</span>
                   </div>
-                  <div style={styles.kpiCard}>
+                  <div className="card-enter d-1" style={styles.kpiCard}>
                     <span style={styles.kpiLabel}>Refill Rate</span>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
                       <span style={styles.kpiValue}>{refillRate}%</span>
@@ -913,7 +917,7 @@ export default function App() {
 
                 {/* ── Row: Pace + Active ── */}
                 <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <div style={styles.kpiCard}>
+                  <div className="card-enter d-2" style={styles.kpiCard}>
                     <span style={styles.kpiLabel}>Session Pace</span>
                     <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
                       <span style={styles.kpiValue}>{ordersPerHour ?? "—"}</span>
@@ -922,7 +926,7 @@ export default function App() {
                     {ordersPerHour && <span style={{ fontSize: 10, fontWeight: 800, color: paceStatus.color, background: paceStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{paceStatus.label}</span>}
                     <span style={styles.kpiSub}>{sessionMins ? `${sessionMins} min session · ${totalOrders} orders` : "Not enough data yet"}</span>
                   </div>
-                  <div style={{ ...styles.kpiCard, background: displayCurrentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: displayCurrentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
+                  <div className="card-enter d-3" style={{ ...styles.kpiCard, background: displayCurrentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: displayCurrentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
                     <span style={styles.kpiLabel}>{isViewingToday ? "Active Now" : "Active"}</span>
                     <span style={{ ...styles.kpiValue, color: displayCurrentOrders.length > 0 ? "#16a34a" : "#94a3b8" }}>{displayCurrentOrders.length}</span>
                     <span style={styles.kpiSub}>{deliveryRate}% delivered · {displayDeliveredOrders.length} done</span>
@@ -930,7 +934,7 @@ export default function App() {
                 </div>
 
                 {/* ── Flavour performance (full width) ── */}
-                <div style={styles.kpiCard}>
+                <div className="card-enter d-4" style={styles.kpiCard}>
                   <span style={styles.kpiLabel}>Flavour Performance</span>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 4 }}>
                     <div>
@@ -1113,7 +1117,7 @@ export default function App() {
                 };
 
                 return (
-                  <>
+                  <div className="expand-down">
                     <div style={styles.summaryDivider}>
                       <div style={styles.summaryDividerLine} />
                       <span style={styles.summaryDividerLabel}>Accounting</span>
@@ -1165,15 +1169,15 @@ export default function App() {
                         }
                       });
                       return (
-                        <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                        <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{groups.length} {groups.length === 1 ? "entry" : "entries"}</span>
                             <button onClick={() => { const ids = new Set(displayExpenses.map(e => e.id)); setExpenses(prev => prev.filter(e => !ids.has(e.id))); }} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
                           </div>
-                          {groups.map(g => {
+                          {groups.map((g, gi) => {
                             const opt = stockExpenseOptions.find(o => o.key === g.category) ?? EXTRA_EXPENSE_OPTS[g.category] ?? { icon: "📦", label: g.category, color: "#64748b", bg: "#f8fafc" };
                             return (
-                              <div key={g.key} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
+                              <div key={g.key} className={`card-enter d-${Math.min(gi, 6)}`} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
                                 <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
                                 {g.totalQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>×{g.totalQty}</span>}
                                 <span style={{ fontSize: 13, fontWeight: 900, color: "#dc2626", marginLeft: "auto", whiteSpace: "nowrap" }}>−{formatCurrency(g.totalAmount)}</span>
@@ -1199,7 +1203,7 @@ export default function App() {
                         return `+${qtyNum} ${qtyUnit} to stock`;
                       })();
                       return (
-                        <div style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
+                        <div className="expand-down" style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
                           <select
                             value={newExpenseCat}
                             onChange={e => { setNewExpenseCat(e.target.value); setNewExpenseDesc(""); }}
@@ -1292,7 +1296,7 @@ export default function App() {
                         Share P&L
                       </button>
                     </div>
-                  </>
+                  </div>
                 );
               })()}
             </div>
@@ -1359,8 +1363,8 @@ export default function App() {
                         <span style={styles.stockName}>{item.name}</span>
                         <div style={styles.stockMeta}>
                           <span style={styles.stockUnit}>{Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2)} {item.unit} total</span>
-                          {anyOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
-                          {anyLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
+                          {anyOut && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
+                          {anyLow && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
                         </div>
                       </div>
                       <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginRight: 4 }}>{isOpen ? "▲ Hide" : "▼ Show"}</span>
@@ -1373,8 +1377,8 @@ export default function App() {
                           return (
                             <div key={f.id} style={styles.subItemRow}>
                               <span style={{ ...styles.subItemTag, background: f.bg, color: f.color }}>{f.icon} {f.name}</span>
-                              {fOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: 9 }}>Out</span>}
-                              {fLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 9 }}>Low</span>}
+                              {fOut && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: 9 }}>Out</span>}
+                              {fLow && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 9 }}>Low</span>}
 
                               <div style={{ marginLeft: "auto", display: "flex", alignItems: "center", gap: 6 }}>
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
@@ -1428,8 +1432,8 @@ export default function App() {
                           · {Math.floor(item.quantity / pack.size)} {pack.plural} + {item.quantity % pack.size} pcs
                         </span>
                       )}
-                      {isOut && <span style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
-                      {isLow && <span style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
+                      {isOut && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
+                      {isLow && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
                     </div>
                   </div>
 
@@ -1456,7 +1460,7 @@ export default function App() {
                       <span>🔥 Consumables <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({consumables.length})</span></span>
                       <span style={styles.collapseChevron}>{consumablesCollapsed ? "▶" : "▼"}</span>
                     </button>
-                    {!consumablesCollapsed && <div style={styles.stockList}>{consumables.map(renderItem)}</div>}
+                    {!consumablesCollapsed && <div className="expand-down" style={styles.stockList}>{consumables.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
                   </>
                 )}
 
@@ -1466,7 +1470,7 @@ export default function App() {
                       <span>🛠️ Equipment <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({equipment.length})</span></span>
                       <span style={styles.collapseChevron}>{equipmentCollapsed ? "▶" : "▼"}</span>
                     </button>
-                    {!equipmentCollapsed && <div style={styles.stockList}>{equipment.map(renderItem)}</div>}
+                    {!equipmentCollapsed && <div className="expand-down" style={styles.stockList}>{equipment.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
                   </>
                 )}
 
@@ -1635,7 +1639,7 @@ export default function App() {
               <div style={styles.settingsSectionLabel}>Pricing</div>
 
               <div style={styles.settingsGrid}>
-                <div style={styles.settingCard}>
+                <div className="card-enter d-0" style={styles.settingCard}>
                   <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
                   <input
                     id="new-pipe-price"
@@ -1652,7 +1656,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div style={styles.settingCard}>
+                <div className="card-enter d-1" style={styles.settingCard}>
                   <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
                   <input
                     id="refill-price"
@@ -1681,11 +1685,11 @@ export default function App() {
               </button>
 
               {!usersCollapsed && (
-                <div style={styles.userList}>
-                  {users.filter((u) => isAdmin || u.role !== "Admin").map((u) => {
+                <div className="expand-down" style={styles.userList}>
+                  {users.filter((u) => isAdmin || u.role !== "Admin").map((u, ui) => {
                     const isExpanded = expandedUsers.has(u.id);
                     return (
-                    <div key={u.id} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
+                    <div key={u.id} className={`card-enter d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
                       <div style={{ ...styles.userRow, cursor: "pointer" }} onClick={() => toggleUserExpanded(u.id)}>
                         <div style={{ ...styles.userAvatar, background: u.paused ? "#94a3b8" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}
@@ -1734,7 +1738,7 @@ export default function App() {
                         )}
                       </div>
                       {isExpanded && (
-                        <>
+                        <div className="expand-down">
                           <div style={styles.userPermissions}>
                             <span style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
                               ✓ POS
@@ -1807,7 +1811,7 @@ export default function App() {
                               <button onClick={() => { setResetPinId(null); setResetPinValue(""); }} style={styles.restockCancelBtn}>✕</button>
                             </div>
                           )}
-                        </>
+                        </div>
                       )}
                     </div>
                   ); })}
@@ -1818,7 +1822,7 @@ export default function App() {
               )}
 
               {isAdmin && (
-                <div style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
+                <div className="card-enter" style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
                   <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Add User</span>
                   <input
                     type="text"
