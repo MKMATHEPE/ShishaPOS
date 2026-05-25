@@ -107,6 +107,10 @@ export default function App() {
   const [newUserName, setNewUserName] = useState("");
   const [newUserRole, setNewUserRole] = useState("Staff");
   const [newUserPin, setNewUserPin] = useState("");
+  const [resetPinId, setResetPinId] = useState(null);
+  const [resetPinValue, setResetPinValue] = useState("");
+  const [expandedUsers, setExpandedUsers] = useState(new Set());
+  const toggleUserExpanded = (id) => setExpandedUsers(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [orderType, setOrderType] = useState("full");
   const [payMethod, setPayMethod] = useState("card");
   const [selectedFlavour, setSelectedFlavour] = useState(null);
@@ -1672,9 +1676,11 @@ export default function App() {
 
               {!usersCollapsed && (
                 <div style={styles.userList}>
-                  {users.filter((u) => isAdmin || u.role !== "Admin").map((u) => (
+                  {users.filter((u) => isAdmin || u.role !== "Admin").map((u) => {
+                    const isExpanded = expandedUsers.has(u.id);
+                    return (
                     <div key={u.id} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
-                      <div style={styles.userRow}>
+                      <div style={{ ...styles.userRow, cursor: "pointer" }} onClick={() => toggleUserExpanded(u.id)}>
                         <div style={{ ...styles.userAvatar, background: u.paused ? "#94a3b8" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}
                         </div>
@@ -1697,6 +1703,11 @@ export default function App() {
                             </div>
                           ) : (
                             <div style={{ display: "flex", gap: 6 }}>
+                              <button
+                                onClick={() => { setResetPinId(resetPinId === u.id ? null : u.id); setResetPinValue(""); }}
+                                style={{ ...styles.userDeleteBtn, fontSize: 14, padding: "2px 9px", borderRadius: 8 }}
+                                title="Change password"
+                              >🔑</button>
                               {u.id !== activeUser?.id && (
                                 <button
                                   onClick={() => setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, paused: !x.paused } : x))}
@@ -1716,49 +1727,84 @@ export default function App() {
                           )
                         )}
                       </div>
-                      <div style={styles.userPermissions}>
-                        <span style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
-                          ✓ POS
-                        </span>
-                        {u.role !== "Admin" && [
-                          { key: "delivered", label: "Orders Delivered" },
-                          { key: "stock",     label: "Stock" },
-                          { key: "management",label: "Management" },
-                          { key: "settings",  label: "Settings" },
-                        ].map(({ key, label }) => {
-                          const allowed = u.permissions?.[key] ?? false;
-                          return isAdmin ? (
-                            <button
-                              key={key}
-                              onClick={() => setUsers((prev) => prev.map((x) =>
-                                x.id === u.id ? { ...x, permissions: { ...x.permissions, [key]: !allowed } } : x
-                              ))}
-                              style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}) }}
-                            >
-                              {allowed ? "✓" : "✕"} {label}
-                            </button>
-                          ) : (
-                            <span
-                              key={key}
-                              style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}), cursor: "default" }}
-                            >
-                              {allowed ? "✓" : "✕"} {label}
+                      {isExpanded && (
+                        <>
+                          <div style={styles.userPermissions}>
+                            <span style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
+                              ✓ POS
                             </span>
-                          );
-                        })}
-                        {u.role === "Admin" && [
-                          { key: "delivered", label: "Orders Delivered" },
-                          { key: "stock",     label: "Stock" },
-                          { key: "management",label: "Management" },
-                          { key: "settings",  label: "Settings" },
-                        ].map(({ key, label }) => (
-                          <span key={key} style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
-                            ✓ {label}
-                          </span>
-                        ))}
-                      </div>
+                            {u.role !== "Admin" && [
+                              { key: "delivered", label: "Orders Delivered" },
+                              { key: "stock",     label: "Stock" },
+                              { key: "management",label: "Management" },
+                              { key: "settings",  label: "Settings" },
+                            ].map(({ key, label }) => {
+                              const allowed = u.permissions?.[key] ?? false;
+                              return isAdmin ? (
+                                <button
+                                  key={key}
+                                  onClick={() => setUsers((prev) => prev.map((x) =>
+                                    x.id === u.id ? { ...x, permissions: { ...x.permissions, [key]: !allowed } } : x
+                                  ))}
+                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}) }}
+                                >
+                                  {allowed ? "✓" : "✕"} {label}
+                                </button>
+                              ) : (
+                                <span
+                                  key={key}
+                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}), cursor: "default" }}
+                                >
+                                  {allowed ? "✓" : "✕"} {label}
+                                </span>
+                              );
+                            })}
+                            {u.role === "Admin" && [
+                              { key: "delivered", label: "Orders Delivered" },
+                              { key: "stock",     label: "Stock" },
+                              { key: "management",label: "Management" },
+                              { key: "settings",  label: "Settings" },
+                            ].map(({ key, label }) => (
+                              <span key={key} style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
+                                ✓ {label}
+                              </span>
+                            ))}
+                          </div>
+                          {resetPinId === u.id && (
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(15,23,42,0.07)" }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", whiteSpace: "nowrap" }}>New password</span>
+                              <input
+                                type="password"
+                                autoFocus
+                                placeholder="Enter new password"
+                                value={resetPinValue}
+                                onChange={e => setResetPinValue(e.target.value)}
+                                onKeyDown={async e => {
+                                  if (e.key === "Enter" && resetPinValue) {
+                                    const hashed = await hashPin(resetPinValue);
+                                    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, pin: hashed } : x));
+                                    setResetPinId(null); setResetPinValue("");
+                                  }
+                                  if (e.key === "Escape") { setResetPinId(null); setResetPinValue(""); }
+                                }}
+                                style={{ ...styles.restockInput, flex: 1 }}
+                              />
+                              <button
+                                onClick={async () => {
+                                  if (!resetPinValue) return;
+                                  const hashed = await hashPin(resetPinValue);
+                                  setUsers(prev => prev.map(x => x.id === u.id ? { ...x, pin: hashed } : x));
+                                  setResetPinId(null); setResetPinValue("");
+                                }}
+                                style={styles.restockConfirmBtn}
+                              >✓</button>
+                              <button onClick={() => { setResetPinId(null); setResetPinValue(""); }} style={styles.restockCancelBtn}>✕</button>
+                            </div>
+                          )}
+                        </>
+                      )}
                     </div>
-                  ))}
+                  ); })}
                   {users.length === 0 && (
                     <div style={styles.emptyState}>No users added yet</div>
                   )}
