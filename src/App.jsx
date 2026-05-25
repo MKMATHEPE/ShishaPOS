@@ -1077,12 +1077,17 @@ export default function App() {
                   const qty = Number(newExpenseDesc) || 0;
                   if (amt <= 0) return;
                   setExpenses(prev => [...prev, { id: Date.now(), category: newExpenseCat, qty: qty || null, amount: amt, time: new Date().toISOString() }]);
-                  // Auto-increment stock if a qty was given for a stock item
                   if (qty > 0) {
+                    const selectedOpt = stockExpenseOptions.find(o => o.key === newExpenseCat);
                     if (newExpenseCat.startsWith("Flavour-")) {
                       const subId = newExpenseCat.replace("Flavour-", "");
                       setStock(prev => prev.map(i => i.name === "Flavour" && i.subItems
                         ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: s.quantity + qty } : s) }
+                        : i
+                      ));
+                    } else if (selectedOpt?.group === "equipment") {
+                      setStock(prev => prev.map(i => i.category === "equipment" && i.name === newExpenseCat
+                        ? { ...i, quantity: i.quantity + qty }
                         : i
                       ));
                     } else {
