@@ -46,7 +46,7 @@ npx supabase functions deploy manage-pos-user
 
 5. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel. Never put a service-role key in a `VITE_` variable.
 
-After the first Admin can sign in, create other staff accounts from Settings. Passwords must contain at least 10 characters.
+After the first Admin can sign in with email, create staff and manager accounts from Settings. They sign in with their unique username and a password of at least 10 characters.
 
 ## Tech Stack
 

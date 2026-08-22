@@ -3,12 +3,23 @@ create schema if not exists private;
 
 create table if not exists public.pos_profiles (
   id uuid primary key references auth.users(id) on delete cascade,
-  email text not null, name text not null,
+  email text not null, username text, name text not null,
   role text not null default 'Staff' check (role in ('Staff', 'Manager', 'Admin')),
   permissions jsonb not null default '{}'::jsonb,
   paused boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+alter table public.pos_profiles add column if not exists username text;
+update public.pos_profiles
+set username = lower(regexp_replace(split_part(email, '@', 1), '[^a-zA-Z0-9._-]', '', 'g'))
+where username is null;
+alter table public.pos_profiles alter column username set not null;
+alter table public.pos_profiles drop constraint if exists pos_profiles_username_format;
+alter table public.pos_profiles add constraint pos_profiles_username_format
+  check (username ~ '^[a-z0-9._-]{3,32}$');
+create unique index if not exists pos_profiles_username_lower_key
+  on public.pos_profiles (lower(username));
 
 create table if not exists public.pos_stock (
   id bigint primary key, name text not null, category text not null,
@@ -113,6 +124,6 @@ do $$ begin
 end $$;
 
 -- Bootstrap the first Admin after creating them in Authentication > Users:
--- insert into public.pos_profiles (id, email, name, role, permissions)
--- select id, email, 'Admin', 'Admin', '{"delivered":true,"stock":true,"management":true,"settings":true}'::jsonb
+-- insert into public.pos_profiles (id, email, username, name, role, permissions)
+-- select id, email, split_part(email, '@', 1), 'Admin', 'Admin', '{"delivered":true,"stock":true,"management":true,"settings":true}'::jsonb
 -- from auth.users where email = 'owner@example.com';

@@ -1,8 +1,19 @@
 import { supabase } from './supabase'
 
-export async function signIn(email, password) {
+const USERNAME_DOMAIN = 'users.chillpipe.co.za'
+
+export function normalizeUsername(value) {
+  return value.trim().toLowerCase()
+}
+
+function authIdentifier(value) {
+  const identifier = normalizeUsername(value)
+  return identifier.includes('@') ? identifier : `${identifier}@${USERNAME_DOMAIN}`
+}
+
+export async function signIn(identifier, password) {
   if (!supabase) throw new Error('Supabase is not configured.')
-  const { error } = await supabase.auth.signInWithPassword({ email, password })
+  const { error } = await supabase.auth.signInWithPassword({ email: authIdentifier(identifier), password })
   if (error) throw error
 }
 

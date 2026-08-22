@@ -94,7 +94,7 @@ export default function App() {
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [newUserName, setNewUserName] = useState("");
-  const [newUserEmail, setNewUserEmail] = useState("");
+  const [newUsername, setNewUsername] = useState("");
   const [newUserRole, setNewUserRole] = useState("Staff");
   const [newUserPin, setNewUserPin] = useState("");
   const [staffMessage, setStaffMessage] = useState("");
@@ -311,11 +311,11 @@ export default function App() {
   const handleLogin = useCallback(async () => {
     try {
       setLoginError("");
-      await signIn(loginUsername.trim().toLowerCase(), loginPassword);
+      await signIn(loginUsername, loginPassword);
       setLoginUsername("");
       setLoginPassword("");
     } catch {
-      setLoginError("Invalid email or password.");
+      setLoginError("Invalid username or password.");
       setLoginPassword("");
     }
   }, [loginUsername, loginPassword]);
@@ -447,14 +447,13 @@ export default function App() {
               <p style={styles.loginMeta}>Sign in to start your shift.</p>
 
               <div style={styles.loginField}>
-                <label style={styles.loginLabel}>Email</label>
+                <label style={styles.loginLabel}>Username or email</label>
                 <input
                   value={loginUsername}
                   onChange={(e) => { setLoginUsername(e.target.value); setLoginError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                  type="email"
                   autoComplete="username"
-                  placeholder="you@example.com"
+                  placeholder="Enter your username"
                   style={styles.loginInput}
                 />
               </div>
@@ -1662,7 +1661,7 @@ export default function App() {
                         </div>
                         <div style={styles.userMeta}>
                           <strong style={styles.userName}>{u.name}</strong>
-                          <span style={styles.userRole}>{u.role}{u.paused ? " · Suspended" : ""}</span>
+                          <span style={styles.userRole}>{u.username ? `@${u.username} · ` : ""}{u.role}{u.paused ? " · Suspended" : ""}</span>
                         </div>
                         {isAdmin && (
                           deleteConfirmId === u.id ? (
@@ -1804,10 +1803,11 @@ export default function App() {
                     style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
                   />
                   <input
-                    type="email"
-                    placeholder="Email address"
-                    value={newUserEmail}
-                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    type="text"
+                    autoComplete="off"
+                    placeholder="Username (e.g. thabo)"
+                    value={newUsername}
+                    onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))}
                     style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
                   />
                   <div style={{ display: "flex", gap: 8 }}>
@@ -1830,12 +1830,12 @@ export default function App() {
                     />
                     <button
                       onClick={async () => {
-                        if (!newUserName.trim() || !newUserEmail.trim() || !newUserPin) return;
+                        if (!newUserName.trim() || !newUsername.trim() || !newUserPin) return;
                         try {
-                          await manageStaff("create", { name: newUserName.trim(), email: newUserEmail.trim(), password: newUserPin, role: newUserRole });
+                          await manageStaff("create", { name: newUserName.trim(), username: newUsername.trim(), password: newUserPin, role: newUserRole });
                           const refreshed = await fetchUsers();
                           if (refreshed) setUsers(refreshed);
-                          setNewUserName(""); setNewUserEmail(""); setNewUserPin(""); setNewUserRole("Staff");
+                          setNewUserName(""); setNewUsername(""); setNewUserPin(""); setNewUserRole("Staff");
                           setStaffMessage("User created securely.");
                         } catch (error) { setStaffMessage(error.message); }
                       }}

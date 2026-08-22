@@ -23,10 +23,15 @@ Deno.serve(async (req) => {
 
     const body = await req.json()
     if (body.action === 'create') {
-      if (!body.email || !body.password || !body.name) throw new Error('Name, email and password are required.')
+      if (!body.username || !body.password || !body.name) throw new Error('Name, username and password are required.')
       if (String(body.password).length < 10) throw new Error('Password must be at least 10 characters.')
+      const username = String(body.username).trim().toLowerCase()
+      if (!/^[a-z0-9._-]{3,32}$/.test(username)) throw new Error('Username must be 3–32 letters, numbers, dots, dashes or underscores.')
+      const email = `${username}@users.chillpipe.co.za`
+      const { data: existing } = await admin.from('pos_profiles').select('id').ilike('username', username).maybeSingle()
+      if (existing) throw new Error('That username is already in use.')
       const { data, error } = await admin.auth.admin.createUser({
-        email: String(body.email).trim().toLowerCase(), password: body.password, email_confirm: true,
+        email, password: body.password, email_confirm: true,
       })
       if (error) throw error
       const permissions = body.role === 'Admin'
@@ -35,7 +40,7 @@ Deno.serve(async (req) => {
           ? { delivered: true, stock: true, management: true, settings: false }
           : { delivered: true, stock: false, management: false, settings: false }
       const { error: profileError } = await admin.from('pos_profiles').insert({
-        id: data.user.id, email: data.user.email, name: body.name, role: body.role ?? 'Staff', permissions,
+        id: data.user.id, email: data.user.email, username, name: body.name, role: body.role ?? 'Staff', permissions,
       })
       if (profileError) { await admin.auth.admin.deleteUser(data.user.id); throw profileError }
     } else if (body.action === 'password') {
