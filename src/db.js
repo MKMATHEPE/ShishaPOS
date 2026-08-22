@@ -10,28 +10,18 @@ function localDateStr() {
 // ── Users ─────────────────────────────────────────────
 export async function fetchUsers() {
   if (!ok()) return null
-  const { data, error } = await supabase.from('pos_users').select('*')
+  const { data, error } = await supabase.from('pos_profiles').select('*').order('name')
   if (error) { console.error('fetchUsers', error); return null }
-  return data.map(r => {
-    const { _paused, ...permissions } = r.permissions ?? {};
-    return { id: r.id, name: r.name, role: r.role, pin: r.pin, permissions, paused: _paused ?? false };
-  })
+  return data
 }
 
 export async function syncUsers(users) {
   if (!ok()) return
-  if (users.length) {
-    const rows = users.map(u => ({
-      id: u.id, name: u.name, role: u.role, pin: u.pin,
-      permissions: { ...(u.permissions ?? {}), _paused: u.paused ?? false },
-    }))
-    const { error } = await supabase.from('pos_users').upsert(rows, { onConflict: 'id' })
-    if (error) { console.error('syncUsers', error); return }
-    const { error: delError } = await supabase.from('pos_users').delete().not('id', 'in', `(${users.map(u => u.id).join(',')})`)
-    if (delError) console.error('syncUsers delete', delError)
-  } else {
-    await supabase.from('pos_users').delete().neq('id', 0)
-  }
+  const results = await Promise.all(users.map(({ id, name, role, permissions, paused }) =>
+    supabase.from('pos_profiles').update({ name, role, permissions, paused }).eq('id', id)
+  ))
+  const failed = results.find(({ error }) => error)
+  if (failed) console.error('syncUsers', failed.error)
 }
 
 // ── Stock ─────────────────────────────────────────────

@@ -31,7 +31,22 @@ npm install
 npm run dev
 ```
 
-Open `http://localhost:5173` in your browser. Default login: **Admin / 1234**.
+Open `http://localhost:5173` in your browser and sign in with a Supabase Auth account.
+
+## Secure authentication setup
+
+1. Run `supabase-schema.sql` in the Supabase SQL Editor. This enables Row Level Security and locks the legacy PIN table.
+2. In Supabase Authentication, create the first owner account with a strong password.
+3. Run the bootstrap statement at the bottom of `supabase-schema.sql`, replacing `owner@example.com` with that account's email.
+4. Deploy the protected staff-management function:
+
+```bash
+npx supabase functions deploy manage-pos-user
+```
+
+5. Add `VITE_SUPABASE_URL` and `VITE_SUPABASE_ANON_KEY` to Vercel. Never put a service-role key in a `VITE_` variable.
+
+After the first Admin can sign in, create other staff accounts from Settings. Passwords must contain at least 10 characters.
 
 ## Tech Stack
 
@@ -48,4 +63,4 @@ VITE_SUPABASE_URL=https://<your-project>.supabase.co
 VITE_SUPABASE_ANON_KEY=<your-anon-key>
 ```
 
-Without these the app runs in local-only mode (no sync between devices).
+Without these the app fails closed and cannot sign in; there is no insecure local-only login fallback.

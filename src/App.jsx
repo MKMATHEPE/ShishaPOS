@@ -1,13 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-
-async function hashPin(pin) {
-  const buf = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(pin));
-  return Array.from(new Uint8Array(buf)).map((b) => b.toString(16).padStart(2, "0")).join("");
-}
-// Pre-computed SHA-256("1234") for the sync useState initializer
-const HASH_1234 = "03ac674216f3e15c761ee1a5e255f067953623c8b388b4459e13f978d7c846f4";
 import chillPipeLogo from "./assets/The_Chill_Pipe.png";
 import { supabase } from "./supabase";
+import { getCurrentProfile, manageStaff, onAuthChange, signIn, signOut } from "./auth";
 import {
   fetchUsers, syncUsers,
   fetchStock, syncStock,
@@ -92,26 +86,18 @@ export default function App() {
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
   const [avgDailyRevenue, setAvgDailyRevenue] = useState(null);
-  const [users, setUsers] = useState(() => {
-    try {
-      const s = localStorage.getItem("pos_users");
-      return s ? JSON.parse(s) : [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }];
-    } catch { return [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }]; }
-  });
-  const [activeUser, setActiveUser] = useState(() => {
-    try { const s = localStorage.getItem("pos_active_user"); return s ? JSON.parse(s) : null; } catch { return null; }
-  });
-  useEffect(() => {
-    if (activeUser) localStorage.setItem("pos_active_user", JSON.stringify(activeUser));
-    else localStorage.removeItem("pos_active_user");
-  }, [activeUser]);
+  const [users, setUsers] = useState([]);
+  const [activeUser, setActiveUser] = useState(null);
+  const [authLoading, setAuthLoading] = useState(true);
 
   const [loginUsername, setLoginUsername] = useState("");
   const [loginPassword, setLoginPassword] = useState("");
   const [loginError, setLoginError] = useState("");
   const [newUserName, setNewUserName] = useState("");
+  const [newUserEmail, setNewUserEmail] = useState("");
   const [newUserRole, setNewUserRole] = useState("Staff");
   const [newUserPin, setNewUserPin] = useState("");
+  const [staffMessage, setStaffMessage] = useState("");
   const [resetPinId, setResetPinId] = useState(null);
   const [resetPinValue, setResetPinValue] = useState("");
   const [expandedUsers, setExpandedUsers] = useState(new Set());
@@ -134,26 +120,7 @@ export default function App() {
       { id: 11, name: "Rota Tops",    category: "equipment",  quantity: 8,  unit: "units",   lowThreshold: 2 },
       { id: 12, name: "Stove",        category: "equipment",  quantity: 2,  unit: "units",   lowThreshold: 1 },
           ];
-    try {
-      const s = localStorage.getItem("pos_stock");
-      if (!s) return defaults;
-      const flavourNames = new Set(FLAVOURS.map(f => f.name));
-      // Strip old individual flavour rows — they're now sub-items under Flavour
-      const saved = JSON.parse(s).filter(i => !flavourNames.has(i.name));
-      // Merge: update unit/threshold from defaults, add subItems if missing, add new default items
-      const merged = saved.map(i => {
-        const def = defaults.find(d => d.name === i.name);
-        if (!def) return i;
-        return {
-          ...i,
-          unit: def.unit,
-          lowThreshold: def.lowThreshold,
-          subItems: i.subItems ?? def.subItems,
-        };
-      });
-      const missing = defaults.filter(d => !saved.some(i => i.name === d.name));
-      return [...merged, ...missing];
-    } catch { return defaults; }
+    return defaults;
   });
   const [usersCollapsed, setUsersCollapsed] = useState(false);
   const [consumablesCollapsed, setConsumablesCollapsed] = useState(true);
@@ -165,9 +132,7 @@ export default function App() {
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [showShareMenu, setShowShareMenu] = useState(false);
-  const [expenses, setExpenses] = useState(() => {
-    try { const s = localStorage.getItem("pos_expenses"); return s ? JSON.parse(s) : []; } catch { return []; }
-  });
+  const [expenses, setExpenses] = useState([]);
   const [newExpenseCat, setNewExpenseCat] = useState("Coal");
   const [newExpenseDesc, setNewExpenseDesc] = useState("");
   const [newExpenseAmt, setNewExpenseAmt] = useState("");
@@ -193,8 +158,26 @@ export default function App() {
     }
   }, [orders]);
 
-  // ── On mount: load from Supabase, fall back to localStorage ──
   useEffect(() => {
+    let alive = true;
+    const refreshAuth = async () => {
+      try {
+        const profile = await getCurrentProfile();
+        if (alive) { setActiveUser(profile); setLoginError(""); }
+      } catch (error) {
+        if (alive) { setActiveUser(null); setLoginError(error.message); }
+      } finally {
+        if (alive) setAuthLoading(false);
+      }
+    };
+    refreshAuth();
+    const subscription = onAuthChange(refreshAuth);
+    return () => { alive = false; subscription.unsubscribe(); };
+  }, []);
+
+  // ── Load business data only after a verified session exists ──
+  useEffect(() => {
+    if (!activeUser || !supabase) return;
     async function load() {
       const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue, remoteUnreturned] = await Promise.all([
         fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(),
@@ -202,37 +185,27 @@ export default function App() {
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
-        localStorage.setItem("pos_users", JSON.stringify(remoteUsers));
-      } else if (remoteUsers && remoteUsers.length === 0) {
-        // Supabase is empty — seed it with current defaults
-        const defaults = [{ id: 1, name: "Admin", role: "Admin", pin: HASH_1234, paused: false, permissions: { delivered: true, stock: true, management: true, settings: true } }];
-        setUsers(defaults);
-        localStorage.setItem("pos_users", JSON.stringify(defaults));
-        syncUsers(defaults);
       }
-      if (remoteStock && remoteStock.length > 0) { setStock(remoteStock); localStorage.setItem("pos_stock", JSON.stringify(remoteStock)); }
+      if (remoteStock && remoteStock.length > 0) setStock(remoteStock);
       if (remoteOrders && remoteOrders.length > 0)  { setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) }))); }
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
-      if (remoteExpenses && remoteExpenses.length > 0){ setExpenses(remoteExpenses); localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses)); }
+      if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
       setDbReady(true);
     }
-    if (supabase) { load(); } else { setDbReady(true); }
+    load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeUser?.id]);
 
-  // ── Sync to localStorage + Supabase on every change ──
+  // ── Sync authenticated changes to Supabase ──
   useEffect(() => {
-    localStorage.setItem("pos_users", JSON.stringify(users));
     if (dbReady) syncUsers(users);
   }, [users]); // eslint-disable-line
 
   useEffect(() => {
-    localStorage.setItem("pos_stock", JSON.stringify(stock));
     if (dbReady) syncStock(stock);
   }, [stock]); // eslint-disable-line
 
   useEffect(() => {
-    localStorage.setItem("pos_expenses", JSON.stringify(expenses));
     if (dbReady) syncExpenses(expenses);
   }, [expenses]); // eslint-disable-line
 
@@ -247,11 +220,9 @@ export default function App() {
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
         setStock(remoteStock);
-        localStorage.setItem("pos_stock", JSON.stringify(remoteStock));
       }
       if (remoteExpenses) {
         setExpenses(remoteExpenses);
-        localStorage.setItem("pos_expenses", JSON.stringify(remoteExpenses));
       }
     }
     refresh();
@@ -267,17 +238,18 @@ export default function App() {
   useEffect(() => {
     const todayStr = localToday();
     if (managementDateFrom === todayStr && managementDateTo === todayStr) {
-      setManagementOrders([]); return; // today filtered client-side from live orders
+      return; // today is filtered client-side from live orders
     }
     if (!supabase) return;
-    setManagementLoading(true);
+    const loadingTimer = setTimeout(() => setManagementLoading(true), 0);
     const from = new Date(`${managementDateFrom}T${managementTimeFrom}:00`).toISOString();
     const to   = new Date(`${managementDateTo}T${managementTimeTo}:59`).toISOString();
     fetchOrdersByDateRange(from, to).then(o => {
       setManagementOrders((o ?? []).map(ord => ({ ...ord, flavour: normalizeFlavour(ord.flavour) })));
       setManagementLoading(false);
     });
-  }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]); // eslint-disable-line
+    return () => clearTimeout(loadingTimer);
+  }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]);
 
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
@@ -326,7 +298,7 @@ export default function App() {
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
     setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty]);
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -337,25 +309,16 @@ export default function App() {
   }, []);
 
   const handleLogin = useCallback(async () => {
-    const hashed = await hashPin(loginPassword);
-    const match = users.find(
-      (u) => u.name.toLowerCase() === loginUsername.trim().toLowerCase() && u.pin === hashed
-    );
-    if (match) {
-      if (match.paused) {
-        setLoginError("Account suspended. Contact your Admin.");
-        setLoginPassword("");
-      } else {
-        setActiveUser(match);
-        setLoginUsername("");
-        setLoginPassword("");
-        setLoginError("");
-      }
-    } else {
-      setLoginError("Invalid username or password.");
+    try {
+      setLoginError("");
+      await signIn(loginUsername.trim().toLowerCase(), loginPassword);
+      setLoginUsername("");
+      setLoginPassword("");
+    } catch {
+      setLoginError("Invalid email or password.");
       setLoginPassword("");
     }
-  }, [users, loginUsername, loginPassword]);  // eslint-disable-line
+  }, [loginUsername, loginPassword]);
 
   // Restores the 4 equipment items deducted by markDelivered.
   // Must be called BEFORE the order is removed from state.
@@ -466,7 +429,9 @@ export default function App() {
   return (
     <div style={styles.container}>
       <div style={styles.appChrome}>
-        {!activeUser ? (
+        {authLoading ? (
+          <div style={styles.loginScreen}><div style={styles.loginCard}>Checking secure session…</div></div>
+        ) : !activeUser ? (
           <div style={styles.loginScreen}>
             <div className="float-1" style={styles.loginOrb1} />
             <div className="float-2" style={styles.loginOrb2} />
@@ -482,15 +447,15 @@ export default function App() {
               <p style={styles.loginMeta}>Sign in to start your shift.</p>
 
               <div style={styles.loginField}>
-                <label style={styles.loginLabel}>Username</label>
+                <label style={styles.loginLabel}>Email</label>
                 <input
-                  type="text"
                   value={loginUsername}
                   onChange={(e) => { setLoginUsername(e.target.value); setLoginError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}
-                  placeholder="Enter your username"
+                  type="email"
+                  autoComplete="username"
+                  placeholder="you@example.com"
                   style={styles.loginInput}
-                  autoComplete="off"
                 />
               </div>
 
@@ -498,6 +463,7 @@ export default function App() {
                 <label style={styles.loginLabel}>Password</label>
                 <input
                   type="password"
+                  autoComplete="current-password"
                   value={loginPassword}
                   onChange={(e) => { setLoginPassword(e.target.value); setLoginError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -528,7 +494,7 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Switch user?</span>
               <button
-                onClick={() => { setActiveUser(null); setConfirmLogout(false); }}
+                onClick={async () => { await signOut(); setActiveUser(null); setUsers([]); setDbReady(false); setConfirmLogout(false); }}
                 style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#0f172a", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
               >Yes</button>
               <button
@@ -1703,7 +1669,12 @@ export default function App() {
                             <div style={styles.deleteConfirmRow}>
                               <span style={styles.deleteConfirmLabel}>Delete?</span>
                               <button
-                                onClick={() => { setUsers((prev) => prev.filter((x) => x.id !== u.id)); setDeleteConfirmId(null); }}
+                                onClick={async (e) => {
+                                  e.stopPropagation();
+                                  try { await manageStaff("delete", { userId: u.id }); setUsers((prev) => prev.filter((x) => x.id !== u.id)); setStaffMessage("User deleted."); }
+                                  catch (error) { setStaffMessage(error.message); }
+                                  setDeleteConfirmId(null);
+                                }}
                                 style={styles.deleteConfirmYes}
                               >Yes</button>
                               <button
@@ -1791,8 +1762,8 @@ export default function App() {
                                 onChange={e => setResetPinValue(e.target.value)}
                                 onKeyDown={async e => {
                                   if (e.key === "Enter" && resetPinValue) {
-                                    const hashed = await hashPin(resetPinValue);
-                                    setUsers(prev => prev.map(x => x.id === u.id ? { ...x, pin: hashed } : x));
+                                    await manageStaff("password", { userId: u.id, password: resetPinValue });
+                                    setStaffMessage("Password updated.");
                                     setResetPinId(null); setResetPinValue("");
                                   }
                                   if (e.key === "Escape") { setResetPinId(null); setResetPinValue(""); }
@@ -1802,8 +1773,8 @@ export default function App() {
                               <button
                                 onClick={async () => {
                                   if (!resetPinValue) return;
-                                  const hashed = await hashPin(resetPinValue);
-                                  setUsers(prev => prev.map(x => x.id === u.id ? { ...x, pin: hashed } : x));
+                                  try { await manageStaff("password", { userId: u.id, password: resetPinValue }); setStaffMessage("Password updated."); }
+                                  catch (error) { setStaffMessage(error.message); }
                                   setResetPinId(null); setResetPinValue("");
                                 }}
                                 style={styles.restockConfirmBtn}
@@ -1832,6 +1803,13 @@ export default function App() {
                     onKeyDown={(e) => e.key === "Enter" && document.getElementById("new-user-pin")?.focus()}
                     style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
                   />
+                  <input
+                    type="email"
+                    placeholder="Email address"
+                    value={newUserEmail}
+                    onChange={(e) => setNewUserEmail(e.target.value)}
+                    style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
+                  />
                   <div style={{ display: "flex", gap: 8 }}>
                     <select
                       value={newUserRole}
@@ -1852,23 +1830,21 @@ export default function App() {
                     />
                     <button
                       onClick={async () => {
-                        if (!newUserName.trim() || !newUserPin) return;
-                        const hashedPin = await hashPin(newUserPin);
-                        const defaultPerms = newUserRole === "Admin"
-                          ? { delivered: true, stock: true, management: true, settings: true }
-                          : newUserRole === "Manager"
-                          ? { delivered: true, stock: true, management: true, settings: false }
-                          : { delivered: true, stock: false, management: false, settings: false };
-                        setUsers((prev) => [...prev, { id: Date.now(), name: newUserName.trim(), role: newUserRole, pin: hashedPin, permissions: defaultPerms }]);
-                        setNewUserName("");
-                        setNewUserPin("");
-                        setNewUserRole("Staff");
+                        if (!newUserName.trim() || !newUserEmail.trim() || !newUserPin) return;
+                        try {
+                          await manageStaff("create", { name: newUserName.trim(), email: newUserEmail.trim(), password: newUserPin, role: newUserRole });
+                          const refreshed = await fetchUsers();
+                          if (refreshed) setUsers(refreshed);
+                          setNewUserName(""); setNewUserEmail(""); setNewUserPin(""); setNewUserRole("Staff");
+                          setStaffMessage("User created securely.");
+                        } catch (error) { setStaffMessage(error.message); }
                       }}
                       style={styles.addUserBtn}
                     >
                       Add
                     </button>
                   </div>
+                  {staffMessage && <div style={styles.loginErrorMsg}>{staffMessage}</div>}
                 </div>
               )}
               </>}
