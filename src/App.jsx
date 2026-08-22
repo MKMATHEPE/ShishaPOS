@@ -460,6 +460,10 @@ export default function App() {
     return currentUserPerms[tab] ?? false;
   };
   const visibleTab = canAccess(activeTab) ? activeTab : "pos";
+  const screenTitle = visibleTab === "pos" ? "The Chill Pipe POS"
+    : visibleTab === "delivered" ? "Orders"
+      : visibleTab === "management" ? "Management"
+        : visibleTab.charAt(0).toUpperCase() + visibleTab.slice(1);
 
   return (
     <div style={styles.container}>
@@ -516,14 +520,8 @@ export default function App() {
         ) : (
         <>
         <div style={styles.topBar}>
-          <div style={styles.brandLockup}>
-            <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.logoImage} />
-            <div>
-              <div style={styles.kicker}>The Chill Pipe</div>
-              <h1 style={styles.logo}>POS</h1>
-              <div style={styles.terminalMeta}>{todayLabel} · {currentTime}</div>
-            </div>
-          </div>
+          <div style={{ width: 38 }} />
+          <h1 style={styles.screenTitle}>{screenTitle}</h1>
           {confirmLogout ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Switch user?</span>
@@ -537,12 +535,12 @@ export default function App() {
               >No</button>
             </div>
           ) : (
-            <button onClick={() => setConfirmLogout(true)} style={styles.activeUserChip}>
-              <div style={styles.activeUserAvatar}>{activeUser.name.charAt(0).toUpperCase()}</div>
-              <div style={styles.activeUserInfo}>
-                <span style={styles.activeUserName}>{activeUser.name}</span>
-                <span style={styles.activeUserRoleLabel}>{activeUser.role} · Switch</span>
-              </div>
+            <button
+              aria-label={visibleTab === "management" ? "Open settings" : "Switch user"}
+              onClick={() => visibleTab === "management" ? setActiveTab("settings") : visibleTab === "settings" ? setActiveTab("management") : setConfirmLogout(true)}
+              style={styles.headerIconBtn}
+            >
+              {visibleTab === "management" ? "⚙" : visibleTab === "settings" ? "←" : activeUser.name.charAt(0).toUpperCase()}
             </button>
           )}
         </div>
@@ -550,13 +548,10 @@ export default function App() {
         <main style={styles.mainContent}>
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
-        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
-          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}>
-            <span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Available pipes</span>
-            <strong style={{ display: "block", fontSize: 24, color: hookahPipeQty <= 2 ? "#dc2626" : "#0f172a", marginTop: 3 }}>{hookahPipeQty}</strong>
-          </div>
-          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}><span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Preparing</span><strong style={{ display: "block", fontSize: 24, color: "#2563eb", marginTop: 3 }}>{currentOrders.length}</strong></div>
-          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}><span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Pipes out</span><strong style={{ display: "block", fontSize: 24, color: pipesOut ? "#b45309" : "#047857", marginTop: 3 }}>{pipesOut}</strong></div>
+        <div style={styles.availabilityCard}>
+          <span style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#64748b" }}>Available pipes</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0f172a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
+          <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
         </div>
         <div style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
@@ -609,12 +604,9 @@ export default function App() {
               >
                 <span style={styles.flavourIcon}>{f.icon}</span>
                 <span style={styles.flavourName}>{f.name}</span>
-                <span style={{ ...styles.flavourPrice, color: selectedFlavour?.id === f.id ? "#fff" : f.color }}>
-                  {formatCurrency(prices[orderType])}
-                </span>
                 {(() => {
                   const qty = stock.find((item) => item.name === "Flavour")?.subItems?.find((item) => item.id === f.id)?.quantity ?? 0;
-                  return <span style={{ fontSize: 9, fontWeight: 800, color: selectedFlavour?.id === f.id ? "rgba(255,255,255,0.85)" : qty <= 1 ? "#dc2626" : "#64748b" }}>● {Math.floor(qty / (FLAVOUR_PER_SALE[f.id] ?? 1))} orders</span>;
+                  return <span style={{ fontSize: 10, fontWeight: 800, color: selectedFlavour?.id === f.id ? "rgba(255,255,255,0.9)" : qty <= 1 ? "#dc2626" : "#16a34a" }}>● {Math.floor(qty / (FLAVOUR_PER_SALE[f.id] ?? 1))}</span>;
                 })()}
                 {flavourCounts[f.id] ? (
                   <span style={{ ...styles.flavourCount, background: selectedFlavour?.id === f.id ? "#fff" : f.color, color: selectedFlavour?.id === f.id ? f.color : "#fff" }}>
@@ -637,10 +629,11 @@ export default function App() {
                 className={!blocked ? "glow-active" : ""}
                 style={{ ...styles.confirmBtn, ...(blocked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
               >
-                {blocked
+                <span>{blocked
                   ? `No ${blockedItem} available · ${selectedFlavour.name}`
-                  : `Add to order · ${selectedFlavour.name} · ${orderType === "full" ? "New Pipe" : "Refill"} · ${formatCurrency(prices[orderType])}`
-                }
+                  : `Confirm order · ${selectedFlavour.name}`
+                }</span>
+                {!blocked && <strong>{formatCurrency(prices[orderType])} ›</strong>}
               </button>
             );
           })()}
@@ -763,6 +756,17 @@ export default function App() {
               staff[name].revenue += order.price;
               return staff;
             }, {})).sort(([, a], [, b]) => b.revenue - a.revenue);
+            const hourlySales = Array.from({ length: 12 }, (_, index) => {
+              const hour = index + 10;
+              return {
+                hour,
+                total: displayOrders.reduce((sum, order) => {
+                  const orderTime = order.time instanceof Date ? order.time : new Date(order.time);
+                  return orderTime.getHours() === hour ? sum + order.price : sum;
+                }, 0),
+              };
+            });
+            const hourlyMax = Math.max(1, ...hourlySales.map((item) => item.total));
 
             const newPipeOrders = displayOrders.filter((o) => o.type === "full");
             const refillOrders  = displayOrders.filter((o) => o.type === "refill");
@@ -911,6 +915,19 @@ export default function App() {
                       <span style={styles.kpiSub}>{metric.note}</span>
                     </div>
                   ))}
+                </div>
+
+                <div style={{ ...styles.kpiCard, minHeight: 150 }}>
+                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+                    <span style={styles.kpiLabel}>Sales by hour</span>
+                    <span style={{ fontSize: 9, color: "#64748b", fontWeight: 800 }}>Rands (R)</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 88, paddingTop: 10, borderBottom: "1px solid #cbd5e1" }}>
+                    {hourlySales.map((item) => (
+                      <div key={item.hour} title={`${item.hour}:00 · ${formatCurrency(item.total)}`} style={{ flex: 1, height: `${Math.max(4, (item.total / hourlyMax) * 100)}%`, minWidth: 3, borderRadius: "3px 3px 0 0", background: item.total ? "#60a5fa" : "#e2e8f0" }} />
+                    ))}
+                  </div>
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8", fontSize: 8, fontWeight: 700 }}><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span></div>
                 </div>
 
                 <div style={{ ...styles.kpiCard, gap: 8 }}>
@@ -2090,17 +2107,17 @@ export default function App() {
         <footer style={styles.footer}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "#0f172a", borderRadius: 20, padding: "5px 5px", width: "100%", boxSizing: "border-box" }}>
           {[
-            { key: "pos",        label: "POS",      badge: currentOrders.length,   access: true },
-            { key: "delivered",  label: "Orders",   badge: deliveredOrders.length, access: canAccess("delivered") },
-            { key: "stock",      label: "Stock",    badge: 0,                      access: canAccess("stock") },
-            { key: "management", label: "Manage",   badge: 0,                      access: canAccess("management") },
-            { key: "settings",   label: "Settings", badge: 0,                      access: canAccess("settings") },
+            { key: "pos",        label: "POS",        icon: "⌑", badge: currentOrders.length,   access: true },
+            { key: "delivered",  label: "Orders",     icon: "▣", badge: deliveredOrders.length, access: canAccess("delivered") },
+            { key: "stock",      label: "Stock",      icon: "◇", badge: 0,                      access: canAccess("stock") },
+            { key: "management", label: "Management", icon: "♙", badge: 0,                      access: canAccess("management") },
           ].filter(t => t.access).map(t => {
             const active = visibleTab === t.key;
             return (
-              <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: active ? "#fff" : "transparent", borderRadius: 14, padding: "7px 10px", flex: active ? "1.6" : "1", transition: "all 0.2s ease" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: active ? "#0f172a" : "rgba(255,255,255,0.4)", letterSpacing: "0.06em", textTransform: "uppercase", whiteSpace: "nowrap" }}>{t.label}</span>
+              <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "all 0.2s ease" }}>
+                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                  <span style={{ fontSize: 18, lineHeight: 1, color: active ? "#fff" : "rgba(255,255,255,0.55)" }}>{t.icon}</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#fff" : "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{t.label}</span>
                   {t.badge > 0 && (
                     <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0f172a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
                   )}
@@ -2126,10 +2143,10 @@ const styles = {
     color: "#111827",
   },
   appChrome: {
-    maxWidth: 560,
+    maxWidth: 430,
     minHeight: "100dvh",
     margin: "0 auto",
-    padding: "72px 12px 80px",
+    padding: "66px 10px 82px",
     display: "flex",
     flexDirection: "column",
     gap: 10,
@@ -2141,19 +2158,54 @@ const styles = {
     left: 0,
     right: 0,
     zIndex: 100,
-    maxWidth: 560,
+    maxWidth: 430,
     margin: "0 auto",
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    padding: "12px 14px",
-    background: "rgba(255,255,255,0.85)",
+    padding: "11px 12px",
+    minHeight: 56,
+    background: "rgba(248,250,252,0.94)",
     backdropFilter: "blur(20px)",
     WebkitBackdropFilter: "blur(20px)",
     borderBottom: "1px solid rgba(255,255,255,0.9)",
-    borderRadius: "0 0 14px 14px",
-    boxShadow: "0 4px 24px rgba(15,23,42,0.08)",
+    borderRadius: 0,
+    boxShadow: "0 1px 0 rgba(15,23,42,0.06)",
+  },
+  screenTitle: {
+    position: "absolute",
+    left: "50%",
+    transform: "translateX(-50%)",
+    margin: 0,
+    color: "#0f172a",
+    fontSize: 15,
+    lineHeight: 1,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+    letterSpacing: "-0.02em",
+  },
+  headerIconBtn: {
+    marginLeft: "auto",
+    width: 36,
+    height: 36,
+    borderRadius: 10,
+    border: "1px solid #e2e8f0",
+    background: "rgba(255,255,255,0.8)",
+    color: "#0f172a",
+    display: "grid",
+    placeItems: "center",
+    fontWeight: 900,
+    fontSize: 15,
+    fontFamily: "inherit",
+  },
+  availabilityCard: {
+    marginBottom: 9,
+    padding: "12px 14px",
+    background: "rgba(255,255,255,0.82)",
+    border: "1px solid rgba(15,23,42,0.08)",
+    borderRadius: 12,
+    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
   },
   mainContent: {
     flex: 1,
@@ -2217,11 +2269,12 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     padding: 14,
-    background: "rgba(255,255,255,0.65)",
+    background: "rgba(255,255,255,0.88)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(255,255,255,0.8)",
-    borderRadius: 14,
+    border: "1px solid rgba(15,23,42,0.07)",
+    borderRadius: 12,
+    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
   },
   sectionHeaderLabel: {
     fontSize: 11,
@@ -2334,13 +2387,16 @@ const styles = {
     padding: "14px 16px",
     border: "none",
     borderRadius: 9,
-    background: "#16a34a",
+    background: "#071a3d",
     color: "#fff",
     fontSize: 14,
     fontWeight: 900,
     cursor: "pointer",
     fontFamily: "inherit",
-    boxShadow: "0 10px 22px rgba(22,163,74,0.22)",
+    boxShadow: "0 10px 22px rgba(7,26,61,0.18)",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
   },
   undoBar: {
     display: "flex",
@@ -3517,6 +3573,8 @@ const styles = {
     bottom: 0,
     left: 0,
     right: 0,
+    maxWidth: 430,
+    margin: "0 auto",
     zIndex: 100,
     display: "flex",
     alignItems: "center",

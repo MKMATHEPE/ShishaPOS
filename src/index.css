@@ -17,7 +17,7 @@ body {
   overflow-x: hidden;
   min-height: 100vh;
   min-height: 100dvh;
-  background: linear-gradient(145deg, #cdd8e8 0%, #e4e9f2 45%, #d5dde9 100%);
+  background: linear-gradient(145deg, #eef2f7 0%, #f8fafc 48%, #e8edf4 100%);
   background-attachment: fixed;
   touch-action: manipulation;
   -webkit-text-size-adjust: 100%;
