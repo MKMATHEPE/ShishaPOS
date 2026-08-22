@@ -1,7 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import chillPipeLogo from "./assets/The_Chill_Pipe.png";
 import { supabase } from "./supabase";
-import { getCurrentProfile, manageStaff, onAuthChange, signIn, signOut } from "./auth";
+import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
   fetchUsers, syncUsers,
   fetchStock, syncStock,
@@ -101,6 +101,13 @@ export default function App() {
   const [staffMessageType, setStaffMessageType] = useState("error");
   const [addingUser, setAddingUser] = useState(false);
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
+  const [settingsSection, setSettingsSection] = useState("overview");
+  const [teamSearch, setTeamSearch] = useState("");
+  const [teamFilter, setTeamFilter] = useState("All");
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [nextPassword, setNextPassword] = useState("");
+  const [securityMessage, setSecurityMessage] = useState("");
+  const [securityBusy, setSecurityBusy] = useState(false);
   const [resetPinId, setResetPinId] = useState(null);
   const [resetPinValue, setResetPinValue] = useState("");
   const [expandedUsers, setExpandedUsers] = useState(new Set());
@@ -423,6 +430,11 @@ export default function App() {
   const usernameIsValid = /^[a-z0-9._-]{3,32}$/.test(newUsername);
   const passwordIsValid = newUserPin.length >= 10;
   const addUserFormIsValid = newUserName.trim().length >= 2 && usernameIsValid && passwordIsValid;
+  const visibleUsers = users.filter((user) => {
+    const matchesSearch = !teamSearch.trim() || `${user.name} ${user.username ?? ""}`.toLowerCase().includes(teamSearch.trim().toLowerCase());
+    const matchesFilter = teamFilter === "All" || (teamFilter === "Suspended" ? user.paused : user.role === teamFilter && !user.paused);
+    return matchesSearch && matchesFilter;
+  });
   const currentUserPerms = users.find((u) => u.id === activeUser?.id)?.permissions ?? {};
   const canAccess = (tab) => {
     if (!activeUser) return false;
@@ -1607,6 +1619,28 @@ export default function App() {
               {/* ── Admin view: full settings ── */}
               {isAdmin && <>
 
+              {settingsSection === "overview" ? (
+                <>
+                  <div style={styles.settingsSectionLabel}>Choose a section</div>
+                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
+                    {[
+                      { key: "pricing", icon: "R", title: "Pricing", text: "Pipe and refill prices", tone: "#2563eb", bg: "#eff6ff" },
+                      { key: "team", icon: "👥", title: "Team & access", text: `${users.length} users and permissions`, tone: "#7c3aed", bg: "#f5f3ff" },
+                      { key: "security", icon: "🔐", title: "Security", text: "Passwords and sessions", tone: "#dc2626", bg: "#fef2f2" },
+                      { key: "business", icon: "⚙", title: "Business", text: "Payments and stock rules", tone: "#047857", bg: "#ecfdf5" },
+                    ].map((section) => (
+                      <button key={section.key} onClick={() => setSettingsSection(section.key)} style={{ border: "1px solid rgba(15,23,42,0.07)", background: section.bg, borderRadius: 16, padding: 16, minHeight: 132, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", justifyContent: "space-between", fontFamily: "inherit" }}>
+                        <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: "#fff", color: section.tone, fontSize: section.icon === "R" ? 16 : 18, fontWeight: 900, boxShadow: "0 4px 12px rgba(15,23,42,0.06)" }}>{section.icon}</span>
+                        <span><strong style={{ display: "block", color: "#0f172a", fontSize: 14 }}>{section.title}</strong><span style={{ display: "block", color: "#64748b", fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>{section.text}</span></span>
+                      </button>
+                    ))}
+                  </div>
+                </>
+              ) : (
+                <button onClick={() => setSettingsSection("overview")} style={{ alignSelf: "flex-start", border: 0, background: "rgba(255,255,255,0.65)", borderRadius: 10, padding: "8px 12px", color: "#334155", fontWeight: 800, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← All settings</button>
+              )}
+
+              {settingsSection === "pricing" && <>
               <div style={styles.settingsSectionLabel}>Pricing</div>
 
               <div style={styles.settingsGrid}>
@@ -1645,8 +1679,25 @@ export default function App() {
                   )}
                 </div>
               </div>
+              </>}
 
               {/* Users section — collapsible */}
+              {settingsSection === "team" && <>
+              <div style={styles.settingsSectionLabel}>Team & access</div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                {["Staff", "Manager", "Admin"].map((role) => (
+                  <div key={role} style={{ background: "rgba(255,255,255,0.65)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, padding: 11 }}>
+                    <strong style={{ display: "block", fontSize: 20, color: "#0f172a" }}>{users.filter((u) => u.role === role && !u.paused).length}</strong>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>{role}</span>
+                  </div>
+                ))}
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <input type="search" value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search name or username" style={{ ...styles.userNameInput, flex: 1 }} />
+                <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ ...styles.userRoleSelect, width: 124 }}>
+                  {['All', 'Staff', 'Manager', 'Admin', 'Suspended'].map((filter) => <option key={filter}>{filter}</option>)}
+                </select>
+              </div>
               <button
                 onClick={() => setUsersCollapsed((c) => !c)}
                 style={styles.collapsibleHeader}
@@ -1657,7 +1708,7 @@ export default function App() {
 
               {!usersCollapsed && (
                 <div className="expand-down" style={styles.userList}>
-                  {users.filter((u) => isAdmin || u.role !== "Admin").map((u, ui) => {
+                  {visibleUsers.map((u, ui) => {
                     const isExpanded = expandedUsers.has(u.id);
                     return (
                     <div key={u.id} className={`card-enter d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
@@ -1791,8 +1842,8 @@ export default function App() {
                       )}
                     </div>
                   ); })}
-                  {users.length === 0 && (
-                    <div style={styles.emptyState}>No users added yet</div>
+                  {visibleUsers.length === 0 && (
+                    <div style={styles.emptyState}>No users match this search</div>
                   )}
                 </div>
               )}
@@ -1896,6 +1947,49 @@ export default function App() {
                   >
                     {addingUser ? "Creating secure account…" : `Create ${newUserRole} account`}
                   </button>
+                </div>
+              )}
+              </>}
+
+              {settingsSection === "security" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={styles.settingsSectionLabel}>Security</div>
+                  <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
+                    <div><strong style={{ color: "#0f172a", fontSize: 14 }}>Change my password</strong><p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 10, lineHeight: 1.5 }}>Use at least 10 characters. Your current password is required.</p></div>
+                    <input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); setSecurityMessage(""); }} placeholder="Current password" style={{ ...styles.userNameInput, width: "100%" }} />
+                    <input type="password" autoComplete="new-password" value={nextPassword} onChange={(e) => { setNextPassword(e.target.value); setSecurityMessage(""); }} placeholder="New password" style={{ ...styles.userNameInput, width: "100%" }} />
+                    <button disabled={securityBusy || !currentPassword || nextPassword.length < 10} onClick={async () => {
+                      setSecurityBusy(true); setSecurityMessage("");
+                      try { await changeOwnPassword(currentPassword, nextPassword); setCurrentPassword(""); setNextPassword(""); setSecurityMessage("Password updated securely."); }
+                      catch (error) { setSecurityMessage(error.message); }
+                      finally { setSecurityBusy(false); }
+                    }} style={{ ...styles.addUserBtn, minHeight: 42, opacity: securityBusy || !currentPassword || nextPassword.length < 10 ? 0.5 : 1 }}>
+                      {securityBusy ? "Updating…" : "Update password"}
+                    </button>
+                    {securityMessage && <div style={styles.loginErrorMsg}>{securityMessage}</div>}
+                  </div>
+                  <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16 }}>
+                    <strong style={{ color: "#0f172a", fontSize: 14 }}>Active sessions</strong>
+                    <p style={{ color: "#64748b", fontSize: 10, lineHeight: 1.5 }}>Sign out this account on every device. You will need to sign in again.</p>
+                    <button onClick={async () => { await signOutEverywhere(); setActiveUser(null); setUsers([]); setDbReady(false); }} style={{ width: "100%", minHeight: 42, border: "1px solid rgba(220,38,38,0.2)", background: "#fef2f2", color: "#b91c1c", borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Sign out all devices</button>
+                  </div>
+                </div>
+              )}
+
+              {settingsSection === "business" && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <div style={styles.settingsSectionLabel}>Business settings</div>
+                  {[
+                    { title: "Payment methods", value: "Cash and card", note: "Available on every POS order" },
+                    { title: "Coal per sale", value: `${COAL_PER_SALE} pieces`, note: "Automatically deducted from stock" },
+                    { title: "Mouth pieces per sale", value: `${MOUTHPIECES_PER_SALE} pieces`, note: "Automatically deducted from stock" },
+                    { title: "Data sync", value: supabase ? "Supabase connected" : "Not configured", note: "Protected by authenticated database policies" },
+                  ].map((item) => (
+                    <div key={item.title} style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 15, display: "flex", justifyContent: "space-between", gap: 14 }}>
+                      <span><strong style={{ display: "block", color: "#0f172a", fontSize: 13 }}>{item.title}</strong><span style={{ display: "block", color: "#64748b", fontSize: 9, marginTop: 4 }}>{item.note}</span></span>
+                      <strong style={{ color: "#047857", fontSize: 11, textAlign: "right", whiteSpace: "nowrap" }}>{item.value}</strong>
+                    </div>
+                  ))}
                 </div>
               )}
               </>}

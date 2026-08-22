@@ -21,6 +21,18 @@ export async function signOut() {
   if (supabase) await supabase.auth.signOut()
 }
 
+export async function signOutEverywhere() {
+  if (!supabase) return
+  const { error } = await supabase.auth.signOut({ scope: 'global' })
+  if (error) throw error
+}
+
+export async function changeOwnPassword(currentPassword, newPassword) {
+  if (!supabase) throw new Error('Supabase is not configured.')
+  const { error } = await supabase.auth.updateUser({ password: newPassword, currentPassword })
+  if (error) throw error
+}
+
 export async function getCurrentProfile() {
   if (!supabase) return null
   const { data: { user } } = await supabase.auth.getUser()
