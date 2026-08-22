@@ -64,6 +64,10 @@ function localToday() {
   return [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
 }
 
+function dateInputValue(date) {
+  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
+}
+
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
@@ -102,6 +106,9 @@ export default function App() {
   const [addingUser, setAddingUser] = useState(false);
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [settingsSection, setSettingsSection] = useState("overview");
+  const [ordersView, setOrdersView] = useState("Preparing");
+  const [stockSearch, setStockSearch] = useState("");
+  const [stockCategory, setStockCategory] = useState("All");
   const [teamSearch, setTeamSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -148,8 +155,13 @@ export default function App() {
   const [newExpenseAmt, setNewExpenseAmt] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => formatTime(new Date()));
+  const [currentMinute, setCurrentMinute] = useState(() => Date.now());
   useEffect(() => {
-    const id = setInterval(() => setCurrentTime(formatTime(new Date())), 60000);
+    const id = setInterval(() => {
+      const now = new Date();
+      setCurrentTime(formatTime(now));
+      setCurrentMinute(now.getTime());
+    }, 60000);
     return () => clearInterval(id);
   }, []);
   const [managementDateFrom, setManagementDateFrom] = useState(localToday);
@@ -425,6 +437,11 @@ export default function App() {
   const PAGE_SIZE = 12;
   const totalDeliveredPages = Math.max(1, Math.ceil(deliveredOrders.length / PAGE_SIZE));
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
+  const queueOrders = ordersView === "Preparing"
+    ? currentOrders
+    : ordersView === "Return Pipes"
+      ? [...unreturnedPipes, ...deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned)]
+      : deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
   const isAdmin = activeUser?.role === "Admin";
   const usernameIsValid = /^[a-z0-9._-]{3,32}$/.test(newUsername);
@@ -533,6 +550,14 @@ export default function App() {
         <main style={styles.mainContent}>
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
+        <div style={{ display: "grid", gridTemplateColumns: "1.3fr 1fr 1fr", gap: 8, marginBottom: 10 }}>
+          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}>
+            <span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Available pipes</span>
+            <strong style={{ display: "block", fontSize: 24, color: hookahPipeQty <= 2 ? "#dc2626" : "#0f172a", marginTop: 3 }}>{hookahPipeQty}</strong>
+          </div>
+          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}><span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Preparing</span><strong style={{ display: "block", fontSize: 24, color: "#2563eb", marginTop: 3 }}>{currentOrders.length}</strong></div>
+          <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 12 }}><span style={{ display: "block", fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>Pipes out</span><strong style={{ display: "block", fontSize: 24, color: pipesOut ? "#b45309" : "#047857", marginTop: 3 }}>{pipesOut}</strong></div>
+        </div>
         <div style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
@@ -587,6 +612,10 @@ export default function App() {
                 <span style={{ ...styles.flavourPrice, color: selectedFlavour?.id === f.id ? "#fff" : f.color }}>
                   {formatCurrency(prices[orderType])}
                 </span>
+                {(() => {
+                  const qty = stock.find((item) => item.name === "Flavour")?.subItems?.find((item) => item.id === f.id)?.quantity ?? 0;
+                  return <span style={{ fontSize: 9, fontWeight: 800, color: selectedFlavour?.id === f.id ? "rgba(255,255,255,0.85)" : qty <= 1 ? "#dc2626" : "#64748b" }}>● {Math.floor(qty / (FLAVOUR_PER_SALE[f.id] ?? 1))} orders</span>;
+                })()}
                 {flavourCounts[f.id] ? (
                   <span style={{ ...styles.flavourCount, background: selectedFlavour?.id === f.id ? "#fff" : f.color, color: selectedFlavour?.id === f.id ? f.color : "#fff" }}>
                     {flavourCounts[f.id]}
@@ -668,48 +697,30 @@ export default function App() {
                 </div>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
+                {[{ label: "Preparing", count: currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
+                  <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0f172a" : "transparent", color: ordersView === tab.label ? "#fff" : "#64748b", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
+                    {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
+                  </button>
+                ))}
+              </div>
+
               <div style={styles.deliveredList}>
-                {deliveredOrders.length === 0 && unreturnedPipes.length === 0 && (
-                  <div style={styles.emptyState}>No delivered orders yet</div>
-                )}
-                {unreturnedPipes.map((o, i) => (
-                  <div key={o.id} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${i * 0.05}s` }}>
-                    <span style={styles.orderIndex}>{String(i + 1).padStart(2, "0")}</span>
-                    <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
-                      {o.flavour.icon} {o.flavour.short}
-                    </span>
-                    <span style={styles.orderMeta}>
-                      <strong>{o.flavour.name}</strong>
-                      <small>New Pipe · {o.payment === "card" ? "Card" : "Cash"} · {formatDateShort(o.sessionDate)} · delivered {formatTime(o.deliveredAt)}</small>
-                    </span>
-                    <button
-                      onClick={() => returnPipe(o.id)}
-                      style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #fca5a5", background: "#fef2f2", color: "#dc2626", cursor: "pointer", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}
-                    >Return Pipe</button>
-                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0 }}>{o.soldBy}</span>}
-                  </div>
-                ))}
-                {deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE).map((o, i) => (
-                  <div key={o.id} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${(unreturnedPipes.length + i) * 0.05}s` }}>
-                    <span style={styles.orderIndex}>{String(unreturnedPipes.length + safePage * PAGE_SIZE + i + 1).padStart(2, "0")}</span>
-                    <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
-                      {o.flavour.icon} {o.flavour.short}
-                    </span>
-                    <span style={styles.orderMeta}>
-                      <strong>{o.flavour.name}</strong>
-                      <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · ordered {formatTime(o.time)} · delivered {formatTime(o.deliveredAt)}</small>
-                    </span>
-                    {o.type === "full" && (
-                      o.pipeReturned
-                        ? <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}>Returned</span>
-                        : <button
-                            onClick={() => returnPipe(o.id)}
-                            style={{ fontSize: 11, fontWeight: 700, padding: "3px 10px", borderRadius: 20, border: "1px solid #cbd5e1", background: "transparent", color: "#64748b", cursor: "pointer", flexShrink: 0, marginLeft: o.soldBy ? 8 : "auto" }}
-                          >Return Pipe</button>
-                    )}
-                    {o.soldBy && <span style={{ fontSize: 11, color: "#94a3b8", flexShrink: 0, marginLeft: o.type === "full" ? 0 : "auto" }}>{o.soldBy}</span>}
-                  </div>
-                ))}
+                {queueOrders.length === 0 && <div style={styles.emptyState}>Nothing in {ordersView.toLowerCase()}</div>}
+                {queueOrders.map((o, i) => {
+                  const orderedAt = o.time instanceof Date ? o.time : new Date(o.time);
+                  const elapsed = Math.max(0, Math.floor((currentMinute - orderedAt.getTime()) / 60000));
+                  const overdue = ordersView === "Preparing" && elapsed >= 12;
+                  return (
+                    <div key={`${o.id}-${ordersView}`} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${i * 0.04}s`, border: overdue ? "1px solid #f59e0b" : undefined, background: overdue ? "#fffbeb" : undefined }}>
+                      <span style={styles.orderIndex}>#{String(o.id).slice(-4)}</span>
+                      <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>{o.flavour.icon} {o.flavour.short}</span>
+                      <span style={styles.orderMeta}><strong>{o.flavour.name}</strong><small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {o.soldBy ?? "Unknown"}</small></span>
+                      <span style={{ fontSize: 10, fontWeight: 800, color: overdue ? "#b45309" : "#64748b" }}>{ordersView === "Preparing" ? `${elapsed}m` : formatTime(o.deliveredAt ?? orderedAt)}</span>
+                      {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={styles.deliverBtn}>{overdue ? "Deliver overdue" : "Mark delivered"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, background: "#fef2f2", color: "#dc2626" }}>Return pipe</button> : <span style={{ fontSize: 10, color: "#16a34a", fontWeight: 800 }}>Complete</span>}
+                    </div>
+                  );
+                })}
               </div>
             </div>
           )}
@@ -743,6 +754,15 @@ export default function App() {
               const eDate = [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
               return eDate >= managementDateFrom && eDate <= managementDateTo;
             });
+            const displayExpenseTotal = displayExpenses.reduce((sum, expense) => sum + expense.amount, 0);
+            const displayNetProfit = displayTotals.gross - displayExpenseTotal;
+            const staffPerformance = Object.entries(displayOrders.reduce((staff, order) => {
+              const name = order.soldBy || "Unknown";
+              staff[name] = staff[name] || { orders: 0, revenue: 0 };
+              staff[name].orders += 1;
+              staff[name].revenue += order.price;
+              return staff;
+            }, {})).sort(([, a], [, b]) => b.revenue - a.revenue);
 
             const newPipeOrders = displayOrders.filter((o) => o.type === "full");
             const refillOrders  = displayOrders.filter((o) => o.type === "refill");
@@ -842,6 +862,19 @@ export default function App() {
                 </div>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+                {["Today", "Yesterday", "7 Days", "Month"].map((preset) => (
+                  <button key={preset} onClick={() => {
+                    const end = new Date();
+                    const start = new Date();
+                    if (preset === "Yesterday") { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
+                    if (preset === "7 Days") start.setDate(start.getDate() - 6);
+                    if (preset === "Month") start.setDate(1);
+                    setManagementDateFrom(dateInputValue(start)); setManagementDateTo(dateInputValue(end)); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59");
+                  }} style={{ border: "1px solid rgba(15,23,42,0.08)", background: (preset === "Today" && isViewingToday) ? "#0f172a" : "rgba(255,255,255,0.7)", color: (preset === "Today" && isViewingToday) ? "#fff" : "#475569", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>
+                ))}
+              </div>
+
               {managementLoading && (
                 <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
               )}
@@ -865,6 +898,31 @@ export default function App() {
                       <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🔄 {refillOrders.length} refills</span>
                     </div>
                   </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  {[
+                    { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#16a34a" : "#dc2626" },
+                    { label: "Top flavour", value: topFlavour ? `${topFlavour.icon} ${topFlavour.short}` : "—", note: `${topFlavourCount} orders`, color: topFlavour?.color || "#0f172a" },
+                  ].map((metric) => (
+                    <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 92 }}>
+                      <span style={styles.kpiLabel}>{metric.label}</span>
+                      <span style={{ ...styles.kpiValue, color: metric.color }}>{metric.value}</span>
+                      <span style={styles.kpiSub}>{metric.note}</span>
+                    </div>
+                  ))}
+                </div>
+
+                <div style={{ ...styles.kpiCard, gap: 8 }}>
+                  <span style={styles.kpiLabel}>Staff performance</span>
+                  {staffPerformance.length === 0 && <span style={styles.kpiSub}>No orders in this period</span>}
+                  {staffPerformance.slice(0, 4).map(([name, result], index) => (
+                    <div key={name} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", alignItems: "center", gap: 8, paddingTop: index ? 8 : 2, borderTop: index ? "1px solid rgba(15,23,42,0.07)" : 0 }}>
+                      <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 99, background: index === 0 ? "#fef3c7" : "#f1f5f9", color: index === 0 ? "#b45309" : "#64748b", fontSize: 10, fontWeight: 900 }}>{index + 1}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>{name}<small style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#94a3b8" }}>{result.orders} order{result.orders === 1 ? "" : "s"}</small></span>
+                      <strong style={{ fontSize: 12, color: "#0f172a" }}>{formatCurrency(result.revenue)}</strong>
+                    </div>
+                  ))}
                 </div>
 
               </div>
@@ -1287,8 +1345,10 @@ export default function App() {
 
           })()}
           {visibleTab === "stock" && (() => {
-            const consumables = stock.filter(i => i.category === "consumable");
-            const equipment   = stock.filter(i => i.category === "equipment");
+            const matchesStockSearch = (item) => !stockSearch.trim() || item.name.toLowerCase().includes(stockSearch.toLowerCase()) || item.subItems?.some((sub) => sub.name.toLowerCase().includes(stockSearch.toLowerCase()));
+            const categoryMatches = (item) => stockCategory === "All" || (stockCategory === "Equipment" ? item.category === "equipment" : stockCategory === "Flavours" ? item.name === "Flavour" : item.category === "consumable" && item.name !== "Flavour");
+            const consumables = stock.filter(i => i.category === "consumable" && matchesStockSearch(i) && categoryMatches(i));
+            const equipment   = stock.filter(i => i.category === "equipment" && matchesStockSearch(i) && categoryMatches(i));
 
             // Flatten all trackable items (including flavour sub-items) for summary
             const allFlatItems = stock.flatMap(i => {
@@ -1435,6 +1495,16 @@ export default function App() {
                       {lowCount > 0 ? `⚠ ${lowCount} item${lowCount > 1 ? "s" : ""} need attention` : "All items stocked"} · {todayLabel}
                     </span>
                   </div>
+                </div>
+
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
+                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb" }, { label: "Equipment", value: equipment.length, color: "#2563eb", bg: "#eff6ff" }].map((summary) => (
+                    <div key={summary.label} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 21 }}>{summary.value}</strong></div>
+                  ))}
+                </div>
+                <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
+                <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
+                  {["All", "Flavours", "Consumables", "Equipment"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
 
                 {consumables.length > 0 && (
@@ -1997,7 +2067,7 @@ export default function App() {
           )}
         </main>
 
-        {visibleTab === "delivered" && totalDeliveredPages > 1 && (
+        {visibleTab === "delivered" && ordersView === "Delivered" && totalDeliveredPages > 1 && (
           <div style={styles.pagination}>
             <button
               onClick={() => setDeliveredPage((p) => Math.max(0, p - 1))}
