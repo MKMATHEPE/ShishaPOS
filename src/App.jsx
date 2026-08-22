@@ -98,6 +98,9 @@ export default function App() {
   const [newUserRole, setNewUserRole] = useState("Staff");
   const [newUserPin, setNewUserPin] = useState("");
   const [staffMessage, setStaffMessage] = useState("");
+  const [staffMessageType, setStaffMessageType] = useState("error");
+  const [addingUser, setAddingUser] = useState(false);
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [resetPinId, setResetPinId] = useState(null);
   const [resetPinValue, setResetPinValue] = useState("");
   const [expandedUsers, setExpandedUsers] = useState(new Set());
@@ -417,6 +420,9 @@ export default function App() {
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
 
   const isAdmin = activeUser?.role === "Admin";
+  const usernameIsValid = /^[a-z0-9._-]{3,32}$/.test(newUsername);
+  const passwordIsValid = newUserPin.length >= 10;
+  const addUserFormIsValid = newUserName.trim().length >= 2 && usernameIsValid && passwordIsValid;
   const currentUserPerms = users.find((u) => u.id === activeUser?.id)?.permissions ?? {};
   const canAccess = (tab) => {
     if (!activeUser) return false;
@@ -1670,8 +1676,8 @@ export default function App() {
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
-                                  try { await manageStaff("delete", { userId: u.id }); setUsers((prev) => prev.filter((x) => x.id !== u.id)); setStaffMessage("User deleted."); }
-                                  catch (error) { setStaffMessage(error.message); }
+                                  try { await manageStaff("delete", { userId: u.id }); setUsers((prev) => prev.filter((x) => x.id !== u.id)); setStaffMessageType("success"); setStaffMessage("User deleted."); }
+                                  catch (error) { setStaffMessageType("error"); setStaffMessage(error.message); }
                                   setDeleteConfirmId(null);
                                 }}
                                 style={styles.deleteConfirmYes}
@@ -1762,7 +1768,7 @@ export default function App() {
                                 onKeyDown={async e => {
                                   if (e.key === "Enter" && resetPinValue) {
                                     await manageStaff("password", { userId: u.id, password: resetPinValue });
-                                    setStaffMessage("Password updated.");
+                                    setStaffMessageType("success"); setStaffMessage("Password updated.");
                                     setResetPinId(null); setResetPinValue("");
                                   }
                                   if (e.key === "Escape") { setResetPinId(null); setResetPinValue(""); }
@@ -1772,8 +1778,8 @@ export default function App() {
                               <button
                                 onClick={async () => {
                                   if (!resetPinValue) return;
-                                  try { await manageStaff("password", { userId: u.id, password: resetPinValue }); setStaffMessage("Password updated."); }
-                                  catch (error) { setStaffMessage(error.message); }
+                                  try { await manageStaff("password", { userId: u.id, password: resetPinValue }); setStaffMessageType("success"); setStaffMessage("Password updated."); }
+                                  catch (error) { setStaffMessageType("error"); setStaffMessage(error.message); }
                                   setResetPinId(null); setResetPinValue("");
                                 }}
                                 style={styles.restockConfirmBtn}
@@ -1792,59 +1798,104 @@ export default function App() {
               )}
 
               {isAdmin && (
-                <div className="card-enter" style={{ background: "rgba(255,255,255,0.6)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10 }}>
-                  <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" }}>Add User</span>
-                  <input
-                    type="text"
-                    placeholder="Full name"
-                    value={newUserName}
-                    onChange={(e) => setNewUserName(e.target.value)}
-                    onKeyDown={(e) => e.key === "Enter" && document.getElementById("new-user-pin")?.focus()}
-                    style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
-                  />
-                  <input
-                    type="text"
-                    autoComplete="off"
-                    placeholder="Username (e.g. thabo)"
-                    value={newUsername}
-                    onChange={(e) => setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, ""))}
-                    style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
-                  />
-                  <div style={{ display: "flex", gap: 8 }}>
+                <div className="card-enter" style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 10px 30px rgba(15,23,42,0.06)" }}>
+                  <div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Add a new user</div>
+                    <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.5, color: "#64748b" }}>Create secure login details and choose what this person can access.</div>
+                  </div>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={styles.loginLabel}>Full name</span>
+                    <input
+                      type="text"
+                      autoComplete="off"
+                      placeholder="e.g. Thabo Mokoena"
+                      value={newUserName}
+                      onChange={(e) => { setNewUserName(e.target.value); setStaffMessage(""); }}
+                      style={{ ...styles.userNameInput, flex: "none", width: "100%" }}
+                    />
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={styles.loginLabel}>Username</span>
+                    <div style={{ position: "relative" }}>
+                      <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontWeight: 800 }}>@</span>
+                      <input
+                        type="text"
+                        autoComplete="off"
+                        maxLength={32}
+                        placeholder="thabo"
+                        value={newUsername}
+                        onChange={(e) => { setNewUsername(e.target.value.toLowerCase().replace(/[^a-z0-9._-]/g, "")); setStaffMessage(""); }}
+                        style={{ ...styles.userNameInput, flex: "none", width: "100%", paddingLeft: 30 }}
+                      />
+                    </div>
+                    <span style={{ fontSize: 10, color: newUsername && !usernameIsValid ? "#dc2626" : "#64748b" }}>
+                      3–32 characters · letters, numbers, dots, dashes or underscores
+                    </span>
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={styles.loginLabel}>Access level</span>
                     <select
                       value={newUserRole}
-                      onChange={(e) => setNewUserRole(e.target.value)}
-                      style={{ ...styles.userRoleSelect, flex: 1 }}
+                      onChange={(e) => { setNewUserRole(e.target.value); setStaffMessage(""); }}
+                      style={{ ...styles.userRoleSelect, width: "100%" }}
                     >
-                      <option value="Staff">Staff</option>
-                      <option value="Manager">Manager</option>
-                      <option value="Admin">Admin</option>
+                      <option value="Staff">Staff · POS and orders</option>
+                      <option value="Manager">Manager · Stock and management</option>
+                      <option value="Admin">Admin · Full access</option>
                     </select>
-                    <input
-                      id="new-user-pin"
-                      type="password"
-                      placeholder="Password"
-                      value={newUserPin}
-                      onChange={(e) => setNewUserPin(e.target.value)}
-                      style={{ ...styles.userNameInput, flex: 1 }}
-                    />
-                    <button
-                      onClick={async () => {
-                        if (!newUserName.trim() || !newUsername.trim() || !newUserPin) return;
-                        try {
-                          await manageStaff("create", { name: newUserName.trim(), username: newUsername.trim(), password: newUserPin, role: newUserRole });
-                          const refreshed = await fetchUsers();
-                          if (refreshed) setUsers(refreshed);
-                          setNewUserName(""); setNewUsername(""); setNewUserPin(""); setNewUserRole("Staff");
-                          setStaffMessage("User created securely.");
-                        } catch (error) { setStaffMessage(error.message); }
-                      }}
-                      style={styles.addUserBtn}
-                    >
-                      Add
-                    </button>
-                  </div>
-                  {staffMessage && <div style={styles.loginErrorMsg}>{staffMessage}</div>}
+                  </label>
+
+                  <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+                    <span style={styles.loginLabel}>Temporary password</span>
+                    <div style={{ position: "relative" }}>
+                      <input
+                        id="new-user-pin"
+                        type={showNewUserPassword ? "text" : "password"}
+                        autoComplete="new-password"
+                        placeholder="At least 10 characters"
+                        value={newUserPin}
+                        onChange={(e) => { setNewUserPin(e.target.value); setStaffMessage(""); }}
+                        style={{ ...styles.userNameInput, width: "100%", paddingRight: 64 }}
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewUserPassword((show) => !show)}
+                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", color: "#475569", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                      >{showNewUserPassword ? "Hide" : "Show"}</button>
+                    </div>
+                    <span style={{ fontSize: 10, color: newUserPin && !passwordIsValid ? "#dc2626" : "#64748b" }}>
+                      Minimum 10 characters. Share it privately with the new user.
+                    </span>
+                  </label>
+
+                  {staffMessage && (
+                    <div style={{ ...styles.loginErrorMsg, background: staffMessageType === "success" ? "rgba(22,163,74,0.1)" : undefined, color: staffMessageType === "success" ? "#15803d" : undefined, borderColor: staffMessageType === "success" ? "rgba(22,163,74,0.2)" : undefined }}>
+                      {staffMessage}
+                    </div>
+                  )}
+
+                  <button
+                    disabled={!addUserFormIsValid || addingUser}
+                    onClick={async () => {
+                      if (!addUserFormIsValid || addingUser) return;
+                      setAddingUser(true); setStaffMessage("");
+                      try {
+                        await manageStaff("create", { name: newUserName.trim(), username: newUsername, password: newUserPin, role: newUserRole });
+                        const refreshed = await fetchUsers();
+                        if (refreshed) setUsers(refreshed);
+                        setNewUserName(""); setNewUsername(""); setNewUserPin(""); setNewUserRole("Staff"); setShowNewUserPassword(false);
+                        setStaffMessageType("success"); setStaffMessage("User created. They can now sign in with their username.");
+                      } catch (error) {
+                        setStaffMessageType("error"); setStaffMessage(error.message);
+                      } finally { setAddingUser(false); }
+                    }}
+                    style={{ ...styles.addUserBtn, width: "100%", minHeight: 44, opacity: !addUserFormIsValid || addingUser ? 0.5 : 1, cursor: !addUserFormIsValid || addingUser ? "not-allowed" : "pointer" }}
+                  >
+                    {addingUser ? "Creating secure account…" : `Create ${newUserRole} account`}
+                  </button>
                 </div>
               )}
               </>}
