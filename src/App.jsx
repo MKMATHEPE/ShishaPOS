@@ -128,6 +128,8 @@ export default function App() {
   const [ordersView, setOrdersView] = useState("Preparing");
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategory, setStockCategory] = useState("All");
+  const [editingEquipmentId, setEditingEquipmentId] = useState(null);
+  const [equipmentDraft, setEquipmentDraft] = useState({ name: "", quantity: "", lowThreshold: "" });
   const [teamSearch, setTeamSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -1500,6 +1502,43 @@ export default function App() {
               const rowStyle = isOut ? styles.stockRowCritical : isLow ? styles.stockRowLow : styles.stockRow;
               const pack = RESTOCK_PACK[item.name];
 
+              if (item.category === "equipment" && editingEquipmentId === item.id) {
+                const saveEquipment = () => {
+                  const name = equipmentDraft.name.trim();
+                  const quantity = Math.max(0, Number(equipmentDraft.quantity));
+                  const lowThreshold = Math.max(0, Number(equipmentDraft.lowThreshold));
+                  if (!name || !Number.isFinite(quantity) || !Number.isFinite(lowThreshold)) return;
+                  setStock(prev => prev.map(stockItem => stockItem.id === item.id
+                    ? { ...stockItem, name, quantity, lowThreshold }
+                    : stockItem
+                  ));
+                  setEditingEquipmentId(null);
+                };
+
+                return (
+                  <div key={item.id} style={{ ...rowStyle, alignItems: "stretch", flexDirection: "column" }}>
+                    <label style={styles.equipmentEditField}>
+                      <span>Name</span>
+                      <input value={equipmentDraft.name} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, name: event.target.value }))} style={styles.equipmentEditInput} />
+                    </label>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <label style={styles.equipmentEditField}>
+                        <span>Quantity</span>
+                        <input type="number" min="0" value={equipmentDraft.quantity} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, quantity: event.target.value }))} style={styles.equipmentEditInput} />
+                      </label>
+                      <label style={styles.equipmentEditField}>
+                        <span>Low-stock alert</span>
+                        <input type="number" min="0" value={equipmentDraft.lowThreshold} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, lowThreshold: event.target.value }))} style={styles.equipmentEditInput} />
+                      </label>
+                    </div>
+                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+                      <button onClick={() => setEditingEquipmentId(null)} style={styles.equipmentCancelBtn}>Cancel</button>
+                      <button onClick={saveEquipment} style={styles.equipmentSaveBtn}>Save changes</button>
+                    </div>
+                  </div>
+                );
+              }
+
               return (
                 <div key={item.id} style={rowStyle}>
                   <div style={styles.stockInfo}>
@@ -1517,6 +1556,18 @@ export default function App() {
                   </div>
 
                   <span style={styles.stockQty}>{item.quantity}</span>
+                  {item.category === "equipment" && (
+                    <button
+                      onClick={() => {
+                        setEditingEquipmentId(item.id);
+                        setEquipmentDraft({ name: item.name, quantity: String(item.quantity), lowThreshold: String(item.lowThreshold) });
+                      }}
+                      style={styles.equipmentEditBtn}
+                      aria-label={`Edit ${item.name}`}
+                    >
+                      Edit
+                    </button>
+                  )}
 
                 </div>
               );
@@ -2909,6 +2960,57 @@ const styles = {
     minWidth: 32,
     textAlign: "center",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+  },
+  equipmentEditBtn: {
+    minHeight: 34,
+    padding: "0 11px",
+    border: "1px solid #bfdbfe",
+    borderRadius: 8,
+    background: "#eff6ff",
+    color: "#1d4ed8",
+    fontSize: 11,
+    fontWeight: 900,
+    fontFamily: "inherit",
+  },
+  equipmentEditField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: 800,
+  },
+  equipmentEditInput: {
+    width: "100%",
+    minHeight: 42,
+    padding: "8px 10px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    background: "#ffffff",
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: 800,
+    fontFamily: "inherit",
+  },
+  equipmentCancelBtn: {
+    minHeight: 40,
+    border: "1px solid #cbd5e1",
+    borderRadius: 9,
+    background: "#ffffff",
+    color: "#64748b",
+    fontSize: 12,
+    fontWeight: 900,
+    fontFamily: "inherit",
+  },
+  equipmentSaveBtn: {
+    minHeight: 40,
+    border: "1px solid #071a3d",
+    borderRadius: 9,
+    background: "#071a3d",
+    color: "#ffffff",
+    fontSize: 12,
+    fontWeight: 900,
+    fontFamily: "inherit",
   },
   restockBtn: {
     height: 32,
