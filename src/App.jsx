@@ -120,7 +120,7 @@ export default function App() {
   const [expandedUsers, setExpandedUsers] = useState(new Set());
   const toggleUserExpanded = (id) => setExpandedUsers(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
   const [orderType, setOrderType] = useState("full");
-  const [payMethod, setPayMethod] = useState("card");
+  const [payMethod, setPayMethod] = useState("cash");
   const [selectedFlavour, setSelectedFlavour] = useState(null);
   const [flash, setFlash] = useState(null);
   const [undoTarget, setUndoTarget] = useState(null);
@@ -140,14 +140,14 @@ export default function App() {
     return defaults;
   });
   const [usersCollapsed, setUsersCollapsed] = useState(false);
-  const [consumablesCollapsed, setConsumablesCollapsed] = useState(true);
-  const [equipmentCollapsed, setEquipmentCollapsed] = useState(true);
+  const [consumablesCollapsed, setConsumablesCollapsed] = useState(false);
+  const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
   const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
   const [kpisCollapsed, setKpisCollapsed] = useState(true);
   const [accountingCollapsed, setAccountingCollapsed] = useState(true);
   const [expensesCollapsed, setExpensesCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
-  const [expandedStockIds, setExpandedStockIds] = useState(new Set());
+  const [expandedStockIds, setExpandedStockIds] = useState(new Set([14]));
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [newExpenseCat, setNewExpenseCat] = useState("Coal");
@@ -439,6 +439,8 @@ export default function App() {
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
   const queueOrders = ordersView === "Preparing"
     ? currentOrders
+    : ordersView === "Ready"
+      ? []
     : ordersView === "Return Pipes"
       ? [...unreturnedPipes, ...deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned)]
       : deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
@@ -537,10 +539,10 @@ export default function App() {
           ) : (
             <button
               aria-label={visibleTab === "management" ? "Open settings" : "Switch user"}
-              onClick={() => visibleTab === "management" ? setActiveTab("settings") : visibleTab === "settings" ? setActiveTab("management") : setConfirmLogout(true)}
+              onClick={() => visibleTab === "management" || visibleTab === "pos" ? setActiveTab("settings") : visibleTab === "settings" ? setActiveTab("management") : undefined}
               style={styles.headerIconBtn}
             >
-              {visibleTab === "management" ? "⚙" : visibleTab === "settings" ? "←" : activeUser.name.charAt(0).toUpperCase()}
+              {visibleTab === "management" ? "⚙" : visibleTab === "settings" ? "←" : visibleTab === "stock" ? "⌕" : visibleTab === "delivered" ? "⌕" : "☷"}
             </button>
           )}
         </div>
@@ -554,7 +556,6 @@ export default function App() {
           <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
         </div>
         <div style={styles.salePanel}>
-          <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
             <div style={styles.toggleGroup}>
               {["full", "refill"].map((t) => (
@@ -569,11 +570,11 @@ export default function App() {
               ))}
             </div>
             <div style={styles.toggleGroup}>
-              {["card", "cash"].map((p) => (
+              {["cash", "card"].map((p) => (
                 <button
                   key={p}
                   onClick={() => setPayMethod(p)}
-                  style={{ ...styles.toggleBtn, ...(payMethod === p ? styles.toggleActive : {}) }}
+                  style={{ ...styles.toggleBtn, ...(payMethod === p ? { background: "#eff6ff", border: "1px solid #bfdbfe", color: "#0f172a", boxShadow: "none" } : {}) }}
                 >
                   <span>{p === "card" ? "Card" : "Cash"}</span>
                   <strong>{p === "card" ? "💳" : "💵"}</strong>
@@ -583,8 +584,7 @@ export default function App() {
           </div>
 
           <div style={styles.panelHeader}>
-            <div style={styles.sectionHeaderLabel}>Flavour</div>
-            <div style={styles.panelHint}>Select one item, then confirm</div>
+            <div style={{ ...styles.sectionHeaderLabel, textTransform: "none", letterSpacing: 0 }}>Select flavour</div>
           </div>
           <div style={styles.flavourGrid}>
             {FLAVOURS.map((f, fi) => (
@@ -646,7 +646,7 @@ export default function App() {
           )}
         </div>
 
-        <div style={styles.receiptPanel}>
+        <div style={{ ...styles.receiptPanel, display: "none" }}>
           <div style={styles.totalBar}>
             <div style={styles.totalLeft}>
               <span style={styles.totalLabel}>Current Orders</span>
@@ -680,7 +680,7 @@ export default function App() {
 
           {visibleTab === "delivered" && (
             <div key="delivered" className="tab-enter" style={styles.deliveredPanel}>
-              <div style={{ ...styles.deliveredBar, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ ...styles.deliveredBar, display: "none", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Orders Delivered</span>
                   <span style={styles.totalSub}>{deliveredOrders.length} orders · Card {deliveredPaymentCounts.card} · Cash {deliveredPaymentCounts.cash}</span>
@@ -690,8 +690,8 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
-                {[{ label: "Preparing", count: currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, max-content)", gap: 6, overflowX: "auto", padding: "3px 0 7px" }}>
+                {[{ label: "Preparing", count: currentOrders.length }, { label: "Ready", count: 0 }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
                   <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0f172a" : "transparent", color: ordersView === tab.label ? "#fff" : "#64748b", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
@@ -816,7 +816,7 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
-              <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
+              <div style={{ ...styles.settingsBar, display: "none", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
                   <span style={styles.totalSub}>
@@ -885,29 +885,12 @@ export default function App() {
 
               {/* ── Always-visible order summary ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* Revenue + orders row */}
-                <div className="pop-enter" style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 2 }}>Total Revenue</div>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(displayTotals.gross)}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {mgmtDateLabel}</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(displayTotals.card)}</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(displayTotals.cash)}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🪄 {newPipeOrders.length} pipes</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🔄 {refillOrders.length} refills</span>
-                    </div>
-                  </div>
-                </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                   {[
-                    { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#16a34a" : "#dc2626" },
-                    { label: "Top flavour", value: topFlavour ? `${topFlavour.icon} ${topFlavour.short}` : "—", note: `${topFlavourCount} orders`, color: topFlavour?.color || "#0f172a" },
+                    { label: "Revenue", value: formatCurrency(displayTotals.gross), note: `${totalOrders} orders`, color: "#0f172a" },
+                    { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#0f172a" : "#dc2626" },
+                    { label: "Cash", value: formatCurrency(displayTotals.cash), note: `${newPipeOrders.length} new pipes`, color: "#0f172a" },
+                    { label: "Card", value: formatCurrency(displayTotals.card), note: `${refillOrders.length} refills`, color: "#0f172a" },
                   ].map((metric) => (
                     <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 92 }}>
                       <span style={styles.kpiLabel}>{metric.label}</span>
@@ -930,17 +913,31 @@ export default function App() {
                   <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8", fontSize: 8, fontWeight: 700 }}><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span></div>
                 </div>
 
-                <div style={{ ...styles.kpiCard, gap: 8 }}>
-                  <span style={styles.kpiLabel}>Staff performance</span>
-                  {staffPerformance.length === 0 && <span style={styles.kpiSub}>No orders in this period</span>}
-                  {staffPerformance.slice(0, 4).map(([name, result], index) => (
-                    <div key={name} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", alignItems: "center", gap: 8, paddingTop: index ? 8 : 2, borderTop: index ? "1px solid rgba(15,23,42,0.07)" : 0 }}>
-                      <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 99, background: index === 0 ? "#fef3c7" : "#f1f5f9", color: index === 0 ? "#b45309" : "#64748b", fontSize: 10, fontWeight: 900 }}>{index + 1}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>{name}<small style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#94a3b8" }}>{result.orders} order{result.orders === 1 ? "" : "s"}</small></span>
-                      <strong style={{ fontSize: 12, color: "#0f172a" }}>{formatCurrency(result.revenue)}</strong>
-                    </div>
-                  ))}
+                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
+                  <div style={{ ...styles.kpiCard, gap: 8 }}>
+                    <span style={styles.kpiLabel}>Top flavours</span>
+                    {sortedFlavours.slice(0, 5).map((flavour, index) => (
+                      <div key={flavour.id} style={{ display: "grid", gridTemplateColumns: "14px 1fr auto", alignItems: "center", gap: 4, fontSize: 9 }}>
+                        <span style={{ color: "#94a3b8", fontWeight: 900 }}>{index + 1}</span>
+                        <span style={{ color: "#334155", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{flavour.icon} {flavour.short}</span>
+                        <strong>{totalOrders ? Math.round(((displayFlavourCounts[flavour.id] || 0) / totalOrders) * 100) : 0}%</strong>
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{ ...styles.kpiCard, gap: 8 }}>
+                    <span style={styles.kpiLabel}>Staff performance</span>
+                    {staffPerformance.length === 0 && <span style={styles.kpiSub}>No orders</span>}
+                    {staffPerformance.slice(0, 5).map(([name, result], index) => (
+                      <div key={name} style={{ display: "grid", gridTemplateColumns: "14px 1fr auto", alignItems: "center", gap: 4, fontSize: 9 }}>
+                        <span style={{ color: "#94a3b8", fontWeight: 900 }}>{index + 1}</span>
+                        <span style={{ color: "#334155", fontWeight: 800, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{name}</span>
+                        <strong style={{ color: "#0f172a" }}>{formatCurrency(result.revenue)}</strong>
+                      </div>
+                    ))}
+                  </div>
                 </div>
+
+                <button onClick={() => setAccountingCollapsed(false)} style={{ ...styles.copyBtn, marginTop: 2, background: "#071a3d" }}>Close shift <span style={{ float: "right" }}>▣</span></button>
 
               </div>
 
@@ -1505,7 +1502,7 @@ export default function App() {
 
             return (
               <div key="stock" className="tab-enter" style={styles.stockPanel}>
-                <div style={styles.settingsBar}>
+                <div style={{ ...styles.settingsBar, display: "none" }}>
                   <div style={styles.totalLeft}>
                     <span style={styles.totalLabel}>Stock</span>
                     <span style={styles.totalSub}>
@@ -2297,7 +2294,7 @@ const styles = {
   },
   toggleRow: {
     display: "grid",
-    gridTemplateColumns: "1fr 1fr",
+    gridTemplateColumns: "1fr",
     gap: 10,
   },
   toggleGroup: {
@@ -2339,8 +2336,8 @@ const styles = {
   },
   flavourBtn: {
     position: "relative",
-    minHeight: 108,
-    padding: "14px 8px 12px",
+    minHeight: 96,
+    padding: "11px 7px 10px",
     border: "1px solid",
     borderRadius: 10,
     cursor: "pointer",
@@ -2354,11 +2351,11 @@ const styles = {
     transition: "all 0.15s ease",
   },
   flavourIcon: {
-    fontSize: 25,
+    fontSize: 29,
     lineHeight: 1,
   },
   flavourName: {
-    fontSize: 13,
+    fontSize: 11,
     fontWeight: 900,
     textAlign: "center",
     lineHeight: 1.15,
