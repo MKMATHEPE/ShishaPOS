@@ -83,6 +83,25 @@ function formatCurrency(n) {
   return `R${n.toLocaleString()}`;
 }
 
+function TabIcon({ name, active }) {
+  const common = {
+    width: 21,
+    height: 21,
+    viewBox: "0 0 24 24",
+    fill: "none",
+    stroke: active ? "#ffffff" : "rgba(255,255,255,0.58)",
+    strokeWidth: 1.8,
+    strokeLinecap: "round",
+    strokeLinejoin: "round",
+    "aria-hidden": true,
+  };
+
+  if (name === "pos") return <svg {...common}><circle cx="9" cy="20" r="1" /><circle cx="18" cy="20" r="1" /><path d="M3 4h2l2.4 10.2a2 2 0 0 0 2 1.6h7.7a2 2 0 0 0 2-1.6L21 8H7" /></svg>;
+  if (name === "orders") return <svg {...common}><path d="M9 5h6" /><path d="M9 3h6a1 1 0 0 1 1 1v2H8V4a1 1 0 0 1 1-1Z" /><path d="M6 5h12a2 2 0 0 1 2 2v13H4V7a2 2 0 0 1 2-2Z" /><path d="M8 11h8M8 15h5" /></svg>;
+  if (name === "stock") return <svg {...common}><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z" /><path d="m4.4 7.7 7.6 4.4 7.6-4.4M12 12.1V21" /></svg>;
+  return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
+}
+
 export default function App() {
   const [orders, setOrders] = useState([]);
   const [unreturnedPipes, setUnreturnedPipes] = useState([]);
@@ -2107,16 +2126,16 @@ export default function App() {
         <footer style={styles.footer}>
           <div style={{ display: "flex", alignItems: "center", gap: 4, background: "linear-gradient(135deg, #071a3d 0%, #0f274f 100%)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 12px 30px rgba(7,26,61,0.28)", borderRadius: 18, padding: "6px 5px", width: "100%", boxSizing: "border-box" }}>
           {[
-            { key: "pos",        label: "POS",        icon: "⌑", badge: currentOrders.length,   access: true },
-            { key: "delivered",  label: "Orders",     icon: "▣", badge: deliveredOrders.length, access: canAccess("delivered") },
-            { key: "stock",      label: "Stock",      icon: "◇", badge: 0,                      access: canAccess("stock") },
-            { key: "management", label: "Management", icon: "♙", badge: 0,                      access: canAccess("management") },
+            { key: "pos",        label: "POS",        icon: "pos",        badge: currentOrders.length,   access: true },
+            { key: "delivered",  label: "Orders",     icon: "orders",     badge: deliveredOrders.length, access: canAccess("delivered") },
+            { key: "stock",      label: "Stock",      icon: "stock",      badge: 0,                      access: canAccess("stock") },
+            { key: "management", label: "Management", icon: "management", badge: 0,                      access: canAccess("management") },
           ].filter(t => t.access).map(t => {
             const active = visibleTab === t.key;
             return (
               <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "all 0.2s ease" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
-                  <span style={{ fontSize: 18, lineHeight: 1, color: active ? "#fff" : "rgba(255,255,255,0.55)" }}>{t.icon}</span>
+                  <TabIcon name={t.icon} active={active} />
                   <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#fff" : "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{t.label}</span>
                   {t.badge > 0 && (
                     <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0f172a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
