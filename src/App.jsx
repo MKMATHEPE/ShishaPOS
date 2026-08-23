@@ -541,7 +541,9 @@ export default function App() {
         ) : (
         <>
         <div style={styles.topBar}>
-          <div style={{ width: 38 }} />
+          <div style={styles.headerLogoWrap}>
+            <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.headerLogo} />
+          </div>
           <h1 style={styles.screenTitle}>{screenTitle}</h1>
           {confirmLogout ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
@@ -2250,6 +2252,21 @@ const styles = {
     fontWeight: 900,
     whiteSpace: "nowrap",
     letterSpacing: "-0.02em",
+  },
+  headerLogoWrap: {
+    width: 38,
+    height: 38,
+    display: "grid",
+    placeItems: "center",
+    overflow: "hidden",
+    borderRadius: 10,
+    background: "#ffffff",
+    border: "1px solid #e2e8f0",
+  },
+  headerLogo: {
+    width: 34,
+    height: 34,
+    objectFit: "contain",
   },
   headerIconBtn: {
     marginLeft: "auto",
