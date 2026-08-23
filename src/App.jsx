@@ -625,10 +625,6 @@ export default function App() {
               >
                 <span style={styles.flavourIcon}>{f.icon}</span>
                 <span style={styles.flavourName}>{f.name}</span>
-                {(() => {
-                  const qty = stock.find((item) => item.name === "Flavour")?.subItems?.find((item) => item.id === f.id)?.quantity ?? 0;
-                  return <span style={{ fontSize: 10, fontWeight: 800, color: selectedFlavour?.id === f.id ? "rgba(255,255,255,0.9)" : qty <= 1 ? "#dc2626" : "#16a34a" }}>● {Math.floor(qty / (FLAVOUR_PER_SALE[f.id] ?? 1))}</span>;
-                })()}
                 {flavourCounts[f.id] ? (
                   <span style={{ ...styles.flavourCount, background: selectedFlavour?.id === f.id ? "#fff" : f.color, color: selectedFlavour?.id === f.id ? f.color : "#fff" }}>
                     {flavourCounts[f.id]}
