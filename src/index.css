@@ -42,6 +42,30 @@ button:active {
   opacity: 0.82;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid rgba(59, 130, 246, 0.22) !important;
+  outline-offset: 2px;
+  border-color: #60a5fa !important;
+}
+
+::selection {
+  color: #ffffff;
+  background: #1d4ed8;
+}
+
+::-webkit-scrollbar {
+  width: 5px;
+  height: 5px;
+}
+
+::-webkit-scrollbar-thumb {
+  border-radius: 999px;
+  background: rgba(100, 116, 139, 0.28);
+}
+
 #root {
   min-height: 100vh;
   min-height: 100dvh;
