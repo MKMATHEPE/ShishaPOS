@@ -292,6 +292,36 @@ export default function App() {
     refresh();
   }, [activeTab]); // eslint-disable-line
 
+  // Keep manager-facing sales views current while staff are taking orders.
+  useEffect(() => {
+    if (!dbReady || !supabase || !["Admin", "Manager"].includes(activeUser?.role)) return;
+    if (!["management", "delivered"].includes(activeTab)) return;
+
+    let alive = true;
+    let refreshing = false;
+    const refreshManagerSales = async () => {
+      if (refreshing) return;
+      refreshing = true;
+      try {
+        const remoteShift = await fetchOpenShift();
+        const [remoteOrders, unfinishedOrders] = await Promise.all([
+          fetchOrders(remoteShift?.id ?? null),
+          fetchUnfinishedOrders(),
+        ]);
+        if (!alive) return;
+        setActiveShift(remoteShift);
+        if (remoteOrders) setOrders(remoteOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+        if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+      } finally {
+        refreshing = false;
+      }
+    };
+
+    refreshManagerSales();
+    const interval = setInterval(refreshManagerSales, 5000);
+    return () => { alive = false; clearInterval(interval); };
+  }, [activeTab, activeUser?.role, dbReady]);
+
   // Fetch session dates list once management tab is opened
   useEffect(() => {
     if (activeTab !== "management" || !supabase || sessionDates.length > 0) return;
