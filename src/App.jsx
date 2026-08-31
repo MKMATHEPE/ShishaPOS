@@ -846,7 +846,7 @@ export default function App() {
                       <div style={styles.orderCardBody}>
                         <span style={{ ...styles.orderCardFlavour, background: o.flavour.bg, color: o.flavour.color }}>{o.flavour.icon}</span>
                         <span style={styles.orderMeta}>
-                          <strong style={{ fontSize: 14 }}>{o.flavour.name}</strong>
+                          <strong style={{ fontSize: 12 }}>{o.flavour.name}</strong>
                           <small style={styles.orderCardStaff}>{o.type === "refill" ? "Refill" : "New Pipe"} · Served by {o.soldBy ?? "Unknown"}</small>
                         </span>
                         <span style={styles.orderCardAmount}>
@@ -854,7 +854,7 @@ export default function App() {
                           <small>{o.payment === "card" ? "▣ Card" : "▤ Cash"}</small>
                         </span>
                       </div>
-                      {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, flexBasis: "100%" }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, flexBasis: "100%", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c" }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 10, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
+                      {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", fontSize: 11 }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c", fontSize: 11 }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 9, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
                       {isAdmin && (orderDeleteConfirmId === o.id ? (
                         <div style={{ ...styles.orderDeleteConfirm, flexBasis: "100%" }}>
                           <span style={{ marginRight: "auto", fontSize: 10, color: "#991b1b", fontWeight: 800 }}>Delete this order permanently?</span>
@@ -3848,12 +3848,12 @@ const styles = {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 10,
-    padding: "13px",
+    gap: 6,
+    padding: "9px 10px",
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: 15,
-    boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
+    borderRadius: 12,
+    boxShadow: "0 3px 10px rgba(15,23,42,0.05)",
     fontSize: 13,
   },
   orderCardHeader: {
@@ -3861,19 +3861,19 @@ const styles = {
     display: "flex",
     alignItems: "center",
     gap: 7,
-    paddingBottom: 8,
+    paddingBottom: 5,
     borderBottom: "1px solid #f1f5f9",
   },
   orderCardNumber: {
     color: "#475569",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 900,
     letterSpacing: "0.03em",
   },
   orderStatusPill: {
-    padding: "3px 7px",
+    padding: "2px 6px",
     borderRadius: 99,
-    fontSize: 8,
+    fontSize: 7,
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.05em",
@@ -3881,29 +3881,29 @@ const styles = {
   orderCardTime: {
     marginLeft: "auto",
     color: "#64748b",
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: 800,
   },
   orderCardBody: {
     flexBasis: "100%",
     display: "flex",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     minWidth: 0,
   },
   orderCardFlavour: {
-    width: 44,
-    height: 44,
+    width: 34,
+    height: 34,
     display: "grid",
     placeItems: "center",
     flexShrink: 0,
-    borderRadius: 12,
-    fontSize: 22,
+    borderRadius: 9,
+    fontSize: 17,
   },
   orderCardStaff: {
     marginTop: 2,
     color: "#64748b",
-    fontSize: 9,
+    fontSize: 8,
     fontWeight: 700,
   },
   orderCardAmount: {
@@ -3913,7 +3913,7 @@ const styles = {
     gap: 2,
     flexShrink: 0,
     color: "#0f172a",
-    fontSize: 13,
+    fontSize: 11,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   },
   orderIndex: {
