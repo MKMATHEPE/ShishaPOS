@@ -54,14 +54,15 @@ export async function syncStock(stock) {
 }
 
 // ── Orders ────────────────────────────────────────────
-export async function fetchOrders() {
+export async function fetchOrders(shiftId = null) {
   if (!ok()) return null
   const today = localDateStr()
-  const { data, error } = await supabase
+  let query = supabase
     .from('pos_orders')
     .select('*')
-    .eq('session_date', today)
     .order('time', { ascending: true })
+  query = shiftId ? query.eq('shift_id', shiftId) : query.eq('session_date', today)
+  const { data, error } = await query
   if (error) { console.error('fetchOrders', error); return null }
   return data.map(r => ({
     id: r.id, flavour: r.flavour, type: r.type,
@@ -69,6 +70,7 @@ export async function fetchOrders() {
     time: new Date(r.time),
     deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
     soldBy: r.sold_by ?? null,
+    shiftId: r.shift_id ?? null,
     pipeReturned: r.pipe_returned ?? false,
   }))
 }
@@ -93,6 +95,7 @@ export async function fetchUnreturnedPipes() {
     soldBy: r.sold_by ?? null,
     pipeReturned: false,
     sessionDate: r.session_date,
+    shiftId: r.shift_id ?? null,
   }))
 }
 
@@ -104,6 +107,7 @@ export async function insertOrder(order) {
     payment: order.payment, price: order.price, status: order.status,
     time: order.time.toISOString(), session_date: today,
     sold_by: order.soldBy ?? null,
+    shift_id: order.shiftId ?? null,
   })
   if (error) console.error('insertOrder', error)
 }
@@ -140,6 +144,7 @@ export async function fetchOrdersByDateRange(from, to) {
     time: new Date(r.time),
     deliveredAt: r.delivered_at ? new Date(r.delivered_at) : undefined,
     soldBy: r.sold_by ?? null,
+    shiftId: r.shift_id ?? null,
     pipeReturned: r.pipe_returned ?? false,
   }))
 }
@@ -181,7 +186,7 @@ export async function fetchExpenses() {
   if (error) { console.error('fetchExpenses', error); return null }
   return data.map(r => ({
     id: r.id, category: r.category, qty: r.qty,
-    amount: r.amount, time: r.time,
+    amount: r.amount, time: r.time, shiftId: r.shift_id ?? null,
   }))
 }
 
@@ -190,7 +195,7 @@ export async function syncExpenses(expenses) {
   if (expenses.length) {
     const rows = expenses.map(e => ({
       id: e.id, category: e.category, qty: e.qty ?? null,
-      amount: e.amount, time: e.time,
+      amount: e.amount, time: e.time, shift_id: e.shiftId ?? null,
     }))
     const { error } = await supabase.from('pos_expenses').upsert(rows, { onConflict: 'id' })
     if (error) { console.error('syncExpenses', error); return }
@@ -199,4 +204,46 @@ export async function syncExpenses(expenses) {
   } else {
     await supabase.from('pos_expenses').delete().neq('id', 0)
   }
+}
+
+// ── Shifts ────────────────────────────────────────────
+export async function fetchOpenShift() {
+  if (!ok()) return null
+  const { data, error } = await supabase.from('pos_shifts').select('*').eq('status', 'open').maybeSingle()
+  if (error) { console.error('fetchOpenShift', error); return null }
+  return data ? {
+    id: data.id, status: data.status, openedAt: new Date(data.opened_at),
+    openedBy: data.opened_by, openingCash: Number(data.opening_cash),
+  } : null
+}
+
+export async function startShift({ openedBy, openingCash }) {
+  if (!ok()) return null
+  const { data, error } = await supabase
+    .from('pos_shifts')
+    .insert({ opened_by: openedBy, opening_cash: openingCash })
+    .select()
+    .single()
+  if (error) throw error
+  return {
+    id: data.id, status: data.status, openedAt: new Date(data.opened_at),
+    openedBy: data.opened_by, openingCash: Number(data.opening_cash),
+  }
+}
+
+export async function closeShift(id, { closedBy, expectedCash, countedCash, closingNote }) {
+  if (!ok()) return null
+  const { data, error } = await supabase
+    .from('pos_shifts')
+    .update({
+      status: 'closed', closed_at: new Date().toISOString(), closed_by: closedBy,
+      expected_cash: expectedCash, counted_cash: countedCash,
+      cash_difference: countedCash - expectedCash, closing_note: closingNote || null,
+    })
+    .eq('id', id)
+    .eq('status', 'open')
+    .select()
+    .single()
+  if (error) throw error
+  return data
 }
