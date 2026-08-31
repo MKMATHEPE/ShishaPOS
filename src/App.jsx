@@ -836,10 +836,24 @@ export default function App() {
                   const overdue = ordersView === "Preparing" && elapsed >= 12;
                   return (
                     <div key={`${o.id}-${ordersView}`} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${i * 0.04}s`, border: overdue ? "1px solid #f59e0b" : undefined, background: overdue ? "#fffbeb" : undefined }}>
-                      <span style={styles.orderIndex}>#{String(o.id).slice(-4)}</span>
-                      <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>{o.flavour.icon} {o.flavour.short}</span>
-                      <span style={styles.orderMeta}><strong>{o.flavour.name}</strong><small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {o.soldBy ?? "Unknown"}</small></span>
-                      <span style={{ fontSize: 10, fontWeight: 800, color: overdue ? "#b45309" : "#64748b" }}>{ordersView === "Preparing" ? `${elapsed}m` : formatTime(o.deliveredAt ?? orderedAt)}</span>
+                      <div style={styles.orderCardHeader}>
+                        <span style={styles.orderCardNumber}>Order #{String(o.id).slice(-4)}</span>
+                        <span style={{ ...styles.orderStatusPill, color: overdue || ordersView === "Return Pipes" ? "#b45309" : ordersView === "Preparing" ? "#1d4ed8" : "#15803d", background: overdue || ordersView === "Return Pipes" ? "#fef3c7" : ordersView === "Preparing" ? "#dbeafe" : "#dcfce7" }}>
+                          {overdue ? "Overdue" : ordersView === "Preparing" ? "Preparing" : ordersView === "Return Pipes" ? "Pipe out" : "Delivered"}
+                        </span>
+                        <span style={styles.orderCardTime}>{ordersView === "Preparing" ? `${elapsed} min` : formatTime(o.deliveredAt ?? orderedAt)}</span>
+                      </div>
+                      <div style={styles.orderCardBody}>
+                        <span style={{ ...styles.orderCardFlavour, background: o.flavour.bg, color: o.flavour.color }}>{o.flavour.icon}</span>
+                        <span style={styles.orderMeta}>
+                          <strong style={{ fontSize: 14 }}>{o.flavour.name}</strong>
+                          <small style={styles.orderCardStaff}>{o.type === "refill" ? "Refill" : "New Pipe"} · Served by {o.soldBy ?? "Unknown"}</small>
+                        </span>
+                        <span style={styles.orderCardAmount}>
+                          <strong>{formatCurrency(o.price)}</strong>
+                          <small>{o.payment === "card" ? "▣ Card" : "▤ Cash"}</small>
+                        </span>
+                      </div>
                       {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, flexBasis: "100%" }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, flexBasis: "100%", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c" }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 10, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
                       {isAdmin && (orderDeleteConfirmId === o.id ? (
                         <div style={{ ...styles.orderDeleteConfirm, flexBasis: "100%" }}>
@@ -3834,13 +3848,73 @@ const styles = {
     display: "flex",
     alignItems: "center",
     flexWrap: "wrap",
-    gap: 8,
-    padding: "12px 12px",
+    gap: 10,
+    padding: "13px",
     background: "#ffffff",
     border: "1px solid #e2e8f0",
-    borderRadius: 12,
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    borderRadius: 15,
+    boxShadow: "0 6px 18px rgba(15,23,42,0.06)",
     fontSize: 13,
+  },
+  orderCardHeader: {
+    flexBasis: "100%",
+    display: "flex",
+    alignItems: "center",
+    gap: 7,
+    paddingBottom: 8,
+    borderBottom: "1px solid #f1f5f9",
+  },
+  orderCardNumber: {
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: 900,
+    letterSpacing: "0.03em",
+  },
+  orderStatusPill: {
+    padding: "3px 7px",
+    borderRadius: 99,
+    fontSize: 8,
+    fontWeight: 900,
+    textTransform: "uppercase",
+    letterSpacing: "0.05em",
+  },
+  orderCardTime: {
+    marginLeft: "auto",
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: 800,
+  },
+  orderCardBody: {
+    flexBasis: "100%",
+    display: "flex",
+    alignItems: "center",
+    gap: 10,
+    minWidth: 0,
+  },
+  orderCardFlavour: {
+    width: 44,
+    height: 44,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+    borderRadius: 12,
+    fontSize: 22,
+  },
+  orderCardStaff: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: 700,
+  },
+  orderCardAmount: {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-end",
+    gap: 2,
+    flexShrink: 0,
+    color: "#0f172a",
+    fontSize: 13,
+    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   },
   orderIndex: {
     width: 24,
