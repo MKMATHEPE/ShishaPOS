@@ -868,6 +868,10 @@ export default function App() {
             const ordersPerHour = sessionMins > 0 ? ((totalOrders / sessionMins) * 60).toFixed(1) : null;
 
             const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
+            const lowStockCount = stock.reduce((count, item) => {
+              if (item.subItems) return count + item.subItems.filter(subItem => subItem.quantity <= 1).length;
+              return count + (item.quantity <= item.lowThreshold ? 1 : 0);
+            }, 0);
             const mgmtDateLabel = isViewingToday ? todayLabel
               : managementDateFrom === managementDateTo ? formatSessionDate(managementDateFrom)
               : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
@@ -1014,36 +1018,41 @@ export default function App() {
 
               {/* ── Always-visible order summary ── */}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                {/* Revenue + orders row */}
-                <div className="pop-enter" style={{ background: "rgba(15,23,42,0.88)", borderRadius: 12, padding: "14px 16px", display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <div>
-                    <div style={{ fontSize: 9, fontWeight: 900, color: "rgba(255,255,255,0.45)", textTransform: "uppercase", letterSpacing: "0.16em", marginBottom: 2 }}>Total Revenue</div>
-                    <div style={{ fontSize: 28, fontWeight: 900, color: "#fff", lineHeight: 1, letterSpacing: "-0.04em", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{formatCurrency(displayTotals.gross)}</div>
-                  </div>
-                  <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 5 }}>
-                    <span style={{ fontSize: 12, fontWeight: 700, color: "rgba(255,255,255,0.6)" }}>{totalOrders} orders · {mgmtDateLabel}</span>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💳 {formatCurrency(displayTotals.card)}</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.55)", fontWeight: 700 }}>💵 {formatCurrency(displayTotals.cash)}</span>
-                    </div>
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🪄 {newPipeOrders.length} pipes</span>
-                      <span style={{ fontSize: 11, color: "rgba(255,255,255,0.45)", fontWeight: 700 }}>🔄 {refillOrders.length} refills</span>
-                    </div>
-                  </div>
+                <div style={styles.managementSectionHeading}>
+                  <div><span style={styles.managementEyebrow}>Performance overview</span><strong style={styles.managementSectionTitle}>{mgmtDateLabel}</strong></div>
+                  <span style={styles.managementPeriodBadge}>{managementLoading ? "Updating…" : `${totalOrders} orders`}</span>
                 </div>
-
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                   {[
+                    { label: "Revenue", value: formatCurrency(displayTotals.gross), note: `Card ${formatCurrency(displayTotals.card)} · Cash ${formatCurrency(displayTotals.cash)}`, color: "#0f172a" },
                     { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#16a34a" : "#dc2626" },
-                    { label: "Top flavour", value: topFlavour ? `${topFlavour.icon} ${topFlavour.short}` : "—", note: `${topFlavourCount} orders`, color: topFlavour?.color || "#0f172a" },
+                    { label: "Orders", value: String(totalOrders), note: `${newPipeOrders.length} new · ${refillOrders.length} refills`, color: "#0f172a" },
+                    { label: "Average order", value: totalOrders ? formatCurrency(Math.round(avgOrderValue)) : "—", note: `${deliveryRate}% delivered`, color: "#2563eb" },
                   ].map((metric) => (
-                    <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 92 }}>
+                    <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 98 }}>
                       <span style={styles.kpiLabel}>{metric.label}</span>
                       <span style={{ ...styles.kpiValue, color: metric.color }}>{metric.value}</span>
                       <span style={styles.kpiSub}>{metric.note}</span>
                     </div>
                   ))}
+                </div>
+
+                <div style={styles.managementAttentionCard}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <div><span style={styles.managementEyebrow}>Live operations</span><strong style={{ ...styles.managementSectionTitle, fontSize: 14 }}>Needs attention</strong></div>
+                    <span style={{ fontSize: 10, color: "#64748b", fontWeight: 800 }}>Now</span>
+                  </div>
+                  <div style={styles.managementAttentionGrid}>
+                    {[
+                      { label: "Preparing", value: displayCurrentOrders.length, tone: displayCurrentOrders.length ? "#b45309" : "#16a34a", bg: displayCurrentOrders.length ? "#fffbeb" : "#f0fdf4", tab: "delivered" },
+                      { label: "Pipes out", value: pipesOut, tone: pipesOut ? "#b45309" : "#16a34a", bg: pipesOut ? "#fffbeb" : "#f0fdf4", tab: "delivered" },
+                      { label: "Low stock", value: lowStockCount, tone: lowStockCount ? "#dc2626" : "#16a34a", bg: lowStockCount ? "#fef2f2" : "#f0fdf4", tab: "stock" },
+                    ].map(item => (
+                      <button key={item.label} onClick={() => setActiveTab(item.tab)} style={{ ...styles.managementAttentionItem, color: item.tone, background: item.bg }}>
+                        <strong style={{ fontSize: 18 }}>{item.value}</strong><span>{item.label}</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
                 <div style={{ ...styles.kpiCard, minHeight: 150 }}>
@@ -1069,6 +1078,22 @@ export default function App() {
                       <strong style={{ fontSize: 12, color: "#0f172a" }}>{formatCurrency(result.revenue)}</strong>
                     </div>
                   ))}
+                </div>
+
+                <div style={styles.managementToolsCard}>
+                  <div><span style={styles.managementEyebrow}>Management tools</span><strong style={{ ...styles.managementSectionTitle, fontSize: 14 }}>Quick actions</strong></div>
+                  <div style={styles.managementToolsGrid}>
+                    {[
+                      ["Orders", "Review activity", "delivered", "▣"],
+                      ["Stock", "Adjust inventory", "stock", "◇"],
+                      ["Staff & settings", "Manage access", "settings", "⚙"],
+                      ["Accounting", "Expenses & reports", null, "R"],
+                    ].map(([label, note, tab, icon]) => (
+                      <button key={label} onClick={() => tab ? setActiveTab(tab) : setAccountingCollapsed(false)} style={styles.managementToolButton}>
+                        <span style={styles.managementToolIcon}>{icon}</span><span><strong>{label}</strong><small>{note}</small></span><span style={{ marginLeft: "auto", color: "#94a3b8" }}>›</span>
+                      </button>
+                    ))}
+                  </div>
                 </div>
 
               </div>
@@ -3627,6 +3652,107 @@ const styles = {
     fontWeight: 600,
     color: "#94a3b8",
     marginTop: 1,
+  },
+  managementSectionHeading: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    padding: "4px 2px 2px",
+  },
+  managementEyebrow: {
+    display: "block",
+    color: "#94a3b8",
+    fontSize: 9,
+    fontWeight: 900,
+    letterSpacing: "0.12em",
+    textTransform: "uppercase",
+  },
+  managementSectionTitle: {
+    display: "block",
+    marginTop: 2,
+    color: "#0f172a",
+    fontSize: 16,
+    fontWeight: 900,
+  },
+  managementPeriodBadge: {
+    padding: "5px 9px",
+    borderRadius: 99,
+    background: "#e0e7ff",
+    color: "#3730a3",
+    fontSize: 9,
+    fontWeight: 900,
+  },
+  managementAttentionCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: 12,
+    border: "1px solid #e2e8f0",
+    borderRadius: 13,
+    background: "#ffffff",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+  },
+  managementAttentionGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+    gap: 6,
+  },
+  managementAttentionItem: {
+    minHeight: 62,
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 1,
+    padding: "8px 10px",
+    border: "none",
+    borderRadius: 10,
+    fontSize: 9,
+    fontWeight: 900,
+    fontFamily: "inherit",
+  },
+  managementToolsCard: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: 12,
+    border: "1px solid #e2e8f0",
+    borderRadius: 13,
+    background: "#ffffff",
+    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+  },
+  managementToolsGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
+    gap: 7,
+  },
+  managementToolButton: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 58,
+    padding: "8px 9px",
+    border: "1px solid #e2e8f0",
+    borderRadius: 10,
+    background: "#f8fafc",
+    color: "#0f172a",
+    textAlign: "left",
+    fontSize: 10,
+    fontWeight: 900,
+    fontFamily: "inherit",
+  },
+  managementToolIcon: {
+    width: 28,
+    height: 28,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+    borderRadius: 8,
+    background: "#e2e8f0",
+    color: "#0f172a",
+    fontSize: 12,
+    fontWeight: 900,
   },
   settingValue: {
     fontSize: 20,
