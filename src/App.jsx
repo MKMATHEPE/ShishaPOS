@@ -523,6 +523,8 @@ export default function App() {
   const PAGE_SIZE = 12;
   const totalDeliveredPages = Math.max(1, Math.ceil(deliveredOrders.length / PAGE_SIZE));
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
+  const isAdmin = activeUser?.role === "Admin";
+  const canManageShift = activeUser?.role === "Admin" || activeUser?.role === "Manager";
   const queueOrders = ordersView === "Preparing"
     ? (canManageShift
       ? managerCurrentOrders.filter((order, index, all) => all.findIndex(candidate => candidate.id === order.id) === index)
@@ -531,8 +533,6 @@ export default function App() {
       ? [...unreturnedPipes, ...deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned)]
       : deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
 
-  const isAdmin = activeUser?.role === "Admin";
-  const canManageShift = activeUser?.role === "Admin" || activeUser?.role === "Manager";
   const usernameIsValid = /^[a-z0-9._-]{3,32}$/.test(newUsername);
   const passwordIsValid = newUserPin.length >= 10;
   const addUserFormIsValid = newUserName.trim().length >= 2 && usernameIsValid && passwordIsValid;
