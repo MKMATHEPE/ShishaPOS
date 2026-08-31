@@ -626,31 +626,6 @@ export default function App() {
         </div>
 
         <main style={styles.mainContent}>
-          <div style={{ ...styles.shiftStatusCard, ...(activeShift ? styles.shiftStatusOpen : styles.shiftStatusClosed), ...(!activeShift && canManageShift ? styles.shiftStatusSetup : {}) }}>
-            <div style={{ minWidth: 0 }}>
-              <strong style={{ display: "block", fontSize: 12, color: activeShift ? "#166534" : "#9a3412" }}>{activeShift ? "● Shift open" : "Shift closed"}</strong>
-              <span style={{ display: "block", marginTop: 2, fontSize: 10, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-                {activeShift ? `Opened ${formatTime(activeShift.openedAt)} · Float ${formatCurrency(activeShift.openingCash)}` : "Orders are paused until a manager opens a shift."}
-              </span>
-            </div>
-            {!activeShift && canManageShift && (
-              <div style={styles.shiftSetupForm}>
-                <label style={{ ...styles.shiftField, flex: "1 1 170px" }}>
-                  <span style={styles.shiftFieldLabel}>Shift start</span>
-                  <input type="datetime-local" value={shiftStartDraft} onChange={(event) => setShiftStartDraft(event.target.value)} aria-label="Shift start date and time" style={{ ...styles.shiftCashInput, width: "100%" }} />
-                </label>
-                <label style={{ ...styles.shiftField, flex: "0 1 100px" }}>
-                  <span style={styles.shiftFieldLabel}>Opening cash</span>
-                  <div style={styles.shiftMoneyField}>
-                    <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>R</span>
-                    <input type="number" min="0" value={openingCashDraft} onChange={(event) => setOpeningCashDraft(event.target.value)} aria-label="Opening cash" style={{ ...styles.shiftCashInput, width: "100%", border: "none", paddingLeft: 2 }} />
-                  </div>
-                </label>
-                <button onClick={handleStartShift} disabled={shiftBusy} style={{ ...styles.shiftPrimaryBtn, alignSelf: "flex-end" }}>{shiftBusy ? "Opening…" : "Open shift"}</button>
-              </div>
-            )}
-          </div>
-          {shiftMessage && <div style={styles.shiftMessage}>{shiftMessage}</div>}
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
         <div style={styles.availabilityCard}>
@@ -918,6 +893,30 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
+              {!activeShift && canManageShift && (
+                <div style={{ ...styles.shiftStatusCard, ...styles.shiftStatusClosed, ...styles.shiftStatusSetup }}>
+                  <div style={{ minWidth: 0 }}>
+                    <strong style={{ display: "block", fontSize: 12, color: "#9a3412" }}>Shift closed</strong>
+                    <span style={{ display: "block", marginTop: 2, fontSize: 10, color: "#64748b" }}>Set the start time and opening cash to begin trading.</span>
+                  </div>
+                  <div style={styles.shiftSetupForm}>
+                    <label style={{ ...styles.shiftField, flex: "1 1 170px" }}>
+                      <span style={styles.shiftFieldLabel}>Shift start</span>
+                      <input type="datetime-local" value={shiftStartDraft} onChange={(event) => setShiftStartDraft(event.target.value)} aria-label="Shift start date and time" style={{ ...styles.shiftCashInput, width: "100%" }} />
+                    </label>
+                    <label style={{ ...styles.shiftField, flex: "0 1 100px" }}>
+                      <span style={styles.shiftFieldLabel}>Opening cash</span>
+                      <div style={styles.shiftMoneyField}>
+                        <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>R</span>
+                        <input type="number" min="0" value={openingCashDraft} onChange={(event) => setOpeningCashDraft(event.target.value)} aria-label="Opening cash" style={{ ...styles.shiftCashInput, width: "100%", border: "none", paddingLeft: 2 }} />
+                      </div>
+                    </label>
+                    <button onClick={handleStartShift} disabled={shiftBusy} style={{ ...styles.shiftPrimaryBtn, alignSelf: "flex-end" }}>{shiftBusy ? "Opening…" : "Open shift"}</button>
+                  </div>
+                </div>
+              )}
+              {shiftMessage && <div style={styles.shiftMessage}>{shiftMessage}</div>}
+
               <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
