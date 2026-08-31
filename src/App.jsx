@@ -5,7 +5,7 @@ import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn
 import {
   fetchUsers, syncUsers,
   fetchStock, syncStock,
-  fetchOrders, fetchUnreturnedPipes, insertOrder, updateOrder, deleteOrder,
+  fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, updateOrder, deleteOrder,
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
   fetchOrdersByDateRange, fetchSessionDates,
@@ -109,6 +109,7 @@ function TabIcon({ name, active }) {
 
 export default function App() {
   const [orders, setOrders] = useState([]);
+  const [managerCurrentOrders, setManagerCurrentOrders] = useState([]);
   const [unreturnedPipes, setUnreturnedPipes] = useState([]);
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
@@ -239,11 +240,13 @@ export default function App() {
       ]);
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
       }
       if (remoteStock && remoteStock.length > 0) setStock(remoteStock);
       if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
       setActiveShift(remoteShift);
@@ -274,7 +277,9 @@ export default function App() {
         fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), fetchOpenShift(),
       ]);
       const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
       if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
         setStock(remoteStock);
@@ -333,6 +338,7 @@ export default function App() {
     };
 
     setOrders((prev) => [...prev, order]);
+    if (["Admin", "Manager"].includes(activeUser?.role)) setManagerCurrentOrders((prev) => [...prev, order]);
     insertOrder(order);
 
     // Auto-deduct stock
@@ -358,7 +364,7 @@ export default function App() {
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
     setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeShift]);
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role, activeShift]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -402,6 +408,7 @@ export default function App() {
     const order = orders.find(o => o.id === undoTarget);
     if (order) restorePipeEquipment(order);
     setOrders(prev => prev.filter(o => o.id !== undoTarget));
+    setManagerCurrentOrders(prev => prev.filter(o => o.id !== undoTarget));
     deleteOrder(undoTarget);
     setUndoTarget(null);
     clearTimeout(undoTimer.current);
@@ -414,6 +421,7 @@ export default function App() {
     restorePipeEquipment(order);
     // 2. Remove from local state
     setOrders(prev => prev.filter(o => o.id !== order.id));
+    setManagerCurrentOrders(prev => prev.filter(o => o.id !== order.id));
     // 3. Hard-delete from DB
     deleteOrder(order.id);
   }, [restorePipeEquipment]);
@@ -437,6 +445,7 @@ export default function App() {
       ));
     }
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", deliveredAt } : o));
+    setManagerCurrentOrders(prev => prev.filter(o => o.id !== order.id));
     updateOrder(order.id, { status: "delivered", deliveredAt });
   }, []);
 
@@ -515,7 +524,9 @@ export default function App() {
   const totalDeliveredPages = Math.max(1, Math.ceil(deliveredOrders.length / PAGE_SIZE));
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
   const queueOrders = ordersView === "Preparing"
-    ? currentOrders
+    ? (canManageShift
+      ? managerCurrentOrders.filter((order, index, all) => all.findIndex(candidate => candidate.id === order.id) === index)
+      : currentOrders)
     : ordersView === "Return Pipes"
       ? [...unreturnedPipes, ...deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned)]
       : deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
@@ -767,7 +778,7 @@ export default function App() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
-                {[{ label: "Preparing", count: currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
+                {[{ label: "Preparing", count: canManageShift ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
                   <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0f172a" : "transparent", color: ordersView === tab.label ? "#fff" : "#64748b", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
