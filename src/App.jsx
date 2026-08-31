@@ -239,7 +239,8 @@ export default function App() {
         fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(), fetchOpenShift(),
       ]);
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
-      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const managerView = ["Admin", "Manager"].includes(activeUser.role);
+      const effectiveOrders = managerView ? remoteOrders : remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
@@ -276,7 +277,8 @@ export default function App() {
       const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned, remoteShift] = await Promise.all([
         fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), fetchOpenShift(),
       ]);
-      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const managerView = ["Admin", "Manager"].includes(activeUser?.role);
+      const effectiveOrders = managerView ? remoteOrders : remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
       if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
@@ -305,7 +307,7 @@ export default function App() {
       try {
         const remoteShift = await fetchOpenShift();
         const [remoteOrders, unfinishedOrders] = await Promise.all([
-          fetchOrders(remoteShift?.id ?? null),
+          fetchOrders(),
           fetchUnfinishedOrders(),
         ]);
         if (!alive) return;
@@ -842,7 +844,7 @@ export default function App() {
             const [fth, ftm] = managementTimeTo.split(":").map(Number);
             const fromMin = ffh * 60 + ffm;
             const toMin   = fth * 60 + ftm;
-            const displayOrders = isViewingToday && activeShift
+            const displayOrders = isViewingToday && activeShift && !canManageShift
               ? shiftOrders
               : isViewingToday ? orders.filter(o => {
                   const t = o.time instanceof Date ? o.time : new Date(o.time);
