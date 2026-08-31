@@ -217,11 +217,11 @@ export async function fetchOpenShift() {
   } : null
 }
 
-export async function startShift({ openedBy, openingCash }) {
+export async function startShift({ openedBy, openingCash, openedAt }) {
   if (!ok()) return null
   const { data, error } = await supabase
     .from('pos_shifts')
-    .insert({ opened_by: openedBy, opening_cash: openingCash })
+    .insert({ opened_by: openedBy, opening_cash: openingCash, opened_at: openedAt })
     .select()
     .single()
   if (error) throw error

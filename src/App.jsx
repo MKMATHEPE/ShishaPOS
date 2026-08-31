@@ -69,6 +69,10 @@ function dateInputValue(date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
+function dateTimeInputValue(date = new Date()) {
+  return `${dateInputValue(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
+}
+
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
@@ -116,6 +120,7 @@ export default function App() {
   const [shiftBusy, setShiftBusy] = useState(false);
   const [shiftMessage, setShiftMessage] = useState("");
   const [openingCashDraft, setOpeningCashDraft] = useState("0");
+  const [shiftStartDraft, setShiftStartDraft] = useState(() => dateTimeInputValue());
   const [countedCashDraft, setCountedCashDraft] = useState("");
   const [closingNote, setClosingNote] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
@@ -449,10 +454,12 @@ export default function App() {
 
   const handleStartShift = async () => {
     const openingCash = Number(openingCashDraft);
-    if (!Number.isFinite(openingCash) || openingCash < 0 || !activeUser) return;
+    const selectedStart = new Date(shiftStartDraft);
+    if (!Number.isFinite(openingCash) || openingCash < 0 || !activeUser || Number.isNaN(selectedStart.getTime())) return;
+    if (selectedStart.getTime() > Date.now()) { setShiftMessage("Shift start time cannot be in the future."); return; }
     setShiftBusy(true); setShiftMessage("");
     try {
-      const shift = await startShift({ openedBy: activeUser.id, openingCash });
+      const shift = await startShift({ openedBy: activeUser.id, openingCash, openedAt: selectedStart.toISOString() });
       setActiveShift(shift);
       setShiftMessage("Shift opened successfully.");
     } catch (error) {
@@ -470,6 +477,7 @@ export default function App() {
     try {
       await closeShift(activeShift.id, { closedBy: activeUser.id, expectedCash: expectedShiftCash, countedCash, closingNote: closingNote.trim() });
       setActiveShift(null); setCountedCashDraft(""); setClosingNote("");
+      setShiftStartDraft(dateTimeInputValue());
       setShiftMessage(`Shift closed. Cash difference: ${formatCurrency(countedCash - expectedShiftCash)}.`);
     } catch (error) { setShiftMessage(error.message || "Could not close the shift."); }
     finally { setShiftBusy(false); }
@@ -618,7 +626,7 @@ export default function App() {
         </div>
 
         <main style={styles.mainContent}>
-          <div style={{ ...styles.shiftStatusCard, ...(activeShift ? styles.shiftStatusOpen : styles.shiftStatusClosed) }}>
+          <div style={{ ...styles.shiftStatusCard, ...(activeShift ? styles.shiftStatusOpen : styles.shiftStatusClosed), ...(!activeShift && canManageShift ? styles.shiftStatusSetup : {}) }}>
             <div style={{ minWidth: 0 }}>
               <strong style={{ display: "block", fontSize: 12, color: activeShift ? "#166534" : "#9a3412" }}>{activeShift ? "● Shift open" : "Shift closed"}</strong>
               <span style={{ display: "block", marginTop: 2, fontSize: 10, color: "#64748b", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
@@ -626,10 +634,19 @@ export default function App() {
               </span>
             </div>
             {!activeShift && canManageShift && (
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>R</span>
-                <input type="number" min="0" value={openingCashDraft} onChange={(event) => setOpeningCashDraft(event.target.value)} aria-label="Opening cash" style={styles.shiftCashInput} />
-                <button onClick={handleStartShift} disabled={shiftBusy} style={styles.shiftPrimaryBtn}>{shiftBusy ? "Opening…" : "Open shift"}</button>
+              <div style={styles.shiftSetupForm}>
+                <label style={{ ...styles.shiftField, flex: "1 1 170px" }}>
+                  <span style={styles.shiftFieldLabel}>Shift start</span>
+                  <input type="datetime-local" value={shiftStartDraft} onChange={(event) => setShiftStartDraft(event.target.value)} aria-label="Shift start date and time" style={{ ...styles.shiftCashInput, width: "100%" }} />
+                </label>
+                <label style={{ ...styles.shiftField, flex: "0 1 100px" }}>
+                  <span style={styles.shiftFieldLabel}>Opening cash</span>
+                  <div style={styles.shiftMoneyField}>
+                    <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>R</span>
+                    <input type="number" min="0" value={openingCashDraft} onChange={(event) => setOpeningCashDraft(event.target.value)} aria-label="Opening cash" style={{ ...styles.shiftCashInput, width: "100%", border: "none", paddingLeft: 2 }} />
+                  </div>
+                </label>
+                <button onClick={handleStartShift} disabled={shiftBusy} style={{ ...styles.shiftPrimaryBtn, alignSelf: "flex-end" }}>{shiftBusy ? "Opening…" : "Open shift"}</button>
               </div>
             )}
           </div>
@@ -2399,6 +2416,38 @@ const styles = {
   shiftStatusClosed: {
     background: "#fff7ed",
     border: "1px solid #fed7aa",
+  },
+  shiftStatusSetup: {
+    alignItems: "stretch",
+    flexDirection: "column",
+  },
+  shiftSetupForm: {
+    display: "flex",
+    alignItems: "flex-end",
+    flexWrap: "wrap",
+    gap: 8,
+  },
+  shiftField: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 4,
+    minWidth: 0,
+  },
+  shiftFieldLabel: {
+    color: "#64748b",
+    fontSize: 9,
+    fontWeight: 900,
+    letterSpacing: "0.06em",
+    textTransform: "uppercase",
+  },
+  shiftMoneyField: {
+    display: "flex",
+    alignItems: "center",
+    minHeight: 36,
+    paddingLeft: 8,
+    border: "1px solid #cbd5e1",
+    borderRadius: 8,
+    background: "#ffffff",
   },
   shiftCashInput: {
     width: 66,
