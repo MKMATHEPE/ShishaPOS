@@ -203,6 +203,7 @@ export default function App() {
   const [managementTimeFrom, setManagementTimeFrom] = useState("00:00");
   const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
+  const [managerDailyOrders, setManagerDailyOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
   const [sessionDates, setSessionDates] = useState([]);
   const listRef = useRef(null);
@@ -240,13 +241,14 @@ export default function App() {
       ]);
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       const managerView = ["Admin", "Manager"].includes(activeUser.role);
-      const effectiveOrders = managerView ? remoteOrders : remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : [];
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
       }
       if (remoteStock && remoteStock.length > 0) setStock(remoteStock);
       if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (managerView && remoteOrders) setManagerDailyOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
@@ -278,9 +280,10 @@ export default function App() {
         fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), fetchOpenShift(),
       ]);
       const managerView = ["Admin", "Manager"].includes(activeUser?.role);
-      const effectiveOrders = managerView ? remoteOrders : remoteShift ? await fetchOrders(remoteShift.id) : remoteOrders;
+      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : [];
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
       if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (managerView && remoteOrders) setManagerDailyOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
@@ -306,13 +309,15 @@ export default function App() {
       refreshing = true;
       try {
         const remoteShift = await fetchOpenShift();
-        const [remoteOrders, unfinishedOrders] = await Promise.all([
+        const [dailyOrders, shiftOnlyOrders, unfinishedOrders] = await Promise.all([
           fetchOrders(),
+          remoteShift ? fetchOrders(remoteShift.id) : Promise.resolve([]),
           fetchUnfinishedOrders(),
         ]);
         if (!alive) return;
         setActiveShift(remoteShift);
-        if (remoteOrders) setOrders(remoteOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+        if (shiftOnlyOrders) setOrders(shiftOnlyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+        if (dailyOrders) setManagerDailyOrders(dailyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
         if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
       } finally {
         refreshing = false;
@@ -844,9 +849,10 @@ export default function App() {
             const [fth, ftm] = managementTimeTo.split(":").map(Number);
             const fromMin = ffh * 60 + ffm;
             const toMin   = fth * 60 + ftm;
+            const todayOrders = canManageShift ? managerDailyOrders : orders;
             const displayOrders = isViewingToday && activeShift && !canManageShift
               ? shiftOrders
-              : isViewingToday ? orders.filter(o => {
+              : isViewingToday ? todayOrders.filter(o => {
                   const t = o.time instanceof Date ? o.time : new Date(o.time);
                   const m = t.getHours() * 60 + t.getMinutes();
                   return m >= fromMin && m <= toMin;
