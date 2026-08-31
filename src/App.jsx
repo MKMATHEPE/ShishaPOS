@@ -2284,7 +2284,7 @@ export default function App() {
         )}
 
         <footer style={styles.footer}>
-          <div style={{ display: "flex", alignItems: "center", gap: 4, background: "linear-gradient(135deg, #071a3d 0%, #0f274f 100%)", border: "1px solid rgba(255,255,255,0.12)", boxShadow: "0 12px 30px rgba(7,26,61,0.28)", borderRadius: 18, padding: "6px 5px", width: "100%", boxSizing: "border-box" }}>
+          <div style={styles.footerBar}>
           {[
             { key: "pos",        label: "POS",        icon: "pos",        badge: currentOrders.length,   access: true },
             { key: "delivered",  label: "Orders",     icon: "orders",     badge: deliveredOrders.length, access: canAccess("delivered") },
@@ -2323,13 +2323,14 @@ const styles = {
   },
   appChrome: {
     maxWidth: 430,
-    minHeight: "100dvh",
+    height: "100dvh",
     margin: "0 auto",
-    padding: "66px 10px 82px",
+    padding: "66px 10px 76px",
     display: "flex",
     flexDirection: "column",
     gap: 10,
     background: "transparent",
+    overflow: "hidden",
   },
   topBar: {
     position: "fixed",
@@ -3917,9 +3918,20 @@ const styles = {
     zIndex: 100,
     display: "flex",
     alignItems: "center",
-    padding: "8px 12px",
-    paddingBottom: "max(14px, env(safe-area-inset-bottom))",
-    background: "transparent",
+    padding: 0,
+    paddingBottom: "env(safe-area-inset-bottom)",
+    background: "linear-gradient(135deg, #071a3d 0%, #0f274f 100%)",
+    borderTop: "1px solid rgba(255,255,255,0.12)",
+    boxShadow: "0 -8px 24px rgba(7,26,61,0.16)",
+  },
+  footerBar: {
+    display: "flex",
+    alignItems: "center",
+    gap: 4,
+    width: "100%",
+    minHeight: 68,
+    padding: "6px 8px",
+    boxSizing: "border-box",
   },
   footerTab: {
     flex: 1,
