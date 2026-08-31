@@ -181,6 +181,7 @@ export default function App() {
   const [accountingCollapsed, setAccountingCollapsed] = useState(true);
   const [expensesCollapsed, setExpensesCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
+  const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
@@ -794,7 +795,12 @@ export default function App() {
                 </span>
                 <span style={styles.orderPrice}>{formatCurrency(o.price)}</span>
                 <button onClick={() => markDelivered(o)} style={styles.deliverBtn}>Delivered</button>
-                <button onClick={() => removeOrder(o)} style={styles.deleteBtn}>×</button>
+                {isAdmin && (orderDeleteConfirmId === o.id ? (
+                  <div style={styles.orderDeleteConfirm}>
+                    <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
+                    <button onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Cancel</button>
+                  </div>
+                ) : <button onClick={() => setOrderDeleteConfirmId(o.id)} aria-label={`Delete order ${o.id}`} style={styles.deleteBtn}>×</button>)}
               </div>
             ))}
           </div>
@@ -835,6 +841,13 @@ export default function App() {
                       <span style={styles.orderMeta}><strong>{o.flavour.name}</strong><small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {o.soldBy ?? "Unknown"}</small></span>
                       <span style={{ fontSize: 10, fontWeight: 800, color: overdue ? "#b45309" : "#64748b" }}>{ordersView === "Preparing" ? `${elapsed}m` : formatTime(o.deliveredAt ?? orderedAt)}</span>
                       {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, flexBasis: "100%" }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, flexBasis: "100%", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c" }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 10, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
+                      {isAdmin && (orderDeleteConfirmId === o.id ? (
+                        <div style={{ ...styles.orderDeleteConfirm, flexBasis: "100%" }}>
+                          <span style={{ marginRight: "auto", fontSize: 10, color: "#991b1b", fontWeight: 800 }}>Delete this order permanently?</span>
+                          <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
+                          <button onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Cancel</button>
+                        </div>
+                      ) : <button onClick={() => setOrderDeleteConfirmId(o.id)} style={{ ...styles.deleteBtn, flexBasis: "100%", minHeight: 34, borderRadius: 8 }}>Delete order</button>)}
                     </div>
                   );
                 })}
@@ -3876,6 +3889,38 @@ const styles = {
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
+  },
+  orderDeleteConfirm: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 6,
+    padding: 5,
+    border: "1px solid #fecaca",
+    borderRadius: 9,
+    background: "#fef2f2",
+  },
+  orderDeleteYes: {
+    minHeight: 32,
+    padding: "0 10px",
+    border: "none",
+    borderRadius: 7,
+    background: "#dc2626",
+    color: "#ffffff",
+    fontSize: 10,
+    fontWeight: 900,
+    fontFamily: "inherit",
+  },
+  orderDeleteNo: {
+    minHeight: 32,
+    padding: "0 10px",
+    border: "1px solid #cbd5e1",
+    borderRadius: 7,
+    background: "#ffffff",
+    color: "#475569",
+    fontSize: 10,
+    fontWeight: 900,
+    fontFamily: "inherit",
   },
   deliverBtn: {
     minHeight: 44,

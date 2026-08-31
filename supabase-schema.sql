@@ -137,7 +137,7 @@ drop policy if exists orders_update on public.pos_orders;
 create policy orders_update on public.pos_orders for update to authenticated
   using ((select private.is_active_pos_user())) with check ((select private.is_active_pos_user()));
 drop policy if exists orders_delete on public.pos_orders;
-create policy orders_delete on public.pos_orders for delete to authenticated using ((select private.is_active_pos_user()));
+create policy orders_delete on public.pos_orders for delete to authenticated using ((select private.is_pos_admin()));
 
 drop policy if exists stock_read on public.pos_stock;
 create policy stock_read on public.pos_stock for select to authenticated using ((select private.is_active_pos_user()));
