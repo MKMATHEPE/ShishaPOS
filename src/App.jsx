@@ -1080,22 +1080,6 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={styles.managementToolsCard}>
-                  <div><span style={styles.managementEyebrow}>Management tools</span><strong style={{ ...styles.managementSectionTitle, fontSize: 14 }}>Quick actions</strong></div>
-                  <div style={styles.managementToolsGrid}>
-                    {[
-                      ["Orders", "Review activity", "delivered", "▣"],
-                      ["Stock", "Adjust inventory", "stock", "◇"],
-                      ["Staff & settings", "Manage access", "settings", "⚙"],
-                      ["Accounting", "Expenses & reports", null, "R"],
-                    ].map(([label, note, tab, icon]) => (
-                      <button key={label} onClick={() => tab ? setActiveTab(tab) : setAccountingCollapsed(false)} style={styles.managementToolButton}>
-                        <span style={styles.managementToolIcon}>{icon}</span><span><strong>{label}</strong><small>{note}</small></span><span style={{ marginLeft: "auto", color: "#94a3b8" }}>›</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
               </div>
 
               {/* ── KPIs ── */}
@@ -3711,48 +3695,6 @@ const styles = {
     fontSize: 9,
     fontWeight: 900,
     fontFamily: "inherit",
-  },
-  managementToolsCard: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 10,
-    padding: 12,
-    border: "1px solid #e2e8f0",
-    borderRadius: 13,
-    background: "#ffffff",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
-  },
-  managementToolsGrid: {
-    display: "grid",
-    gridTemplateColumns: "repeat(2, minmax(0, 1fr))",
-    gap: 7,
-  },
-  managementToolButton: {
-    display: "flex",
-    alignItems: "center",
-    gap: 8,
-    minHeight: 58,
-    padding: "8px 9px",
-    border: "1px solid #e2e8f0",
-    borderRadius: 10,
-    background: "#f8fafc",
-    color: "#0f172a",
-    textAlign: "left",
-    fontSize: 10,
-    fontWeight: 900,
-    fontFamily: "inherit",
-  },
-  managementToolIcon: {
-    width: 28,
-    height: 28,
-    display: "grid",
-    placeItems: "center",
-    flexShrink: 0,
-    borderRadius: 8,
-    background: "#e2e8f0",
-    color: "#0f172a",
-    fontSize: 12,
-    fontWeight: 900,
   },
   settingValue: {
     fontSize: 20,
