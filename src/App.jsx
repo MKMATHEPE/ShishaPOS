@@ -9,7 +9,6 @@ import {
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
   fetchOrdersByDateRange, fetchSessionDates,
-  fetchOpenShift, startShift, closeShift,
 } from "./db";
 
 const FLAVOURS = [
@@ -69,10 +68,6 @@ function dateInputValue(date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
 
-function dateTimeInputValue(date = new Date()) {
-  return `${dateInputValue(date)}T${String(date.getHours()).padStart(2, "0")}:${String(date.getMinutes()).padStart(2, "0")}`;
-}
-
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
@@ -117,13 +112,6 @@ export default function App() {
   const [avgDailyRevenue, setAvgDailyRevenue] = useState(null);
   const [users, setUsers] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
-  const [activeShift, setActiveShift] = useState(null);
-  const [shiftBusy, setShiftBusy] = useState(false);
-  const [shiftMessage, setShiftMessage] = useState("");
-  const [openingCashDraft, setOpeningCashDraft] = useState("0");
-  const [shiftStartDraft, setShiftStartDraft] = useState(() => dateTimeInputValue());
-  const [countedCashDraft, setCountedCashDraft] = useState("");
-  const [closingNote, setClosingNote] = useState("");
   const [authLoading, setAuthLoading] = useState(true);
 
   const [loginUsername, setLoginUsername] = useState("");
@@ -204,7 +192,6 @@ export default function App() {
   const [managementTimeFrom, setManagementTimeFrom] = useState("00:00");
   const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
-  const [managerDailyOrders, setManagerDailyOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
   const [sessionDates, setSessionDates] = useState([]);
   const listRef = useRef(null);
@@ -237,23 +224,19 @@ export default function App() {
   useEffect(() => {
     if (!activeUser || !supabase) return;
     async function load() {
-      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue, remoteUnreturned, remoteShift] = await Promise.all([
-        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(), fetchOpenShift(),
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue, remoteUnreturned] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(),
       ]);
       if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
-      const managerView = ["Admin", "Manager"].includes(activeUser.role);
-      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : [];
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
       }
       if (remoteStock && remoteStock.length > 0) setStock(remoteStock);
-      if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
-      if (managerView && remoteOrders) setManagerDailyOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (remoteOrders) setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
-      setActiveShift(remoteShift);
       setDbReady(true);
     }
     load();
@@ -277,14 +260,11 @@ export default function App() {
   useEffect(() => {
     if (!dbReady || !supabase) return;
     async function refresh() {
-      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned, remoteShift] = await Promise.all([
-        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), fetchOpenShift(),
+      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned] = await Promise.all([
+        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(),
       ]);
-      const managerView = ["Admin", "Manager"].includes(activeUser?.role);
-      const effectiveOrders = remoteShift ? await fetchOrders(remoteShift.id) : [];
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
-      if (effectiveOrders) setOrders(effectiveOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
-      if (managerView && remoteOrders) setManagerDailyOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (remoteOrders) setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
@@ -293,7 +273,6 @@ export default function App() {
       if (remoteExpenses) {
         setExpenses(remoteExpenses);
       }
-      setActiveShift(remoteShift);
     }
     refresh();
   }, [activeTab]); // eslint-disable-line
@@ -309,16 +288,12 @@ export default function App() {
       if (refreshing) return;
       refreshing = true;
       try {
-        const remoteShift = await fetchOpenShift();
-        const [dailyOrders, shiftOnlyOrders, unfinishedOrders] = await Promise.all([
+        const [dailyOrders, unfinishedOrders] = await Promise.all([
           fetchOrders(),
-          remoteShift ? fetchOrders(remoteShift.id) : Promise.resolve([]),
           fetchUnfinishedOrders(),
         ]);
         if (!alive) return;
-        setActiveShift(remoteShift);
-        if (shiftOnlyOrders) setOrders(shiftOnlyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
-        if (dailyOrders) setManagerDailyOrders(dailyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+        if (dailyOrders) setOrders(dailyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
         if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
       } finally {
         refreshing = false;
@@ -359,7 +334,7 @@ export default function App() {
   const kopsQty       = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("kop"))?.quantity ?? 0;
 
   const confirmOrder = useCallback(() => {
-    if (!selectedFlavour || !activeShift) return;
+    if (!selectedFlavour) return;
     if (orderType === "full" && (hookahPipeQty <= 1 || rotasQty <= 1 || rotaTopsQty <= 1 || kopsQty <= 1)) return;
 
     const order = {
@@ -371,7 +346,6 @@ export default function App() {
       time: new Date(),
       status: "active",
       soldBy: activeUser?.name ?? "Unknown",
-      shiftId: activeShift.id,
       pipeReturned: false,
     };
 
@@ -402,7 +376,7 @@ export default function App() {
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
     setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role, activeShift]);
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -491,45 +465,6 @@ export default function App() {
   const deliveredOrders = orders.filter((o) => o.status === "delivered");
   const pipesOut = deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned).length
     + unreturnedPipes.filter((oldOrder) => !orders.some((order) => order.id === oldOrder.id)).length;
-  const shiftOrders = activeShift ? orders.filter((order) => order.shiftId === activeShift.id) : [];
-  const shiftExpenses = activeShift ? expenses.filter((expense) => expense.shiftId === activeShift.id) : [];
-  const shiftCashSales = shiftOrders.filter((order) => order.payment === "cash").reduce((sum, order) => sum + order.price, 0);
-  const shiftExpenseTotal = shiftExpenses.reduce((sum, expense) => sum + Number(expense.amount), 0);
-  const expectedShiftCash = activeShift ? activeShift.openingCash + shiftCashSales - shiftExpenseTotal : 0;
-  const shiftOutstandingOrders = shiftOrders.filter((order) => order.status !== "delivered").length;
-  const shiftOutstandingPipes = shiftOrders.filter((order) => order.type === "full" && order.status === "delivered" && !order.pipeReturned).length;
-
-  const handleStartShift = async () => {
-    const openingCash = Number(openingCashDraft);
-    const selectedStart = new Date(shiftStartDraft);
-    if (!Number.isFinite(openingCash) || openingCash < 0 || !activeUser || Number.isNaN(selectedStart.getTime())) return;
-    if (selectedStart.getTime() > Date.now()) { setShiftMessage("Shift start time cannot be in the future."); return; }
-    setShiftBusy(true); setShiftMessage("");
-    try {
-      const shift = await startShift({ openedBy: activeUser.id, openingCash, openedAt: selectedStart.toISOString() });
-      setActiveShift(shift);
-      setShiftMessage("Shift opened successfully.");
-    } catch (error) {
-      const existing = await fetchOpenShift();
-      if (existing) setActiveShift(existing);
-      setShiftMessage(existing ? "Another manager already opened the shift." : (error.message || "Could not open the shift."));
-    } finally { setShiftBusy(false); }
-  };
-
-  const handleCloseShift = async () => {
-    const countedCash = Number(countedCashDraft);
-    if (!activeShift || !activeUser || !Number.isFinite(countedCash) || countedCash < 0) return;
-    if (shiftOutstandingOrders || shiftOutstandingPipes) return;
-    setShiftBusy(true); setShiftMessage("");
-    try {
-      await closeShift(activeShift.id, { closedBy: activeUser.id, expectedCash: expectedShiftCash, countedCash, closingNote: closingNote.trim() });
-      setActiveShift(null); setCountedCashDraft(""); setClosingNote("");
-      setShiftStartDraft(dateTimeInputValue());
-      setShiftMessage(`Shift closed. Cash difference: ${formatCurrency(countedCash - expectedShiftCash)}.`);
-    } catch (error) { setShiftMessage(error.message || "Could not close the shift."); }
-    finally { setShiftBusy(false); }
-  };
-
 
   const paymentCounts = currentOrders.reduce(
     (acc, o) => {
@@ -562,9 +497,9 @@ export default function App() {
   const totalDeliveredPages = Math.max(1, Math.ceil(deliveredOrders.length / PAGE_SIZE));
   const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
   const isAdmin = activeUser?.role === "Admin";
-  const canManageShift = activeUser?.role === "Admin" || activeUser?.role === "Manager";
+  const canViewAllOrders = activeUser?.role === "Admin" || activeUser?.role === "Manager";
   const queueOrders = ordersView === "Preparing"
-    ? (canManageShift
+    ? (canViewAllOrders
       ? managerCurrentOrders.filter((order, index, all) => all.findIndex(candidate => candidate.id === order.id) === index)
       : currentOrders)
     : ordersView === "Return Pipes"
@@ -610,7 +545,7 @@ export default function App() {
 
               <div style={styles.loginBrandTag}>The Chill Pipe · POS</div>
               <h1 style={styles.loginAppName}>Welcome back</h1>
-              <p style={styles.loginMeta}>Sign in to start your shift.</p>
+              <p style={styles.loginMeta}>Sign in to start taking orders.</p>
 
               <div style={styles.loginField}>
                 <label style={styles.loginLabel}>Username or email</label>
@@ -746,7 +681,7 @@ export default function App() {
             const blockedItem = orderType === "full"
               ? (hookahPipeQty <= 1 ? "Hookah Pipe" : rotasQty <= 1 ? "Rotas" : rotaTopsQty <= 1 ? "Rota Tops" : kopsQty <= 1 ? "Kops" : null)
               : null;
-            const blocked = !!blockedItem || !activeShift;
+            const blocked = !!blockedItem;
             return (
               <button
                 onClick={confirmOrder}
@@ -755,7 +690,7 @@ export default function App() {
                 style={{ ...styles.confirmBtn, ...(blocked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
               >
                 <span>{blocked
-                  ? !activeShift ? "A manager must open the shift" : `No ${blockedItem} available · ${selectedFlavour.name}`
+                  ? `No ${blockedItem} available · ${selectedFlavour.name}`
                   : `Confirm order · ${selectedFlavour.name}`
                 }</span>
                 {!blocked && <strong>{formatCurrency(prices[orderType])} ›</strong>}
@@ -821,7 +756,7 @@ export default function App() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
-                {[{ label: "Preparing", count: canManageShift ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
+                {[{ label: "Preparing", count: canViewAllOrders ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
                   <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0f172a" : "transparent", color: ordersView === tab.label ? "#fff" : "#64748b", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
@@ -854,14 +789,14 @@ export default function App() {
                           <small>{o.payment === "card" ? "▣ Card" : "▤ Cash"}</small>
                         </span>
                       </div>
-                      {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", fontSize: 11 }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c", fontSize: 11 }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 9, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
+                      {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", fontSize: 11 }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, minHeight: 30, marginLeft: "auto", padding: "0 10px", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c", fontSize: 9 }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 9, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
                       {isAdmin && (orderDeleteConfirmId === o.id ? (
                         <div style={{ ...styles.orderDeleteConfirm, flexBasis: "100%" }}>
                           <span style={{ marginRight: "auto", fontSize: 10, color: "#991b1b", fontWeight: 800 }}>Delete this order permanently?</span>
                           <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
                           <button onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Cancel</button>
                         </div>
-                      ) : <button onClick={() => setOrderDeleteConfirmId(o.id)} style={{ ...styles.deleteBtn, flexBasis: "100%", minHeight: 34, borderRadius: 8 }}>Delete order</button>)}
+                      ) : <button onClick={() => setOrderDeleteConfirmId(o.id)} style={{ ...styles.deleteBtn, minWidth: 0, minHeight: 30, padding: "0 10px", borderRadius: 7, fontSize: 9 }}>Delete</button>)}
                     </div>
                   );
                 })}
@@ -876,10 +811,7 @@ export default function App() {
             const [fth, ftm] = managementTimeTo.split(":").map(Number);
             const fromMin = ffh * 60 + ffm;
             const toMin   = fth * 60 + ftm;
-            const todayOrders = canManageShift ? managerDailyOrders : orders;
-            const displayOrders = isViewingToday && activeShift && !canManageShift
-              ? shiftOrders
-              : isViewingToday ? todayOrders.filter(o => {
+            const displayOrders = isViewingToday ? orders.filter(o => {
                   const t = o.time instanceof Date ? o.time : new Date(o.time);
                   const m = t.getHours() * 60 + t.getMinutes();
                   return m >= fromMin && m <= toMin;
@@ -973,30 +905,6 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
-              {!activeShift && canManageShift && (
-                <div style={{ ...styles.shiftStatusCard, ...styles.shiftStatusClosed, ...styles.shiftStatusSetup }}>
-                  <div style={{ minWidth: 0 }}>
-                    <strong style={{ display: "block", fontSize: 12, color: "#9a3412" }}>Shift closed</strong>
-                    <span style={{ display: "block", marginTop: 2, fontSize: 10, color: "#64748b" }}>Set the start time and opening cash to begin trading.</span>
-                  </div>
-                  <div style={styles.shiftSetupForm}>
-                    <label style={{ ...styles.shiftField, flex: "1 1 170px" }}>
-                      <span style={styles.shiftFieldLabel}>Shift start</span>
-                      <input type="datetime-local" value={shiftStartDraft} onChange={(event) => setShiftStartDraft(event.target.value)} aria-label="Shift start date and time" style={{ ...styles.shiftCashInput, width: "100%" }} />
-                    </label>
-                    <label style={{ ...styles.shiftField, flex: "0 1 100px" }}>
-                      <span style={styles.shiftFieldLabel}>Opening cash</span>
-                      <div style={styles.shiftMoneyField}>
-                        <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b" }}>R</span>
-                        <input type="number" min="0" value={openingCashDraft} onChange={(event) => setOpeningCashDraft(event.target.value)} aria-label="Opening cash" style={{ ...styles.shiftCashInput, width: "100%", border: "none", paddingLeft: 2 }} />
-                      </div>
-                    </label>
-                    <button onClick={handleStartShift} disabled={shiftBusy} style={{ ...styles.shiftPrimaryBtn, alignSelf: "flex-end" }}>{shiftBusy ? "Opening…" : "Open shift"}</button>
-                  </div>
-                </div>
-              )}
-              {shiftMessage && <div style={styles.shiftMessage}>{shiftMessage}</div>}
-
               <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
@@ -1062,34 +970,6 @@ export default function App() {
 
               {managementLoading && (
                 <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
-              )}
-
-              {activeShift && canManageShift && (
-                <div style={{ ...styles.kpiCard, gap: 10 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div>
-                      <span style={styles.kpiLabel}>Current shift</span>
-                      <strong style={{ display: "block", marginTop: 2, fontSize: 16, color: "#0f172a" }}>Cash reconciliation</strong>
-                    </div>
-                    <span style={{ fontSize: 11, fontWeight: 900, color: "#166534", background: "#dcfce7", borderRadius: 99, padding: "4px 9px" }}>Open</span>
-                  </div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 7 }}>
-                    {[
-                      ["Opening cash", activeShift.openingCash],
-                      ["Cash sales", shiftCashSales],
-                      ["Expenses", -shiftExpenseTotal],
-                      ["Expected cash", expectedShiftCash],
-                    ].map(([label, value]) => <div key={label} style={{ background: "#f8fafc", borderRadius: 9, padding: "8px 10px" }}><span style={{ display: "block", fontSize: 9, color: "#64748b", fontWeight: 800 }}>{label}</span><strong style={{ fontSize: 13, color: Number(value) < 0 ? "#dc2626" : "#0f172a" }}>{formatCurrency(Number(value))}</strong></div>)}
-                  </div>
-                  {(shiftOutstandingOrders > 0 || shiftOutstandingPipes > 0) && (
-                    <div style={{ padding: "9px 10px", borderRadius: 9, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 11, fontWeight: 800 }}>
-                      Close blocked: {shiftOutstandingOrders} preparing order{shiftOutstandingOrders === 1 ? "" : "s"} · {shiftOutstandingPipes} pipe{shiftOutstandingPipes === 1 ? "" : "s"} still out
-                    </div>
-                  )}
-                  <label style={styles.equipmentEditField}><span>Counted cash</span><input type="number" min="0" value={countedCashDraft} onChange={(event) => setCountedCashDraft(event.target.value)} placeholder={formatCurrency(expectedShiftCash)} style={styles.equipmentEditInput} /></label>
-                  <label style={styles.equipmentEditField}><span>Closing note (optional)</span><textarea value={closingNote} onChange={(event) => setClosingNote(event.target.value)} rows="2" style={{ ...styles.equipmentEditInput, resize: "vertical" }} /></label>
-                  <button onClick={handleCloseShift} disabled={shiftBusy || shiftOutstandingOrders > 0 || shiftOutstandingPipes > 0 || countedCashDraft === ""} style={{ ...styles.shiftPrimaryBtn, minHeight: 44, opacity: shiftOutstandingOrders > 0 || shiftOutstandingPipes > 0 || countedCashDraft === "" ? 0.45 : 1 }}>{shiftBusy ? "Closing…" : "Close shift"}</button>
-                </div>
               )}
 
               {/* ── Always-visible order summary ── */}
@@ -1362,8 +1242,8 @@ export default function App() {
                 const commitExpense = () => {
                   const amt = Number(newExpenseAmt);
                   const qty = Number(newExpenseDesc) || 0;
-                  if (amt <= 0 || !activeShift) return;
-                  setExpenses(prev => [...prev, { id: Date.now(), category: newExpenseCat, qty: qty || null, amount: amt, time: new Date().toISOString(), shiftId: activeShift?.id ?? null }]);
+                  if (amt <= 0) return;
+                  setExpenses(prev => [...prev, { id: Date.now(), category: newExpenseCat, qty: qty || null, amount: amt, time: new Date().toISOString(), shiftId: null }]);
                   if (qty > 0) {
                     const selectedOpt = stockExpenseOptions.find(o => o.key === newExpenseCat);
                     if (newExpenseCat.startsWith("Flavour-")) {
@@ -2485,86 +2365,6 @@ const styles = {
     border: "1px solid rgba(15,23,42,0.08)",
     borderRadius: 12,
     boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
-  },
-  shiftStatusCard: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-    padding: "10px 12px",
-    borderRadius: 12,
-  },
-  shiftStatusOpen: {
-    background: "#f0fdf4",
-    border: "1px solid #bbf7d0",
-  },
-  shiftStatusClosed: {
-    background: "#fff7ed",
-    border: "1px solid #fed7aa",
-  },
-  shiftStatusSetup: {
-    alignItems: "stretch",
-    flexDirection: "column",
-  },
-  shiftSetupForm: {
-    display: "flex",
-    alignItems: "flex-end",
-    flexWrap: "wrap",
-    gap: 8,
-  },
-  shiftField: {
-    display: "flex",
-    flexDirection: "column",
-    gap: 4,
-    minWidth: 0,
-  },
-  shiftFieldLabel: {
-    color: "#64748b",
-    fontSize: 9,
-    fontWeight: 900,
-    letterSpacing: "0.06em",
-    textTransform: "uppercase",
-  },
-  shiftMoneyField: {
-    display: "flex",
-    alignItems: "center",
-    minHeight: 36,
-    paddingLeft: 8,
-    border: "1px solid #cbd5e1",
-    borderRadius: 8,
-    background: "#ffffff",
-  },
-  shiftCashInput: {
-    width: 66,
-    minHeight: 36,
-    padding: "6px 8px",
-    border: "1px solid #cbd5e1",
-    borderRadius: 8,
-    background: "#ffffff",
-    color: "#0f172a",
-    fontSize: 14,
-    fontWeight: 900,
-    fontFamily: "inherit",
-  },
-  shiftPrimaryBtn: {
-    minHeight: 36,
-    padding: "0 12px",
-    border: "none",
-    borderRadius: 8,
-    background: "#071a3d",
-    color: "#ffffff",
-    fontSize: 11,
-    fontWeight: 900,
-    fontFamily: "inherit",
-  },
-  shiftMessage: {
-    padding: "8px 10px",
-    borderRadius: 9,
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
-    color: "#1d4ed8",
-    fontSize: 11,
-    fontWeight: 800,
   },
   mainContent: {
     flex: 1,
@@ -3949,8 +3749,8 @@ const styles = {
     color: "#111827",
   },
   deleteBtn: {
-    minWidth: 44,
-    minHeight: 44,
+    minWidth: 34,
+    minHeight: 34,
     background: "#fff1f2",
     border: "1px solid #fecdd3",
     borderRadius: 8,
