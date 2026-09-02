@@ -1357,7 +1357,7 @@ export default function App() {
                                 <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
                               )}
                             </optgroup>
-                            <optgroup label="🛠️ Equipment">
+                            <optgroup label="🛠️ Fixed Assets">
                               {stockExpenseOptions.filter(o => o.group === "equipment").map(o =>
                                 <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
                               )}
@@ -1444,7 +1444,7 @@ export default function App() {
               : item.quantity <= item.lowThreshold;
             const categoryMatches = (item) => stockCategory === "All"
               || (stockCategory === "Attention" ? needsAttention(item)
-                : stockCategory === "Equipment" ? item.category === "equipment"
+                : stockCategory === "Fixed Assets" ? item.category === "equipment"
                   : stockCategory === "Flavours" ? item.name === "Flavour"
                     : item.category === "consumable" && item.name !== "Flavour");
             const consumables = stock.filter(i => i.category === "consumable" && matchesStockSearch(i) && categoryMatches(i));
@@ -1671,13 +1671,13 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Equipment", value: stock.filter(item => item.category === "equipment").length, color: "#2563eb", bg: "#eff6ff", filter: "Equipment" }].map((summary) => (
+                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Fixed Assets", value: stock.filter(item => item.category === "equipment").length, color: "#2563eb", bg: "#eff6ff", filter: "Fixed Assets" }].map((summary) => (
                     <button key={summary.label} onClick={() => setStockCategory(summary.filter)} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center", fontFamily: "inherit" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 21 }}>{summary.value}</strong></button>
                   ))}
                 </div>
                 <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-                  {["Attention", "All", "Flavours", "Consumables", "Equipment"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
+                  {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
 
                 {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}
@@ -1732,7 +1732,7 @@ export default function App() {
                 {equipment.length > 0 && (
                   <>
                     <button onClick={() => setEquipmentCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                      <span>🛠️ Equipment <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({equipment.length})</span></span>
+                      <span>🛠️ Fixed Assets <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({equipment.length})</span></span>
                       <span style={styles.collapseChevron}>{equipmentCollapsed ? "▶" : "▼"}</span>
                     </button>
                     {!equipmentCollapsed && <div className="expand-down" style={styles.stockList}>{equipment.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
