@@ -173,6 +173,7 @@ export default function App() {
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
+  const [stockPlanningOrders, setStockPlanningOrders] = useState([]);
   const [newExpenseCat, setNewExpenseCat] = useState("Coal");
   const [newExpenseDesc, setNewExpenseDesc] = useState("");
   const [newExpenseAmt, setNewExpenseAmt] = useState("");
@@ -310,6 +311,16 @@ export default function App() {
     if (activeTab !== "management" || !supabase || sessionDates.length > 0) return;
     fetchSessionDates().then(dates => { if (dates) setSessionDates(dates); });
   }, [activeTab]); // eslint-disable-line
+
+  useEffect(() => {
+    if (activeTab !== "stock" || !supabase) return;
+    const fromDate = new Date();
+    fromDate.setDate(fromDate.getDate() - 13);
+    fromDate.setHours(0, 0, 0, 0);
+    fetchOrdersByDateRange(fromDate.toISOString(), new Date().toISOString()).then(recentOrders => {
+      if (recentOrders) setStockPlanningOrders(recentOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+    });
+  }, [activeTab]);
 
   // Fetch orders when the management date/time range changes
   useEffect(() => {
@@ -1476,6 +1487,22 @@ export default function App() {
             const outItems = allFlatItems.filter(i => i.quantity === 0);
             const lowItems = allFlatItems.filter(i => i.quantity > 0 && i.quantity <= i.lowThreshold);
             const lowCount = outItems.length + lowItems.length;
+            const sellingDays = Math.max(1, new Set(stockPlanningOrders.map(order => dateInputValue(new Date(order.time)))).size);
+            const targetDays = 7;
+            const purchasePlan = stock.flatMap(item => {
+              if (item.subItems) return item.subItems.map(subItem => {
+                const flavourOrders = stockPlanningOrders.filter(order => order.flavour.id === subItem.id).length;
+                const dailyUse = (flavourOrders / sellingDays) * (FLAVOUR_PER_SALE[subItem.id] ?? 0);
+                const daysLeft = dailyUse > 0 ? subItem.quantity / dailyUse : Infinity;
+                return { id: `flavour-${subItem.id}`, name: subItem.name, icon: subItem.icon, unit: "boxes", quantity: subItem.quantity, dailyUse, daysLeft, buy: Math.max(0, Math.ceil(dailyUse * targetDays - subItem.quantity)) };
+              });
+              const perSale = item.name === "Coal" ? COAL_PER_SALE : item.name === "Mouth Pieces" ? MOUTHPIECES_PER_SALE : 0;
+              if (!perSale) return [];
+              const dailyUse = (stockPlanningOrders.length / sellingDays) * perSale;
+              const daysLeft = dailyUse > 0 ? item.quantity / dailyUse : Infinity;
+              return [{ id: item.id, name: item.name, icon: "📦", unit: item.unit, quantity: item.quantity, dailyUse, daysLeft, buy: Math.max(0, Math.ceil(dailyUse * targetDays - item.quantity)) }];
+            }).filter(item => item.dailyUse > 0).sort((a, b) => a.daysLeft - b.daysLeft);
+            const buySoonCount = purchasePlan.filter(item => item.daysLeft <= 4).length;
 
             const buildStockReport = () => {
               const lines = [`Stock Report · ${todayLabel}`, ""];
@@ -1681,6 +1708,43 @@ export default function App() {
                 </div>
 
                 {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}
+
+                <div style={styles.purchasePlanner}>
+                  <div style={styles.purchasePlannerHeader}>
+                    <div>
+                      <span style={styles.stockCategoryHeader}>Purchase planner</span>
+                      <strong style={styles.purchasePlannerTitle}>{buySoonCount ? `${buySoonCount} item${buySoonCount === 1 ? "" : "s"} to buy soon` : "Stock coverage looks healthy"}</strong>
+                    </div>
+                    <span style={styles.purchasePlannerTarget}>7-day target</span>
+                  </div>
+                  {stockPlanningOrders.length === 0 ? (
+                    <div style={{ color: "#64748b", fontSize: 11, fontWeight: 700 }}>Recommendations will appear after sales history is available.</div>
+                  ) : (
+                    <div style={styles.purchasePlanList}>
+                      {purchasePlan.map(item => {
+                        const urgent = item.daysLeft <= 2;
+                        const soon = item.daysLeft <= 4;
+                        const tone = urgent ? "#dc2626" : soon ? "#b45309" : "#15803d";
+                        return (
+                          <div key={item.id} style={styles.purchasePlanRow}>
+                            <span style={styles.purchasePlanIcon}>{item.icon}</span>
+                            <span style={{ flex: 1, minWidth: 0 }}>
+                              <strong style={{ display: "block", color: "#0f172a", fontSize: 11 }}>{item.name}</strong>
+                              <small style={{ display: "block", marginTop: 2, color: "#64748b", fontSize: 9, fontWeight: 700 }}>
+                                {Number.isFinite(item.daysLeft) ? `${item.daysLeft.toFixed(1)} selling days left` : "No recent usage"}
+                              </small>
+                            </span>
+                            <span style={{ textAlign: "right" }}>
+                              <strong style={{ display: "block", color: tone, fontSize: 11 }}>{item.buy > 0 ? `Buy ${item.buy}` : "No purchase"}</strong>
+                              <small style={{ color: "#94a3b8", fontSize: 8, fontWeight: 800 }}>{item.buy > 0 ? item.unit : `${item.quantity.toFixed?.(1) ?? item.quantity} available`}</small>
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                  <span style={styles.purchasePlannerNote}>Based on sales across {sellingDays} active day{sellingDays === 1 ? "" : "s"}. Buy quantities refill stock to approximately seven selling days.</span>
+                </div>
 
                 {consumables.length > 0 && (
                   <>
@@ -2956,6 +3020,68 @@ const styles = {
     color: "#64748b",
     paddingLeft: 2,
     marginTop: 4,
+  },
+  purchasePlanner: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 10,
+    padding: 12,
+    border: "1px solid #c7d2fe",
+    borderRadius: 13,
+    background: "linear-gradient(145deg, #ffffff 0%, #eef2ff 100%)",
+    boxShadow: "0 4px 14px rgba(49,46,129,0.07)",
+  },
+  purchasePlannerHeader: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+  },
+  purchasePlannerTitle: {
+    display: "block",
+    marginTop: 3,
+    color: "#0f172a",
+    fontSize: 14,
+    fontWeight: 900,
+  },
+  purchasePlannerTarget: {
+    padding: "4px 8px",
+    borderRadius: 99,
+    background: "#e0e7ff",
+    color: "#3730a3",
+    fontSize: 8,
+    fontWeight: 900,
+    whiteSpace: "nowrap",
+  },
+  purchasePlanList: {
+    display: "flex",
+    flexDirection: "column",
+    gap: 5,
+  },
+  purchasePlanRow: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    padding: "8px 9px",
+    border: "1px solid rgba(99,102,241,0.10)",
+    borderRadius: 9,
+    background: "rgba(255,255,255,0.8)",
+  },
+  purchasePlanIcon: {
+    width: 28,
+    height: 28,
+    display: "grid",
+    placeItems: "center",
+    flexShrink: 0,
+    borderRadius: 8,
+    background: "#eef2ff",
+    fontSize: 14,
+  },
+  purchasePlannerNote: {
+    color: "#64748b",
+    fontSize: 8,
+    fontWeight: 700,
+    lineHeight: 1.45,
   },
   stockList: {
     display: "flex",
