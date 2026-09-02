@@ -128,7 +128,7 @@ export default function App() {
   const [settingsSection, setSettingsSection] = useState("overview");
   const [ordersView, setOrdersView] = useState("Preparing");
   const [stockSearch, setStockSearch] = useState("");
-  const [stockCategory, setStockCategory] = useState("All");
+  const [stockCategory, setStockCategory] = useState("Attention");
   const [editingEquipmentId, setEditingEquipmentId] = useState(null);
   const [equipmentDraft, setEquipmentDraft] = useState({ name: "", quantity: "", lowThreshold: "" });
   const [teamSearch, setTeamSearch] = useState("");
@@ -162,8 +162,8 @@ export default function App() {
     return defaults;
   });
   const [usersCollapsed, setUsersCollapsed] = useState(false);
-  const [consumablesCollapsed, setConsumablesCollapsed] = useState(true);
-  const [equipmentCollapsed, setEquipmentCollapsed] = useState(true);
+  const [consumablesCollapsed, setConsumablesCollapsed] = useState(false);
+  const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
   const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
   const [kpisCollapsed, setKpisCollapsed] = useState(true);
   const [accountingCollapsed, setAccountingCollapsed] = useState(true);
@@ -1457,7 +1457,14 @@ export default function App() {
           })()}
           {visibleTab === "stock" && (() => {
             const matchesStockSearch = (item) => !stockSearch.trim() || item.name.toLowerCase().includes(stockSearch.toLowerCase()) || item.subItems?.some((sub) => sub.name.toLowerCase().includes(stockSearch.toLowerCase()));
-            const categoryMatches = (item) => stockCategory === "All" || (stockCategory === "Equipment" ? item.category === "equipment" : stockCategory === "Flavours" ? item.name === "Flavour" : item.category === "consumable" && item.name !== "Flavour");
+            const needsAttention = (item) => item.subItems
+              ? item.subItems.some(subItem => subItem.quantity <= item.lowThreshold)
+              : item.quantity <= item.lowThreshold;
+            const categoryMatches = (item) => stockCategory === "All"
+              || (stockCategory === "Attention" ? needsAttention(item)
+                : stockCategory === "Equipment" ? item.category === "equipment"
+                  : stockCategory === "Flavours" ? item.name === "Flavour"
+                    : item.category === "consumable" && item.name !== "Flavour");
             const consumables = stock.filter(i => i.category === "consumable" && matchesStockSearch(i) && categoryMatches(i));
             const equipment   = stock.filter(i => i.category === "equipment" && matchesStockSearch(i) && categoryMatches(i));
 
@@ -1539,26 +1546,23 @@ export default function App() {
                                     {(() => {
                                       const perSale = FLAVOUR_PER_SALE[f.id];
                                       if (!perSale) return <span style={{ fontSize: 12, color: "#94a3b8" }}>{f.quantity.toFixed(2)} bx</span>;
-                                      const denom = Math.round((1 / perSale) * 10) / 10;
                                       const qty = Math.round(f.quantity * 1000) / 1000;
-                                      const wholeBoxes = Math.floor(qty);
-                                      const fraction = qty - wholeBoxes;
-                                      const servingsInOpen = Math.round(fraction * denom * 10) / 10;
-                                      const openLabel = Number.isInteger(servingsInOpen) ? String(servingsInOpen) : servingsInOpen.toFixed(1);
                                       if (qty === 0) return (
-                                        <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>–</span>
+                                        <span style={{ fontSize: 10, color: "#dc2626", fontWeight: 800 }}>0 orders</span>
                                       );
                                       return <>
-                                        <span style={{ fontSize: 11, fontWeight: 800, color: "#0f172a", background: "rgba(15,23,42,0.07)", padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                          📦 {wholeBoxes} {wholeBoxes === 1 ? "box" : "boxes"}
+                                        <span style={{ fontSize: 10, fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                                          {qty.toFixed(2)} boxes
                                         </span>
-                                        {servingsInOpen > 0 && (
-                                          <span style={{ fontSize: 11, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                            {openLabel} orders left
-                                          </span>
-                                        )}
+                                        <span style={{ fontSize: 9, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
+                                          ≈ {Math.floor(qty / perSale)} orders
+                                        </span>
                                       </>;
                                     })()}
+                                  </div>
+                                  <div style={styles.stockControls} onClick={event => event.stopPropagation()}>
+                                    <button aria-label={`Remove one box of ${f.name}`} onClick={() => setStock(prev => prev.map(stockItem => stockItem.id === item.id ? { ...stockItem, subItems: stockItem.subItems.map(subItem => subItem.id === f.id ? { ...subItem, quantity: Math.max(0, subItem.quantity - 1) } : subItem) } : stockItem))} style={styles.stockBtnMinus}>−</button>
+                                    <button aria-label={`Add one box of ${f.name}`} onClick={() => setStock(prev => prev.map(stockItem => stockItem.id === item.id ? { ...stockItem, subItems: stockItem.subItems.map(subItem => subItem.id === f.id ? { ...subItem, quantity: subItem.quantity + 1 } : subItem) } : stockItem))} style={styles.stockBtnPlus}>+</button>
                                   </div>
                                 </div>
                             </div>
@@ -1574,6 +1578,8 @@ export default function App() {
               const isLow = !isOut && item.quantity <= item.lowThreshold;
               const rowStyle = isOut ? styles.stockRowCritical : isLow ? styles.stockRowLow : styles.stockRow;
               const pack = RESTOCK_PACK[item.name];
+              const perOrder = item.name === "Coal" ? COAL_PER_SALE : item.name === "Mouth Pieces" ? MOUTHPIECES_PER_SALE : null;
+              const orderCapacity = perOrder ? Math.floor(item.quantity / perOrder) : null;
 
               if (item.category === "equipment" && editingEquipmentId === item.id) {
                 const saveEquipment = () => {
@@ -1618,6 +1624,7 @@ export default function App() {
                     <span style={styles.stockName}>{item.name}</span>
                     <div style={styles.stockMeta}>
                       <span style={styles.stockUnit}>{item.unit}</span>
+                      {orderCapacity !== null && <span style={{ ...styles.stockUnit, color: orderCapacity <= 5 ? "#dc2626" : "#047857", fontWeight: 800 }}>· ≈ {orderCapacity} orders</span>}
                       {pack && (
                         <span style={{ ...styles.stockUnit, color: "#94a3b8" }}>
                           · {Math.floor(item.quantity / pack.size)} {pack.plural} + {item.quantity % pack.size} pcs
@@ -1629,6 +1636,12 @@ export default function App() {
                   </div>
 
                   <span style={styles.stockQty}>{item.quantity}</span>
+                  {item.category !== "equipment" && (
+                    <div style={styles.stockControls}>
+                      <button aria-label={`Remove one ${item.unit} of ${item.name}`} onClick={() => setStock(prev => prev.map(stockItem => stockItem.id === item.id ? { ...stockItem, quantity: Math.max(0, stockItem.quantity - 1) } : stockItem))} style={styles.stockBtnMinus}>−</button>
+                      <button aria-label={`Add one ${item.unit} of ${item.name}`} onClick={() => setStock(prev => prev.map(stockItem => stockItem.id === item.id ? { ...stockItem, quantity: stockItem.quantity + 1 } : stockItem))} style={styles.stockBtnPlus}>+</button>
+                    </div>
+                  )}
                   {item.category === "equipment" && (
                     <button
                       onClick={() => {
@@ -1658,14 +1671,16 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb" }, { label: "Equipment", value: equipment.length, color: "#2563eb", bg: "#eff6ff" }].map((summary) => (
-                    <div key={summary.label} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 21 }}>{summary.value}</strong></div>
+                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Equipment", value: stock.filter(item => item.category === "equipment").length, color: "#2563eb", bg: "#eff6ff", filter: "Equipment" }].map((summary) => (
+                    <button key={summary.label} onClick={() => setStockCategory(summary.filter)} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center", fontFamily: "inherit" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 21 }}>{summary.value}</strong></button>
                   ))}
                 </div>
                 <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-                  {["All", "Flavours", "Consumables", "Equipment"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
+                  {["Attention", "All", "Flavours", "Consumables", "Equipment"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
+
+                {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}
 
                 {consumables.length > 0 && (
                   <>
