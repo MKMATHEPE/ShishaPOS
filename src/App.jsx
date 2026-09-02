@@ -4,8 +4,8 @@ import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
   fetchUsers, syncUsers,
-  fetchStock, syncStock,
-  fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, updateOrder, deleteOrder,
+  fetchStock, syncStock, updateStockItem,
+  fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder,
   fetchExpenses, syncExpenses,
   fetchHistoricalRevenue,
   fetchOrdersByDateRange, fetchSessionDates,
@@ -47,13 +47,6 @@ const RESTOCK_PACK = {
 };
 
 const LOGO_SRC = chillPipeLogo;
-
-const isPipeEquipment = (item) =>
-  item.category === "equipment" && (
-    item.name.toLowerCase().includes("hookah") ||
-    item.name.toLowerCase().includes("rota") ||
-    item.name.toLowerCase().includes("kop")
-  );
 
 function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -409,67 +402,45 @@ export default function App() {
     }
   }, [loginUsername, loginPassword]);
 
-  // Restores the 4 equipment items deducted by markDelivered.
-  // Must be called BEFORE the order is removed from state.
-  // Guard conditions prevent double-restoration and refill false-positives.
-  const restorePipeEquipment = useCallback((order) => {
-    if (
-      order?.type === "full" &&
-      order?.status === "delivered" &&
-      !order?.pipeReturned
-    ) {
-      setStock(s => s.map(item =>
-        isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item
-      ));
-    }
-  }, []);
-
   const undoLast = useCallback(() => {
     if (!undoTarget) return;
-    // Read current order state to check if it was marked delivered in the undo window.
-    // If it was, restorePipeEquipment handles the equipment reversal.
-    const order = orders.find(o => o.id === undoTarget);
-    if (order) restorePipeEquipment(order);
     setOrders(prev => prev.filter(o => o.id !== undoTarget));
     setManagerCurrentOrders(prev => prev.filter(o => o.id !== undoTarget));
     deleteOrder(undoTarget);
     setUndoTarget(null);
     clearTimeout(undoTimer.current);
-  }, [undoTarget, orders, restorePipeEquipment]);
+  }, [undoTarget]);
 
   // Accepts the full order object so there is no stale-closure risk when reading
   // order.status / order.pipeReturned — we inspect before any state mutation.
-  const removeOrder = useCallback((order) => {
-    // 1. Restore equipment if the pipe was out when the order is cancelled
-    restorePipeEquipment(order);
-    // 2. Remove from local state
+  const removeOrder = useCallback(async (order) => {
+    const removed = await deleteOrder(order.id);
+    if (!removed) return;
     setOrders(prev => prev.filter(o => o.id !== order.id));
     setManagerCurrentOrders(prev => prev.filter(o => o.id !== order.id));
-    // 3. Hard-delete from DB
-    deleteOrder(order.id);
-  }, [restorePipeEquipment]);
+    const remoteStock = await fetchStock();
+    if (remoteStock) setStock(remoteStock);
+  }, []);
 
-  const returnPipe = useCallback((id) => {
+  const returnPipe = useCallback(async (id) => {
+    const returned = await returnOrderPipe(id);
+    if (!returned) return;
     setOrders((prev) => prev.map((o) => o.id === id ? { ...o, pipeReturned: true } : o));
     setUnreturnedPipes((prev) => prev.filter(o => o.id !== id));
-    setStock(s => s.map(item => isPipeEquipment(item) ? { ...item, quantity: item.quantity + 1 } : item));
-    updateOrder(id, { pipeReturned: true });
+    const remoteStock = await fetchStock();
+    if (remoteStock) setStock(remoteStock);
   }, []);
 
   // Accepts the full order object to avoid reading order.type inside a state updater
   // (calling setState inside setState updater is an anti-pattern — updaters must be pure).
-  const markDelivered = useCallback((order) => {
+  const markDelivered = useCallback(async (order) => {
     const deliveredAt = new Date();
-    // Deduct one unit of each equipment item for new-pipe orders.
-    // This is reversed by returnPipe, or by removeOrder if the order is later cancelled.
-    if (order.type === "full") {
-      setStock(s => s.map(item =>
-        isPipeEquipment(item) ? { ...item, quantity: Math.max(0, item.quantity - 1) } : item
-      ));
-    }
+    const delivered = await markOrderDelivered(order.id);
+    if (!delivered) return;
     setOrders(prev => prev.map(o => o.id === order.id ? { ...o, status: "delivered", deliveredAt } : o));
     setManagerCurrentOrders(prev => prev.filter(o => o.id !== order.id));
-    updateOrder(order.id, { status: "delivered", deliveredAt });
+    const remoteStock = await fetchStock();
+    if (remoteStock) setStock(remoteStock);
   }, []);
 
   const currentOrders = orders.filter((o) => o.status !== "delivered");
@@ -1614,10 +1585,12 @@ export default function App() {
                   const quantity = Math.max(0, Number(equipmentDraft.quantity));
                   const lowThreshold = Math.max(0, Number(equipmentDraft.lowThreshold));
                   if (!name || !Number.isFinite(quantity) || !Number.isFinite(lowThreshold)) return;
+                  const updatedItem = { ...item, name, quantity, lowThreshold };
                   setStock(prev => prev.map(stockItem => stockItem.id === item.id
-                    ? { ...stockItem, name, quantity, lowThreshold }
+                    ? updatedItem
                     : stockItem
                   ));
+                  updateStockItem(updatedItem);
                   setEditingEquipmentId(null);
                 };
 

@@ -38,19 +38,25 @@ export async function fetchStock() {
 
 export async function syncStock(stock) {
   if (!ok()) return
-  if (stock.length) {
-    const rows = stock.map(i => ({
+  const consumables = stock.filter(i => i.category !== 'equipment')
+  if (consumables.length) {
+    const rows = consumables.map(i => ({
       id: i.id, name: i.name, category: i.category,
       quantity: i.quantity, unit: i.unit, low_threshold: i.lowThreshold,
       sub_items: i.subItems ?? null,
     }))
     const { error } = await supabase.from('pos_stock').upsert(rows, { onConflict: 'id' })
     if (error) { console.error('syncStock', error); return }
-    const { error: delError } = await supabase.from('pos_stock').delete().not('id', 'in', `(${stock.map(i => i.id).join(',')})`)
-    if (delError) console.error('syncStock delete', delError)
-  } else {
-    await supabase.from('pos_stock').delete().neq('id', 0)
   }
+}
+
+export async function updateStockItem(item) {
+  if (!ok()) return false
+  const { error } = await supabase.from('pos_stock').update({
+    name: item.name, quantity: item.quantity, low_threshold: item.lowThreshold,
+  }).eq('id', item.id)
+  if (error) { console.error('updateStockItem', error); return false }
+  return true
 }
 
 // ── Orders ────────────────────────────────────────────
@@ -131,20 +137,25 @@ export async function insertOrder(order) {
   if (error) console.error('insertOrder', error)
 }
 
-export async function updateOrder(id, updates) {
-  if (!ok()) return
-  const row = {}
-  if (updates.status) row.status = updates.status
-  if (updates.deliveredAt) row.delivered_at = updates.deliveredAt.toISOString()
-  if (updates.pipeReturned !== undefined) row.pipe_returned = updates.pipeReturned
-  const { error } = await supabase.from('pos_orders').update(row).eq('id', id)
-  if (error) console.error('updateOrder', error)
+export async function markOrderDelivered(id) {
+  if (!ok()) return false
+  const { data, error } = await supabase.rpc('mark_pos_order_delivered', { order_id: id })
+  if (error) { console.error('markOrderDelivered', error); return false }
+  return data === true
+}
+
+export async function returnOrderPipe(id) {
+  if (!ok()) return false
+  const { data, error } = await supabase.rpc('return_pos_order_pipe', { order_id: id })
+  if (error) { console.error('returnOrderPipe', error); return false }
+  return data === true
 }
 
 export async function deleteOrder(id) {
-  if (!ok()) return
-  const { error } = await supabase.from('pos_orders').delete().eq('id', id)
-  if (error) console.error('deleteOrder', error)
+  if (!ok()) return false
+  const { data, error } = await supabase.rpc('delete_pos_order', { order_id: id })
+  if (error) { console.error('deleteOrder', error); return false }
+  return data === true
 }
 
 // ── Orders by date range (for management date filter) ─
