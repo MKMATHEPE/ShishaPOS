@@ -895,7 +895,7 @@ export default function App() {
                 style={{ fontSize: 12, fontWeight: 800, color: "#6c6a65", background: "rgba(0,0,0,0.06)", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
               >No</button>
             </div>
-          ) : (
+          ) : (visibleTab !== "management" || isAdmin) && (
             <button
               aria-label={visibleTab === "management" ? "Open settings" : "Switch user"}
               onClick={() => visibleTab === "management" ? setActiveTab("settings") : visibleTab === "settings" ? setActiveTab("management") : setConfirmLogout(true)}
