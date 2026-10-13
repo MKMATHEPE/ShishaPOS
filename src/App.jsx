@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { stockLines } from "./stockTakingModel";
 import StockItemPhoto from "./StockItemPhoto.jsx";
 import PullToRefresh from "./PullToRefresh.jsx";
+import ManagementOverview from "./ManagementOverview.jsx";
 import ExpensesList from "./ExpensesList.jsx";
 import StockTaking from "./StockTaking.jsx";
 import { planWeekend } from "./purchasePlanner";
@@ -581,7 +582,7 @@ export default function App() {
   }, [activeTab]); // eslint-disable-line
 
   useEffect(() => {
-    if (activeTab !== "stock" || !supabase) return;
+    if (!["stock", "management"].includes(activeTab) || !supabase) return;
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 56);
     fromDate.setHours(0, 0, 0, 0);
@@ -1102,40 +1103,11 @@ export default function App() {
               if (o.payment === "card") acc.card += o.price; else acc.cash += o.price;
               return acc;
             }, { gross: 0, card: 0, cash: 0 });
-            const displayDeliveredOrders = displayOrders.filter((o) => o.status === "delivered");
             const displayExpenses = expenses.filter(e => {
               const d = new Date(e.time);
               const eDate = [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
               return eDate >= managementDateFrom && eDate <= managementDateTo;
             });
-            const displayExpenseTotal = displayExpenses.reduce((sum, expense) => sum + expense.amount, 0);
-            const displayNetProfit = displayTotals.gross - displayExpenseTotal;
-            const staffPerformance = Object.entries(displayOrders.reduce((staff, order) => {
-              const name = order.soldBy || "Unknown";
-              staff[name] = staff[name] || { orders: 0, revenue: 0 };
-              staff[name].orders += 1;
-              staff[name].revenue += order.price;
-              return staff;
-            }, {})).sort(([, a], [, b]) => b.revenue - a.revenue);
-            const hourlySales = Array.from({ length: 12 }, (_, index) => {
-              const hour = index + 10;
-              return {
-                hour,
-                total: displayOrders.reduce((sum, order) => {
-                  const orderTime = order.time instanceof Date ? order.time : new Date(order.time);
-                  return orderTime.getHours() === hour ? sum + order.price : sum;
-                }, 0),
-              };
-            });
-            const hourlyMax = Math.max(1, ...hourlySales.map((item) => item.total));
-
-            const newPipeOrders = displayOrders.filter((o) => o.type === "full");
-            const refillOrders  = displayOrders.filter((o) => o.type === "refill");
-
-            // KPIs
-            const totalOrders = displayOrders.length;
-            const avgOrderValue = totalOrders > 0 ? displayTotals.gross / totalOrders : 0;
-            const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
             const mgmtDateLabel = isViewingToday ? todayLabel
               : managementDateFrom === managementDateTo ? formatSessionDate(managementDateFrom)
               : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
@@ -1257,60 +1229,8 @@ export default function App() {
                     if (await setFinanceLock(date)) setFinanceJournal(current => ({ ...current, lockedThrough: date || null }));
                   }}
                 />
-              ) : <>
-              {managementLoading && (
-                <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#8c8982", fontWeight: 600 }}>Loading…</div>
-              )}
+              ) : <ManagementOverview orders={displayOrders} expenses={expenses} from={managementDateFrom} to={managementDateTo} timeFrom={managementTimeFrom} timeTo={managementTimeTo} loading={managementLoading} />}
 
-              {/* ── Always-visible order summary ── */}
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <div style={styles.managementSectionHeading}>
-                  <div><span style={styles.managementEyebrow}>Performance overview</span><strong style={styles.managementSectionTitle}>{mgmtDateLabel}</strong></div>
-                  <span style={styles.managementPeriodBadge}>{managementLoading ? "Updating…" : `${totalOrders} orders`}</span>
-                </div>
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
-                  {[
-                    { label: "Revenue", value: formatCurrency(displayTotals.gross), note: `Card ${formatCurrency(displayTotals.card)} · Cash ${formatCurrency(displayTotals.cash)}`, color: "#0a0a0a" },
-                    { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#16a34a" : "#dc2626" },
-                    { label: "Orders", value: String(totalOrders), note: `${newPipeOrders.length} new · ${refillOrders.length} refills`, color: "#0a0a0a" },
-                    { label: "Average order", value: totalOrders ? formatCurrency(Math.round(avgOrderValue)) : "—", note: `${deliveryRate}% delivered`, color: "#0a0a0a" },
-                  ].map((metric) => (
-                    <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 98 }}>
-                      <span style={styles.kpiLabel}>{metric.label}</span>
-                      <span style={{ ...styles.kpiValue, color: metric.color }}>{metric.value}</span>
-                      <span style={styles.kpiSub}>{metric.note}</span>
-                    </div>
-                  ))}
-                </div>
-
-                <div style={{ ...styles.kpiCard, minHeight: 150 }}>
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                    <span style={styles.kpiLabel}>Sales by hour</span>
-                    <span style={{ fontSize: 9, color: "#6c6a65", fontWeight: 800 }}>Rands (R)</span>
-                  </div>
-                  <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 88, paddingTop: 10, borderBottom: "1px solid #d8d4cb" }}>
-                    {hourlySales.map((item) => (
-                      <div key={item.hour} title={`${item.hour}:00 · ${formatCurrency(item.total)}`} style={{ flex: 1, height: `${Math.max(4, (item.total / hourlyMax) * 100)}%`, minWidth: 3, borderRadius: "3px 3px 0 0", background: item.total ? "#0a0a0a" : "#d8d4cb" }} />
-                    ))}
-                  </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", color: "#8c8982", fontSize: 8, fontWeight: 700 }}><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span></div>
-                </div>
-
-                <div style={{ ...styles.kpiCard, gap: 8 }}>
-                  <span style={styles.kpiLabel}>Staff performance</span>
-                  {staffPerformance.length === 0 && <span style={styles.kpiSub}>No orders in this period</span>}
-                  {staffPerformance.slice(0, 4).map(([name, result], index) => (
-                    <div key={name} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", alignItems: "center", gap: 8, paddingTop: index ? 8 : 2, borderTop: index ? "1px solid rgba(10,10,10,0.07)" : 0 }}>
-                      <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 99, background: index === 0 ? "#fef3c7" : "#ece8df", color: index === 0 ? "#b45309" : "#6c6a65", fontSize: 10, fontWeight: 900 }}>{index + 1}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: "#4a4843" }}>{name}<small style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#8c8982" }}>{result.orders} order{result.orders === 1 ? "" : "s"}</small></span>
-                      <strong style={{ fontSize: 12, color: "#0a0a0a" }}>{formatCurrency(result.revenue)}</strong>
-                    </div>
-                  ))}
-                </div>
-
-              </div>
-
-              </>}
             </div>
             );
 

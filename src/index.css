@@ -586,3 +586,36 @@ html, body, #root {
     font-size: 16px !important;
   }
 }
+
+.management-overview { display: grid; gap: 12px; min-width: 0; }
+.overview-comparison { font-size: 10px; color: var(--cp-muted); margin: 0; line-height: 1.5; }
+.overview-kpis { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 8px; }
+.overview-card { min-width: 0; border: 1px solid var(--cp-line); border-radius: 14px; background: #fff; padding: 12px; }
+.overview-card h2 { font: 400 22px/1.2 Georgia,serif; margin: 0 0 10px; }
+.overview-card small, .overview-card p { font-size: 10px; color: var(--cp-muted); line-height: 1.5; }
+.overview-kpi { display: flex; flex-direction: column; gap: 6px; }
+.overview-kpi > span { font-size: 11px; color: var(--cp-muted); }
+.overview-kpi > strong { font: 400 clamp(20px,6vw,28px)/1.2 Georgia,serif; overflow-wrap: anywhere; }
+.overview-card svg { display: block; width: 100%; height: auto; margin-top: 12px; }
+.overview-card svg text { font: 9px Arial,sans-serif; fill: #6c6a65; }
+.overview-chart-labels { display: flex; justify-content: space-between; font-size: 9px; color: var(--cp-muted); }
+.overview-legend { text-align: center; }
+.overview-card table { width: 100%; table-layout: fixed; border-collapse: collapse; font-size: 10px; margin-top: 10px; }
+.overview-card th { color: var(--cp-muted); font-weight: 500; text-align: right; padding-bottom: 7px; }
+.overview-card td { border-top: 1px solid var(--cp-stone); padding: 9px 0; text-align: right; overflow-wrap: anywhere; }
+.overview-card th:first-child, .overview-card td:first-child { width: 42%; text-align: left; padding-right: 6px; }
+.overview-flavour { display: flex; gap: 6px; align-items: center; }
+.overview-flavour img { width: 28px; height: 34px; object-fit: cover; border-radius: 6px; flex-shrink: 0; }
+.overview-hours { display: grid; grid-template-columns: repeat(12,minmax(0,1fr)); gap: 5px; margin-top: 12px; }
+.overview-hours > div { display: flex; flex-direction: column; align-items: center; gap: 5px; min-width: 0; }
+.overview-hour-track { height: 82px; width: 100%; display: flex; align-items: end; border-bottom: 1px solid var(--cp-line); }
+.overview-hour-track span { width: 100%; background: var(--cp-ink); border-radius: 3px 3px 0 0; }
+.overview-hours b { font-size: 9px; font-weight: 500; }
+.overview-mix { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.overview-mix > span { display: flex; flex-direction: column; gap: 6px; font-size: 11px; }
+.overview-mix strong { font: 400 26px Georgia,serif; }
+.overview-mix-bar { height: 8px; background: var(--cp-stone); border-radius: 8px; overflow: hidden; margin-top: 12px; }
+.overview-mix-bar span { display: block; height: 100%; background: var(--cp-ink); }
+.overview-unit { display: block; }
+.overview-card summary { font-size: 11px; padding: 8px 0; cursor: pointer; }
+.overview-detail-row { display: flex; justify-content: space-between; gap: 6px; font-size: 10px; padding: 6px 0; border-top: 1px solid var(--cp-stone); }
