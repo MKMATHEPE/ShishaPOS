@@ -217,7 +217,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
   const label = { fontSize: 9, fontWeight: 900, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.1em" };
   const field = { minHeight: 42, border: "1px solid #d8d4cb", borderRadius: 9, background: "#fff", padding: "0 10px", color: "#0a0a0a", fontFamily: "inherit", fontWeight: 700, minWidth: 0 };
   const selectField = { ...field, fontSize: 11, fontWeight: 700, padding: "0 8px" };
-  return <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+  return <div className="finance-panel expand-down">
     <div style={styles.managementSectionHeading}>
       <div><span style={styles.managementEyebrow}>Finance journal</span><strong style={styles.managementSectionTitle}>{periodLabel}</strong></div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge}>{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #d8d4cb", background: "#fff", color: "#4a4843", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
@@ -2414,6 +2414,8 @@ const styles = {
     boxShadow: "0 4px 18px rgba(10,10,10,0.035)",
   },
   settingsPanel: {
+    flexShrink: 0,
+    minWidth: 0,
     display: "flex",
     flexDirection: "column",
     gap: 10,

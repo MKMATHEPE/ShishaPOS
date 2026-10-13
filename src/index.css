@@ -444,11 +444,20 @@ button:disabled { opacity: .45; }
 .expenses-list .expense-error { color: #b91c1c; }
 .expense-actions > span { font-size: 10px; color: #6c6a65; }
 
-/* Finance actions have independent sizing, not inherited copy-button styles. */
+/* Keep finance sections in normal flow so long mobile content cannot compress
+   their height and paint subsequent sections over the action buttons. */
+.finance-panel {
+  display: flow-root;
+  min-width: 0;
+  flex: 0 0 auto;
+}
+.finance-panel > * + * { margin-top: 8px; }
+
+/* Finance actions grow with wrapped labels and mobile text sizing. */
 .finance-action-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  grid-auto-rows: 56px;
+  grid-auto-rows: minmax(56px, auto);
   gap: 8px;
   flex-shrink: 0;
   width: 100%;
@@ -460,7 +469,8 @@ button:disabled { opacity: .45; }
   justify-content: center;
   width: 100%;
   min-width: 0;
-  height: 56px;
+  min-height: 56px;
+  height: auto;
   margin: 0;
   padding: 8px;
   border: 0;
