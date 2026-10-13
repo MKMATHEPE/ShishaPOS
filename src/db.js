@@ -125,16 +125,18 @@ export async function fetchUnreturnedPipes() {
 }
 
 export async function insertOrder(order) {
-  if (!ok()) return
-  const today = localDateStr()
+  if (!ok()) return false
+  const orderTime = order.time instanceof Date ? order.time : new Date(order.time)
+  const sessionDate = order.sessionDate ?? [orderTime.getFullYear(), String(orderTime.getMonth()+1).padStart(2,"0"), String(orderTime.getDate()).padStart(2,"0")].join("-")
   const { error } = await supabase.from('pos_orders').insert({
     id: order.id, flavour: typeof order.flavour === 'object' ? order.flavour?.name : order.flavour, type: order.type,
     payment: order.payment, price: order.price, status: order.status,
-    time: order.time.toISOString(), session_date: today,
+    time: orderTime.toISOString(), session_date: sessionDate,
     sold_by: order.soldBy ?? null,
     shift_id: order.shiftId ?? null,
   })
-  if (error) console.error('insertOrder', error)
+  if (error && error.code !== '23505') { console.error('insertOrder', error); return false }
+  return true
 }
 
 export async function markOrderDelivered(id) {
@@ -216,7 +218,9 @@ export async function fetchExpenses() {
   if (error) { console.error('fetchExpenses', error); return null }
   return data.map(r => ({
     id: r.id, category: r.category, qty: r.qty,
-    amount: r.amount, time: r.time, shiftId: r.shift_id ?? null,
+    amount: Number(r.amount), time: r.time, shiftId: r.shift_id ?? null,
+    description: r.description ?? '', paidBy: r.paid_by ?? null,
+    reimbursedAt: r.reimbursed_at ?? null,
   }))
 }
 
@@ -226,12 +230,75 @@ export async function syncExpenses(expenses) {
     const rows = expenses.map(e => ({
       id: e.id, category: e.category, qty: e.qty ?? null,
       amount: e.amount, time: e.time, shift_id: e.shiftId ?? null,
+      description: e.description || null, paid_by: e.paidBy || null,
+      reimbursed_at: e.reimbursedAt || null,
     }))
-    const { error } = await supabase.from('pos_expenses').upsert(rows, { onConflict: 'id' })
+    let { error } = await supabase.from('pos_expenses').upsert(rows, { onConflict: 'id' })
+    // Keep the existing app usable while the finance migration is being applied.
+    if (error && ['PGRST204', '42703'].includes(error.code)) {
+      const legacyRows = rows.map(row => ({ id: row.id, category: row.category, qty: row.qty, amount: row.amount, time: row.time, shift_id: row.shift_id }))
+      ;({ error } = await supabase.from('pos_expenses').upsert(legacyRows, { onConflict: 'id' }))
+    }
     if (error) { console.error('syncExpenses', error); return }
     const { error: delError } = await supabase.from('pos_expenses').delete().not('id', 'in', `(${expenses.map(e => e.id).join(',')})`)
     if (delError) console.error('syncExpenses delete', delError)
   } else {
     await supabase.from('pos_expenses').delete().neq('id', 0)
   }
+}
+
+// ── Finance journal ───────────────────────────────────
+export async function fetchFinanceJournal() {
+  if (!ok()) return null
+  const [partners, transactions, settings, manualSales] = await Promise.all([
+    supabase.from('pos_finance_partners').select('*'),
+    supabase.from('pos_finance_transactions').select('*').order('transaction_date', { ascending: false }).order('created_at', { ascending: false }),
+    supabase.from('pos_finance_settings').select('*').eq('id', true).maybeSingle(),
+    supabase.from('pos_manual_sales').select('*').order('sale_date', { ascending: false }).order('created_at', { ascending: false }),
+  ])
+  const failed = partners.error || transactions.error || settings.error || manualSales.error
+  if (failed) {
+    if (!['PGRST205', '42P01'].includes(failed.code)) console.error('fetchFinanceJournal', failed)
+    return null
+  }
+  return {
+    partners: partners.data.map(row => ({ profileId: row.profile_id, profitShare: Number(row.profit_share) })),
+    transactions: transactions.data.map(row => ({ id: row.id, kind: row.kind, profileId: row.profile_id, amount: Number(row.amount), description: row.description ?? '', date: row.transaction_date, createdAt: row.created_at })),
+    manualSales: manualSales.data.map(row => ({ id: row.id, date: row.sale_date, amount: Number(row.amount), payment: row.payment, description: row.description, reason: row.reason, createdAt: row.created_at })),
+    lockedThrough: settings.data?.locked_through ?? null,
+  }
+}
+
+export async function addManualSale(sale) {
+  if (!ok()) return null
+  const { data, error } = await supabase.from('pos_manual_sales').insert({ sale_date: sale.date, amount: sale.amount, payment: sale.payment, description: sale.description, reason: sale.reason }).select().single()
+  if (error) { console.error('addManualSale', error); return null }
+  return { id: data.id, date: data.sale_date, amount: Number(data.amount), payment: data.payment, description: data.description, reason: data.reason, createdAt: data.created_at }
+}
+
+export async function saveFinancePartners(partners) {
+  if (!ok()) return false
+  const { error: clearError } = await supabase.from('pos_finance_partners').delete().not('profile_id', 'is', null)
+  if (clearError) { console.error('saveFinancePartners clear', clearError); return false }
+  if (!partners.length) return true
+  const { error } = await supabase.from('pos_finance_partners').insert(partners.map(p => ({ profile_id: p.profileId, profit_share: p.profitShare })))
+  if (error) { console.error('saveFinancePartners', error); return false }
+  return true
+}
+
+export async function addFinanceTransaction(transaction) {
+  if (!ok()) return null
+  const { data, error } = await supabase.from('pos_finance_transactions').insert({
+    kind: transaction.kind, profile_id: transaction.profileId, amount: transaction.amount,
+    description: transaction.description || null, transaction_date: transaction.date,
+  }).select().single()
+  if (error) { console.error('addFinanceTransaction', error); return null }
+  return { id: data.id, kind: data.kind, profileId: data.profile_id, amount: Number(data.amount), description: data.description ?? '', date: data.transaction_date, createdAt: data.created_at }
+}
+
+export async function setFinanceLock(lockedThrough) {
+  if (!ok()) return false
+  const { error } = await supabase.from('pos_finance_settings').upsert({ id: true, locked_through: lockedThrough || null, updated_by: (await supabase.auth.getUser()).data.user?.id, updated_at: new Date().toISOString() })
+  if (error) { console.error('setFinanceLock', error); return false }
+  return true
 }

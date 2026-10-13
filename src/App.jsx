@@ -7,9 +7,10 @@ import {
   fetchStock, syncStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder,
   fetchExpenses, syncExpenses,
-  fetchHistoricalRevenue,
+  fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
+import { getOfflineOrders, queueOfflineOrder, removeOfflineOrder } from "./offlineOrders";
 
 const FLAVOURS = [
   { id: "lk", name: "Lady Killer", short: "LK", icon: "🌹", bg: "#fff1f2", color: "#be123c", border: "#fecdd3" },
@@ -57,6 +58,11 @@ function localToday() {
   return [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
 }
 
+function createOrderId() {
+  const randomPart = crypto.getRandomValues(new Uint16Array(1))[0] % 1000;
+  return Date.now() * 1000 + randomPart;
+}
+
 function dateInputValue(date) {
   return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
 }
@@ -95,6 +101,220 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
+function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom, dateTo, canAddManualSale, onExpense, onManualSale, onPartnersChange, onTransaction, onLockChange }) {
+  const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
+  const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday() });
+  const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
+  const [activeAction, setActiveAction] = useState(null);
+  const [message, setMessage] = useState("");
+  const partners = journal.partners ?? [];
+  const transactions = (journal.transactions ?? []).filter(item => item.date >= dateFrom && item.date <= dateTo);
+  const manualSales = (journal.manualSales ?? []).filter(item => item.date >= dateFrom && item.date <= dateTo);
+  const manualRevenue = manualSales.reduce((sum, item) => sum + item.amount, 0);
+  const totalRevenue = revenue + manualRevenue;
+  const expenseTotal = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const profit = totalRevenue - expenseTotal;
+  const reimbursements = transactions.filter(item => item.kind === "reimbursement");
+  const payouts = transactions.filter(item => item.kind === "partner_payout");
+  const partnerTotal = partners.reduce((sum, item) => sum + Number(item.profitShare || 0), 0);
+  const sharesValid = partnerTotal === 0 || Math.abs(partnerTotal - 100) < 0.01;
+  const personName = id => users.find(user => user.id === id)?.name ?? "Removed user";
+  const rows = users.map(user => {
+    const spent = expenses.filter(item => item.paidBy === user.id).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const refunded = reimbursements.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
+    const partner = partners.find(item => item.profileId === user.id);
+    const effectiveShare = partner ? (partnerTotal === 0 ? 100 / partners.length : sharesValid ? Number(partner.profitShare || 0) : 0) : 0;
+    const share = partner && profit > 0 ? profit * effectiveShare / 100 : 0;
+    const paid = payouts.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
+    return { user, spent, refunded, reimbursementDue: Math.max(0, spent - refunded), share, paid, profitDue: Math.max(0, share - paid) };
+  }).filter(row => row.spent || row.refunded || row.share || row.paid || partners.some(item => item.profileId === row.user.id));
+  const totalDue = rows.reduce((sum, row) => sum + row.reimbursementDue + row.profitDue, 0);
+  const locked = journal.lockedThrough && entry.date <= journal.lockedThrough;
+
+  const togglePartner = user => {
+    const exists = partners.some(item => item.profileId === user.id);
+    const next = exists ? partners.filter(item => item.profileId !== user.id) : [...partners, { profileId: user.id, profitShare: 0 }];
+    onPartnersChange(next);
+  };
+  const updateShare = (profileId, value) => onPartnersChange(partners.map(item => item.profileId === profileId ? { ...item, profitShare: Math.max(0, Math.min(100, Number(value) || 0)) } : item));
+  const submit = async () => {
+    if (!entry.profileId || Number(entry.amount) <= 0) return setMessage("Choose a person and enter an amount.");
+    if (locked) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
+    const ok = await onTransaction({ ...entry, amount: Number(entry.amount) });
+    setMessage(ok ? "Payment recorded." : "Could not record the payment.");
+    if (ok) setEntry(current => ({ ...current, amount: "", description: "" }));
+  };
+  const submitExpense = () => {
+    if (!spend.description.trim() || Number(spend.amount) <= 0) return setMessage("Describe the expense and enter an amount.");
+    if (journal.lockedThrough && spend.date <= journal.lockedThrough) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
+    onExpense({ ...spend, amount: Number(spend.amount) });
+    setSpend(current => ({ ...current, description: "", amount: "" }));
+    setMessage(spend.paidBy ? "Personal expense saved. It now appears under Who is owed." : "Business expense saved.");
+    setActiveAction(null);
+  };
+  const submitManualSale = async () => {
+    if (Number(sale.amount) <= 0 || !sale.description.trim() || !sale.reason.trim()) return setMessage("Enter the amount, description and reason.");
+    if (journal.lockedThrough && sale.date <= journal.lockedThrough) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
+    const ok = await onManualSale({ ...sale, amount: Number(sale.amount) });
+    setMessage(ok ? "Missing sale added." : "Could not add the sale.");
+    if (ok) { setSale(current => ({ ...current, amount: "", description: "", reason: "" })); setActiveAction(null); }
+  };
+  const statement = row => {
+    const text = [`${personName(row.user.id)} · Finance statement · ${periodLabel}`, `Expenses paid personally: ${formatCurrency(row.spent)}`, `Reimbursed: ${formatCurrency(row.refunded)}`, `Reimbursement due: ${formatCurrency(row.reimbursementDue)}`, `Profit share: ${formatCurrency(row.share)}`, `Profit paid: ${formatCurrency(row.paid)}`, `Total due: ${formatCurrency(row.reimbursementDue + row.profitDue)}`].join("\n");
+    navigator.clipboard?.writeText(text); setMessage("Statement copied.");
+  };
+  const startPayment = (kind, row = null) => {
+    setEntry(current => ({ ...current, kind, profileId: row?.user.id ?? "", amount: row ? String(kind === "reimbursement" ? row.reimbursementDue : row.profitDue) : "", date: localToday() }));
+    setActiveAction(kind);
+    setMessage("");
+  };
+  const activity = [
+    ...manualSales.map(item => ({ id: `s-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: `Manual ${item.payment} sale`, detail: `${item.description} · ${item.reason}`, status: "Adjustment", tone: "#2563eb", amount: item.amount })),
+    ...expenses.map(item => { const outstanding = item.paidBy && (rows.find(row => row.user.id === item.paidBy)?.reimbursementDue ?? 0) > 0; return { id: `e-${item.id}`, date: String(item.time).slice(0, 10), time: item.time, title: item.paidBy ? `${personName(item.paidBy)} paid ${formatCurrency(item.amount)}` : `Business spent ${formatCurrency(item.amount)}`, detail: item.description || item.category, status: outstanding ? "Needs repayment" : item.paidBy ? "Repaid" : "Business paid", tone: outstanding ? "#b45309" : item.paidBy ? "#16a34a" : "#64748b", amount: -Number(item.amount) }; }),
+    ...transactions.map(item => ({ id: `t-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: item.kind === "reimbursement" ? `Paid back ${personName(item.profileId)}` : `Paid partner ${personName(item.profileId)}`, detail: item.description || (item.kind === "reimbursement" ? "Expense reimbursement" : "Profit payout"), status: "Paid", tone: "#16a34a", amount: -item.amount })),
+  ].sort((a, b) => String(b.time).localeCompare(String(a.time))).slice(0, 8);
+  const businessPaidExpenses = expenses.filter(item => !item.paidBy).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+  const refundsPaid = reimbursements.reduce((sum, item) => sum + item.amount, 0);
+  const profitPaid = payouts.reduce((sum, item) => sum + item.amount, 0);
+  const businessAvailable = totalRevenue - businessPaidExpenses - refundsPaid - profitPaid;
+  const downloadReport = () => {
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, char => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[char]));
+    const money = value => `R${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+    const issued = new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
+    const refundsDue = rows.reduce((sum, row) => sum + row.reimbursementDue, 0);
+    const profitDue = rows.reduce((sum, row) => sum + row.profitDue, 0);
+    const paymentRows = transactions.map(item => `<tr><td>${esc(item.date)}</td><td>${esc(personName(item.profileId))}</td><td>${item.kind === 'reimbursement' ? 'Refund of expenses' : 'Profit payout'}</td><td class="n">${money(item.amount)}</td></tr>`).join('');
+    const manualSaleRows = manualSales.map(item => `<tr><td>${esc(item.date)}</td><td>${esc(item.payment === 'card' ? 'Card' : 'Cash')}</td><td>${esc(item.description)}</td><td>${esc(item.reason)}</td><td class="n">${money(item.amount)}</td></tr>`).join('');
+    const personRows = rows.map(row => `<tr><td>${esc(row.user.name)}${partners.some(partner => partner.profileId === row.user.id) ? ' <small>(partner)</small>' : ''}</td><td class="n">${money(row.spent)}</td><td class="n">${money(row.refunded)}</td><td class="n">${money(row.share)}</td><td class="n">${money(row.paid)}</td><td class="n">${money(row.refunded + row.paid)}</td><td class="n"><b>${money(row.reimbursementDue + row.profitDue)}</b></td></tr>`).join('');
+    const html = `<!doctype html><html><head><meta charset="utf-8"><title>The Chill Pipe finance report</title><style>
+      *{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#20201e;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}.toolbar{position:sticky;top:0;padding:12px;text-align:center;background:#0f172a}.toolbar button{border:0;border-radius:8px;background:#fff;color:#0f172a;padding:10px 18px;font-weight:800;cursor:pointer}.paper{max-width:1050px;margin:24px auto;background:#fff;padding:46px 48px;box-shadow:0 10px 35px #0001}.head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #216f59;padding-bottom:20px;margin-bottom:32px}.head h1{font-size:36px;line-height:1;margin:0 0 7px}.muted{color:#6d6c67}.issued{text-align:right}.section{margin-top:32px}.section h2{font-size:16px;letter-spacing:.07em;color:#6d6c67;text-transform:uppercase;margin:0 0 18px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px 42px}.summary div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted #aaa;padding:7px 0}.summary b{white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#f1f0eb;color:#4b4a47;text-align:left;font-size:13px}th,td{padding:12px 9px;border-bottom:1px solid #ddd}.n{text-align:right;white-space:nowrap}small{color:#6d6c67}.total td{font-weight:900;font-size:16px}@media(max-width:700px){.paper{margin:0;padding:24px 18px}.summary{grid-template-columns:1fr}.sc{overflow-x:auto}.head h1{font-size:28px}}@media print{body{background:#fff}.toolbar{display:none}.paper{box-shadow:none;margin:0;max-width:none;padding:16px 10px}@page{size:A4 landscape;margin:12mm}}
+    </style></head><body><div class="toolbar"><button onclick="window.print()">Download / Save as PDF</button></div><main class="paper"><header class="head"><div><h1>The Chill Pipe</h1><div class="muted">Combined statement of account</div><div class="muted">${esc(periodLabel)}</div></div><div class="issued muted">Issued ${esc(issued)}</div></header>
+    <section class="section"><h2>Business summary</h2><div class="summary"><div><span>Income received</span><b>${money(totalRevenue)}</b></div><div><span>Less: expenses</span><b>${money(expenseTotal)}</b></div><div><span>Profit after deductions</span><b>${money(profit)}</b></div><div><span>Profit paid to partners</span><b>${money(profitPaid)}</b></div><div><span>Profit remaining to pay</span><b>${money(profitDue)}</b></div><div><span>Refunds paid</span><b>${money(refundsPaid)}</b></div><div><span>Refunds still owed</span><b>${money(refundsDue)}</b></div><div><span>Business cash</span><b>${money(businessAvailable)}</b></div>${manualRevenue ? `<div><span>Manual sale adjustments</span><b>${money(manualRevenue)}</b></div>` : ''}</div></section>
+    <section class="section"><h2>Each person</h2><div class="sc"><table><thead><tr><th>Person</th><th class="n">Spent</th><th class="n">Refunded</th><th class="n">Profit share</th><th class="n">Profit paid</th><th class="n">Total paid</th><th class="n">Still owed</th></tr></thead><tbody>${personRows || '<tr><td colspan="7" class="muted">No balances for this period.</td></tr>'}</tbody></table></div></section>
+    <section class="section"><h2>Payments made</h2><div class="sc"><table><thead><tr><th>Date</th><th>Person</th><th>Type</th><th class="n">Amount</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="4" class="muted">No payments for this period.</td></tr>'}<tr class="total"><td colspan="3">Total paid out</td><td class="n">${money(refundsPaid + profitPaid)}</td></tr></tbody></table></div></section>
+    ${manualSaleRows ? `<section class="section"><h2>Manual sale adjustments</h2><div class="sc"><table><thead><tr><th>Date</th><th>Payment</th><th>Description</th><th>Reason</th><th class="n">Amount</th></tr></thead><tbody>${manualSaleRows}</tbody></table></div></section>` : ''}</main></body></html>`;
+    const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url; link.download = `the-chill-pipe-finance-${dateFrom}-to-${dateTo}.html`;
+    document.body.appendChild(link); link.click(); link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
+    setMessage('Finance report downloaded.');
+  };
+
+  const card = { background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 13, padding: 13, display: "flex", flexDirection: "column", gap: 10 };
+  const label = { fontSize: 9, fontWeight: 900, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" };
+  const field = { minHeight: 42, border: "1px solid #dbe3ee", borderRadius: 9, background: "#fff", padding: "0 10px", color: "#0f172a", fontFamily: "inherit", fontWeight: 700, minWidth: 0 };
+  const selectField = { ...field, fontSize: 11, fontWeight: 700, padding: "0 8px" };
+  return <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+    <div style={styles.managementSectionHeading}>
+      <div><span style={styles.managementEyebrow}>Finance journal</span><strong style={styles.managementSectionTitle}>{periodLabel}</strong></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge}>{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #dbe3ee", background: "#fff", color: "#334155", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
+    </div>
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+      {[
+        ["Received", totalRevenue, "#16a34a"], ["Spent", expenseTotal, "#dc2626"], ["Available", businessAvailable, businessAvailable >= 0 ? "#0f172a" : "#dc2626"],
+      ].map(([name, value, color]) => <div key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
+    </div>
+
+    {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
+
+    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+      <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")} style={{ ...styles.addUserBtn, minHeight: 48, padding: "0 8px", fontSize: 11 }}>＋ Add expense</button>
+      {canAddManualSale && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>＋ Missing sale</button>}
+      <button onClick={() => startPayment("reimbursement")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay someone back</button>
+      <button onClick={() => startPayment("partner_payout")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay partner</button>
+    </div>
+    {message && !activeAction && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
+
+    {activeAction === "expense" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(15,23,42,0.05)" }}>
+      <strong style={{ fontSize: 14, color: "#0f172a" }}>Add expense</strong>
+      <div style={{ display: "flex", flexDirection: "column", gap: 9, paddingTop: 4 }}>
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+          <select value={spend.paidBy} onChange={event => setSpend(current => ({ ...current, paidBy: event.target.value }))} style={selectField} aria-label="Who paid for this expense">
+            <option value="">Paid by business</option>
+            {users.map(user => <option key={user.id} value={user.id}>Paid by {user.name}</option>)}
+          </select>
+          <select value={spend.category} onChange={event => setSpend(current => ({ ...current, category: event.target.value }))} style={selectField} aria-label="Expense category">
+            {['Transport', 'Wages', 'Supplies', 'Rent', 'Utilities', 'Repairs', 'Other'].map(category => <option key={category}>{category}</option>)}
+          </select>
+          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
+            <span style={{ fontSize: 9, fontWeight: 900, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Expense date</span>
+            <input type="date" value={spend.date} max={localToday()} onChange={event => setSpend(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} aria-label="Expense date" />
+          </div>
+          <input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={spend.amount} onChange={event => setSpend(current => ({ ...current, amount: event.target.value }))} style={field} aria-label="Expense amount" />
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Date:</span>
+          {[{ label: "Today", days: 0 }, { label: "Yesterday", days: -1 }].map(option => {
+            const date = new Date(); date.setDate(date.getDate() + option.days); const value = dateInputValue(date);
+            return <button key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0f172a" : "1px solid #dbe3ee", borderRadius: 8, background: spend.date === value ? "#0f172a" : "#fff", color: spend.date === value ? "#fff" : "#475569", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
+          })}
+        </div>
+        <input placeholder="What was the money spent on?" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
+        <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>Save expense</button></div>
+      </div>
+    </div>}
+
+    {activeAction === "manual_sale" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0f172a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#1d4ed8", background: "#dbeafe", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Sale date</span><input type="date" max={localToday()} value={sale.date} onChange={event => setSale(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} /></div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Payment</span><select value={sale.payment} onChange={event => setSale(current => ({ ...current, payment: event.target.value }))} style={selectField}><option value="cash">Cash</option><option value="card">Card</option></select></div>
+      </div>
+      <input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={sale.amount} onChange={event => setSale(current => ({ ...current, amount: event.target.value }))} style={{ ...field, fontSize: 18 }} />
+      <input placeholder="Sale description" value={sale.description} onChange={event => setSale(current => ({ ...current, description: event.target.value }))} style={field} />
+      <input placeholder="Why was it not recorded?" value={sale.reason} onChange={event => setSale(current => ({ ...current, reason: event.target.value }))} style={field} />
+      <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
+    </div>}
+
+    <div style={card}>
+      <span style={label}>Who is owed</span>
+      {rows.length === 0 ? <span style={{ fontSize: 12, color: "#94a3b8" }}>No balances due.</span> : rows.map(row => <div key={row.user.id} style={{ borderTop: "1px solid #edf2f7", paddingTop: 9, display: "grid", gridTemplateColumns: "1fr auto", gap: 6 }}>
+        <div><strong style={{ fontSize: 12, color: "#0f172a" }}>{row.user.name}</strong><small style={{ display: "block", color: "#64748b" }}>{row.reimbursementDue > 0 ? `Expenses ${formatCurrency(row.reimbursementDue)}` : ""}{row.reimbursementDue > 0 && row.profitDue > 0 ? " · " : ""}{row.profitDue > 0 ? `Profit ${formatCurrency(row.profitDue)}` : ""}</small><button onClick={() => statement(row)} style={{ border: 0, background: "none", color: "#2563eb", fontSize: 9, fontWeight: 800, padding: "4px 0 0", cursor: "pointer" }}>Copy statement</button></div>
+        <div style={{ textAlign: "right" }}><strong style={{ display: "block", color: "#b45309", marginBottom: 5 }}>{formatCurrency(row.reimbursementDue + row.profitDue)}</strong>{row.reimbursementDue > 0 ? <button onClick={() => startPayment("reimbursement", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay back</button> : row.profitDue > 0 ? <button onClick={() => startPayment("partner_payout", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay profit</button> : null}</div>
+      </div>)}
+    </div>
+
+    {(activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down" style={card}>
+      <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <select value={entry.profileId} onChange={event => setEntry(current => ({ ...current, profileId: event.target.value }))} style={selectField}><option value="">Choose person</option>{users.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
+        <input type="date" value={entry.date} onChange={event => setEntry(current => ({ ...current, date: event.target.value }))} style={field} />
+      </div>
+      <input type="number" min="0" placeholder="Amount (R)" value={entry.amount} onChange={event => setEntry(current => ({ ...current, amount: event.target.value }))} style={{ ...field, fontSize: 18 }} />
+      <input placeholder="Note (optional)" value={entry.description} onChange={event => setEntry(current => ({ ...current, description: event.target.value }))} style={field} />
+      <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
+      {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
+    </div>}
+
+    <div style={card}>
+      <span style={label}>Recent activity</span>
+      {activity.length === 0 ? <span style={{ fontSize: 12, color: "#94a3b8" }}>No activity yet.</span> : activity.map(item => <div key={item.id} style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", gap: 8, alignItems: "center", borderTop: "1px solid #edf2f7", paddingTop: 9 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: ["Paid", "Repaid"].includes(item.status) ? "#dcfce7" : item.status === "Needs repayment" ? "#fff7ed" : "#f1f5f9", color: item.tone, fontWeight: 900 }}>{["Paid", "Repaid"].includes(item.status) ? "✓" : "↓"}</span>
+        <span><strong style={{ display: "block", fontSize: 11, color: "#334155" }}>{item.title}</strong><small style={{ color: "#94a3b8" }}>{item.detail} · {item.date === localToday() ? "Today" : formatDateShort(item.date)}</small></span>
+        <span style={{ textAlign: "right" }}><strong style={{ display: "block", fontSize: 11, color: item.amount > 0 ? "#16a34a" : "#dc2626" }}>{item.amount > 0 ? "+" : ""}{formatCurrency(Math.abs(item.amount))}</strong><small style={{ color: item.tone, fontSize: 8, fontWeight: 800 }}>{item.status}</small></span>
+      </div>)}
+    </div>
+
+    <details style={card}>
+      <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#334155" }}>Finance settings</summary>
+      <div><span style={label}>Profit sharing</span><div style={{ fontSize: 11, color: sharesValid ? "#64748b" : "#dc2626", marginTop: 3 }}>{partners.length ? (partnerTotal === 0 ? `Equal split · ${partners.length} partner${partners.length === 1 ? "" : "s"}` : `${partnerTotal.toFixed(1)}% allocated${sharesValid ? " ✓" : " · must total 100%"}`) : "No partners selected"}</div></div>
+      {users.map(user => { const partner = partners.find(item => item.profileId === user.id); return <div key={user.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 76px", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={!!partner} onChange={() => togglePartner(user)} aria-label={`Make ${user.name} a partner`} />
+        <span style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>{user.name}</span>
+        {partner ? <input type="number" min="0" max="100" step="0.1" value={partner.profitShare || ""} placeholder="Equal" onChange={event => updateShare(user.id, event.target.value)} style={{ ...field, width: 76, fontSize: 11 }} aria-label={`${user.name} profit percentage`} /> : <span />}
+      </div>; })}
+      <div style={{ height: 1, background: "#edf2f7" }} />
+      <div><span style={label}>Period lock</span><div style={{ fontSize: 11, color: journal.lockedThrough ? "#b45309" : "#64748b", marginTop: 3 }}>{journal.lockedThrough ? `Locked through ${formatDateShort(journal.lockedThrough)}` : "No period locked"}</div></div>
+      <div style={{ display: "flex", gap: 8 }}>
+        <input type="date" aria-label="Lock accounting through date" value={journal.lockedThrough ?? ""} max={localToday()} onChange={event => onLockChange(event.target.value)} style={{ ...field, flex: 1 }} />
+        {journal.lockedThrough && <button onClick={() => onLockChange(null)} style={{ ...styles.copyBtn, minWidth: 74 }}>Reopen</button>}
+      </div>
+    </details>
+  </div>;
+}
+
 export default function App() {
   const [orders, setOrders] = useState([]);
   const [managerCurrentOrders, setManagerCurrentOrders] = useState([]);
@@ -102,7 +322,6 @@ export default function App() {
   const [prices, setPrices] = useState(DEFAULT_PRICES);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
-  const [avgDailyRevenue, setAvgDailyRevenue] = useState(null);
   const [users, setUsers] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
   const [authLoading, setAuthLoading] = useState(true);
@@ -158,18 +377,12 @@ export default function App() {
   const [consumablesCollapsed, setConsumablesCollapsed] = useState(false);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
   const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
-  const [kpisCollapsed, setKpisCollapsed] = useState(true);
-  const [accountingCollapsed, setAccountingCollapsed] = useState(true);
-  const [expensesCollapsed, setExpensesCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [stockPlanningOrders, setStockPlanningOrders] = useState([]);
-  const [newExpenseCat, setNewExpenseCat] = useState("Coal");
-  const [newExpenseDesc, setNewExpenseDesc] = useState("");
-  const [newExpenseAmt, setNewExpenseAmt] = useState("");
   const [confirmLogout, setConfirmLogout] = useState(false);
   const [currentTime, setCurrentTime] = useState(() => formatTime(new Date()));
   const [currentMinute, setCurrentMinute] = useState(() => Date.now());
@@ -187,9 +400,74 @@ export default function App() {
   const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
+  const [managementView, setManagementView] = useState("overview");
+  const [financeJournal, setFinanceJournal] = useState({ partners: [], transactions: [], manualSales: [], lockedThrough: null });
+  const [isOnline, setIsOnline] = useState(() => navigator.onLine);
+  const [pendingOrderCount, setPendingOrderCount] = useState(0);
+  const [syncingOrders, setSyncingOrders] = useState(false);
+  const [syncMessage, setSyncMessage] = useState("");
   const [sessionDates, setSessionDates] = useState([]);
   const listRef = useRef(null);
   const undoTimer = useRef(null);
+  const orderSyncRunning = useRef(false);
+
+  const syncOfflineOrders = useCallback(async () => {
+    if (!navigator.onLine || !activeUser || orderSyncRunning.current) return;
+    orderSyncRunning.current = true;
+    setSyncingOrders(true);
+    setSyncMessage("");
+    try {
+      const pending = await getOfflineOrders();
+      let synced = 0;
+      for (const order of pending) {
+        const saved = await insertOrder(order);
+        if (!saved) break;
+        await removeOfflineOrder(order.id);
+        synced += 1;
+        setOrders(prev => prev.map(item => item.id === order.id ? { ...item, pendingSync: false } : item));
+      }
+      const remaining = await getOfflineOrders();
+      setPendingOrderCount(remaining.length);
+      if (synced > 0) setSyncMessage(`${synced} offline order${synced === 1 ? "" : "s"} synced`);
+    } finally {
+      orderSyncRunning.current = false;
+      setSyncingOrders(false);
+    }
+  }, [activeUser]);
+
+  useEffect(() => {
+    const goOnline = () => { setIsOnline(true); syncOfflineOrders(); };
+    const goOffline = () => setIsOnline(false);
+    window.addEventListener("online", goOnline);
+    window.addEventListener("offline", goOffline);
+    return () => {
+      window.removeEventListener("online", goOnline);
+      window.removeEventListener("offline", goOffline);
+    };
+  }, [syncOfflineOrders]);
+
+  useEffect(() => {
+    if (!activeUser) return;
+    getOfflineOrders().then(pending => {
+      setPendingOrderCount(pending.length);
+      setOrders(prev => {
+        const known = new Set(prev.map(order => order.id));
+        return [...prev, ...pending.filter(order => !known.has(order.id)).map(order => ({
+          ...order,
+          flavour: normalizeFlavour(order.flavour),
+          time: new Date(order.time),
+          pendingSync: true,
+        }))];
+      });
+      if (navigator.onLine && pending.length) syncOfflineOrders();
+    });
+  }, [activeUser, syncOfflineOrders]);
+
+  useEffect(() => {
+    if (!syncMessage || pendingOrderCount > 0) return;
+    const timer = setTimeout(() => setSyncMessage(""), 4000);
+    return () => clearTimeout(timer);
+  }, [syncMessage, pendingOrderCount]);
 
   useEffect(() => {
     if (listRef.current) {
@@ -218,19 +496,26 @@ export default function App() {
   useEffect(() => {
     if (!activeUser || !supabase) return;
     async function load() {
-      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, histRevenue, remoteUnreturned] = await Promise.all([
-        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchHistoricalRevenue(), fetchUnreturnedPipes(),
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, remoteUnreturned, remoteFinance, pendingOrders] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchUnreturnedPipes(), fetchFinanceJournal(), getOfflineOrders(),
       ]);
-      if (histRevenue !== null) setAvgDailyRevenue(histRevenue);
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
         setUsers(remoteUsers);
       }
       if (remoteStock && remoteStock.length > 0) setStock(remoteStock);
-      if (remoteOrders) setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (remoteOrders) {
+        const remoteIds = new Set(remoteOrders.map(order => order.id));
+        setOrders([
+          ...remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })),
+          ...pendingOrders.filter(order => !remoteIds.has(order.id)).map(order => ({ ...order, flavour: normalizeFlavour(order.flavour), time: new Date(order.time), pendingSync: true })),
+        ]);
+      }
+      setPendingOrderCount(pendingOrders.length);
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
+      if (remoteFinance) setFinanceJournal(remoteFinance);
       setDbReady(true);
     }
     load();
@@ -254,11 +539,17 @@ export default function App() {
   useEffect(() => {
     if (!dbReady || !supabase) return;
     async function refresh() {
-      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned] = await Promise.all([
-        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(),
+      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned, pendingOrders] = await Promise.all([
+        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), getOfflineOrders(),
       ]);
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
-      if (remoteOrders) setOrders(remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
+      if (remoteOrders) {
+        const remoteIds = new Set(remoteOrders.map(order => order.id));
+        setOrders([
+          ...remoteOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })),
+          ...pendingOrders.filter(order => !remoteIds.has(order.id)).map(order => ({ ...order, flavour: normalizeFlavour(order.flavour), time: new Date(order.time), pendingSync: true })),
+        ]);
+      }
       if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteStock && remoteStock.length > 0) {
@@ -282,12 +573,19 @@ export default function App() {
       if (refreshing) return;
       refreshing = true;
       try {
-        const [dailyOrders, unfinishedOrders] = await Promise.all([
+        const [dailyOrders, unfinishedOrders, pendingOrders] = await Promise.all([
           fetchOrders(),
           fetchUnfinishedOrders(),
+          getOfflineOrders(),
         ]);
         if (!alive) return;
-        if (dailyOrders) setOrders(dailyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+        if (dailyOrders) {
+          const remoteIds = new Set(dailyOrders.map(order => order.id));
+          setOrders([
+            ...dailyOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })),
+            ...pendingOrders.filter(order => !remoteIds.has(order.id)).map(order => ({ ...order, flavour: normalizeFlavour(order.flavour), time: new Date(order.time), pendingSync: true })),
+          ]);
+        }
         if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
       } finally {
         refreshing = false;
@@ -337,12 +635,12 @@ export default function App() {
   const rotaTopsQty   = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("rota top"))?.quantity ?? 0;
   const kopsQty       = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("kop"))?.quantity ?? 0;
 
-  const confirmOrder = useCallback(() => {
+  const confirmOrder = useCallback(async () => {
     if (!selectedFlavour) return;
     if (orderType === "full" && (hookahPipeQty <= 1 || rotasQty <= 1 || rotaTopsQty <= 1 || kopsQty <= 1)) return;
 
     const order = {
-      id: Date.now(),
+      id: createOrderId(),
       flavour: selectedFlavour,
       type: orderType,
       payment: payMethod,
@@ -353,25 +651,36 @@ export default function App() {
       pipeReturned: false,
     };
 
-    setOrders((prev) => [...prev, order]);
-    if (["Admin", "Manager"].includes(activeUser?.role)) setManagerCurrentOrders((prev) => [...prev, order]);
-    insertOrder(order);
+    const savedOnline = navigator.onLine ? await insertOrder(order) : false;
+    const orderForDisplay = { ...order, pendingSync: !savedOnline };
+    setOrders((prev) => [...prev, orderForDisplay]);
+    if (["Admin", "Manager"].includes(activeUser?.role)) setManagerCurrentOrders((prev) => [...prev, orderForDisplay]);
 
-    // Auto-deduct stock
-    const flavourId = selectedFlavour.id;
-    setStock(prev => prev.map(item => {
-      if (item.name === "Coal")
-        return { ...item, quantity: Math.max(0, item.quantity - COAL_PER_SALE) };
-      if (item.name === "Mouth Pieces")
-        return { ...item, quantity: Math.max(0, item.quantity - MOUTHPIECES_PER_SALE) };
-      if (item.name === "Flavour" && item.subItems)
-        return { ...item, subItems: item.subItems.map(s =>
-          s.id === flavourId
-            ? { ...s, quantity: Math.max(0, parseFloat((s.quantity - (FLAVOUR_PER_SALE[s.id] ?? 0)).toFixed(3))) }
-            : s
-        )};
-      return item;
-    }));
+    if (!savedOnline) {
+      await queueOfflineOrder(order);
+      const pending = await getOfflineOrders();
+      setPendingOrderCount(pending.length);
+      setIsOnline(navigator.onLine);
+      setSyncMessage("Order saved on this device");
+    }
+
+    if (savedOnline) {
+      // Online sales keep the existing stock behaviour. Offline sales never adjust stock.
+      const flavourId = selectedFlavour.id;
+      setStock(prev => prev.map(item => {
+        if (item.name === "Coal")
+          return { ...item, quantity: Math.max(0, item.quantity - COAL_PER_SALE) };
+        if (item.name === "Mouth Pieces")
+          return { ...item, quantity: Math.max(0, item.quantity - MOUTHPIECES_PER_SALE) };
+        if (item.name === "Flavour" && item.subItems)
+          return { ...item, subItems: item.subItems.map(s =>
+            s.id === flavourId
+              ? { ...s, quantity: Math.max(0, parseFloat((s.quantity - (FLAVOUR_PER_SALE[s.id] ?? 0)).toFixed(3))) }
+              : s
+          )};
+        return item;
+      }));
+    }
 
     setFlash(selectedFlavour.id);
     setUndoTarget(order.id);
@@ -402,14 +711,21 @@ export default function App() {
     }
   }, [loginUsername, loginPassword]);
 
-  const undoLast = useCallback(() => {
+  const undoLast = useCallback(async () => {
     if (!undoTarget) return;
+    const pending = orders.find(order => order.id === undoTarget)?.pendingSync;
     setOrders(prev => prev.filter(o => o.id !== undoTarget));
     setManagerCurrentOrders(prev => prev.filter(o => o.id !== undoTarget));
-    deleteOrder(undoTarget);
+    if (pending) {
+      await removeOfflineOrder(undoTarget);
+      const remaining = await getOfflineOrders();
+      setPendingOrderCount(remaining.length);
+    } else {
+      deleteOrder(undoTarget);
+    }
     setUndoTarget(null);
     clearTimeout(undoTimer.current);
-  }, [undoTarget]);
+  }, [undoTarget, orders]);
 
   // Accepts the full order object so there is no stale-closure risk when reading
   // order.status / order.pipeReturned — we inspect before any state mutation.
@@ -500,6 +816,7 @@ export default function App() {
   const canAccess = (tab) => {
     if (!activeUser) return false;
     if (tab === "pos") return true;
+    if (!isOnline) return false;
     if (isAdmin) return true;
     return currentUserPerms[tab] ?? false;
   };
@@ -592,6 +909,15 @@ export default function App() {
         </div>
 
         <main style={styles.mainContent}>
+          {(!isOnline || pendingOrderCount > 0 || syncMessage) && (
+            <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#eff6ff" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#bfdbfe" : "#a7f3d0" }}>
+              <div>
+                <strong>{!isOnline ? "Offline mode" : pendingOrderCount > 0 ? `${pendingOrderCount} waiting to sync` : syncMessage}</strong>
+                <span>{!isOnline ? " Orders stay on this device. Stock will not change." : pendingOrderCount > 0 ? " Stock will not be adjusted." : ""}</span>
+              </div>
+              {isOnline && pendingOrderCount > 0 && <button onClick={syncOfflineOrders} disabled={syncingOrders} style={styles.syncButton}>{syncingOrders ? "Syncing…" : "Sync now"}</button>}
+            </div>
+          )}
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
         <div style={styles.availabilityCard}>
@@ -708,10 +1034,10 @@ export default function App() {
                 </span>
                 <span style={styles.orderMeta}>
                   <strong>{o.flavour.name}</strong>
-                  <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {formatTime(o.time)}</small>
+                  <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {formatTime(o.time)}{o.pendingSync ? " · Waiting to sync" : ""}</small>
                 </span>
                 <span style={styles.orderPrice}>{formatCurrency(o.price)}</span>
-                <button onClick={() => markDelivered(o)} style={styles.deliverBtn}>Delivered</button>
+                <button onClick={() => markDelivered(o)} disabled={o.pendingSync} style={{ ...styles.deliverBtn, ...(o.pendingSync ? { opacity: 0.55, cursor: "not-allowed" } : {}) }}>{o.pendingSync ? "Sync first" : "Delivered"}</button>
                 {isAdmin && (orderDeleteConfirmId === o.id ? (
                   <div style={styles.orderDeleteConfirm}>
                     <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
@@ -804,9 +1130,6 @@ export default function App() {
               if (o.payment === "card") acc.card += o.price; else acc.cash += o.price;
               return acc;
             }, { gross: 0, card: 0, cash: 0 });
-            const displayFlavourCounts = displayOrders.reduce((acc, o) => {
-              acc[o.flavour.id] = (acc[o.flavour.id] || 0) + 1; return acc;
-            }, {});
             const displayDeliveredOrders = displayOrders.filter((o) => o.status === "delivered");
             const displayCurrentOrders   = displayOrders.filter((o) => o.status !== "delivered");
             const displayExpenses = expenses.filter(e => {
@@ -841,22 +1164,6 @@ export default function App() {
             // KPIs
             const totalOrders = displayOrders.length;
             const avgOrderValue = totalOrders > 0 ? displayTotals.gross / totalOrders : 0;
-            const refillRate = totalOrders > 0 ? Math.round((refillOrders.length / totalOrders) * 100) : 0;
-
-            const sortedFlavours = [...FLAVOURS].sort((a, b) => (displayFlavourCounts[b.id] || 0) - (displayFlavourCounts[a.id] || 0));
-            const topFlavour = totalOrders > 0 ? sortedFlavours[0] : null;
-            const topFlavourCount = topFlavour ? (displayFlavourCounts[topFlavour.id] || 0) : 0;
-            const leastFlavour = totalOrders > 0 ? sortedFlavours[sortedFlavours.length - 1] : null;
-            const leastFlavourCount = leastFlavour ? (displayFlavourCounts[leastFlavour.id] || 0) : 0;
-            const activeFlavours = FLAVOURS.filter(f => (displayFlavourCounts[f.id] || 0) > 0).length;
-
-            const sessionMins = (() => {
-              if (displayOrders.length < 2) return null;
-              const times = displayOrders.map(o => new Date(o.time).getTime());
-              return Math.round((Math.max(...times) - Math.min(...times)) / 60000);
-            })();
-            const ordersPerHour = sessionMins > 0 ? ((totalOrders / sessionMins) * 60).toFixed(1) : null;
-
             const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
             const lowStockCount = stock.reduce((count, item) => {
               if (item.subItems) return count + item.subItems.filter(subItem => subItem.quantity <= 1).length;
@@ -865,25 +1172,6 @@ export default function App() {
             const mgmtDateLabel = isViewingToday ? todayLabel
               : managementDateFrom === managementDateTo ? formatSessionDate(managementDateFrom)
               : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
-
-            // Status helpers
-            const refillStatus = refillRate >= 40
-              ? { label: "Strong", color: "#16a34a", bg: "#dcfce7", tip: "Customers are staying & coming back" }
-              : refillRate >= 20
-              ? { label: "Average", color: "#b45309", bg: "#fef9c3", tip: "Encourage more refills" }
-              : { label: "Low", color: "#dc2626", bg: "#fee2e2", tip: "Promote refill packages" };
-
-            const avgStatus = avgOrderValue >= prices.full * 0.9
-              ? { label: "Strong", color: "#16a34a", bg: "#dcfce7", tip: "Mostly new pipes — great revenue" }
-              : avgOrderValue >= (prices.full + prices.refill) / 2
-              ? { label: "Moderate", color: "#b45309", bg: "#fef9c3", tip: "Balance of pipes & refills" }
-              : { label: "Low", color: "#dc2626", bg: "#fee2e2", tip: "Mostly refills — push new pipes" };
-
-            const paceStatus = ordersPerHour >= 10
-              ? { label: "Busy", color: "#16a34a", bg: "#dcfce7" }
-              : ordersPerHour >= 5
-              ? { label: "Steady", color: "#b45309", bg: "#fef9c3" }
-              : { label: "Slow", color: "#dc2626", bg: "#fee2e2" };
 
             return (
             <div key="management" className="tab-enter" style={styles.settingsPanel}>
@@ -937,6 +1225,12 @@ export default function App() {
                 </div>
               </div>
 
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(15,23,42,0.06)" }}>
+                {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
+                  <button key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0f172a" : "transparent", color: managementView === view.id ? "#fff" : "#64748b", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                ))}
+              </div>
+
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
                 {["Today", "Yesterday", "7 Days", "Month"].map((preset) => (
                   <button key={preset} onClick={() => {
@@ -950,6 +1244,43 @@ export default function App() {
                 ))}
               </div>
 
+              {managementView === "finance" ? (
+                <FinancePanel
+                  users={users}
+                  expenses={displayExpenses}
+                  revenue={displayTotals.gross}
+                  journal={financeJournal}
+                  periodLabel={mgmtDateLabel}
+                  dateFrom={managementDateFrom}
+                  dateTo={managementDateTo}
+                  canAddManualSale
+                  onExpense={expense => {
+                    const now = new Date();
+                    const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00`);
+                    setExpenses(current => [...current, {
+                      id: Date.now(), category: expense.category, qty: null,
+                      amount: expense.amount, time: time.toISOString(), shiftId: null,
+                      description: expense.description, paidBy: expense.paidBy || null,
+                    }]);
+                  }}
+                  onManualSale={async sale => {
+                    const saved = await addManualSale(sale);
+                    if (saved) setFinanceJournal(current => ({ ...current, manualSales: [saved, ...(current.manualSales ?? [])] }));
+                    return !!saved;
+                  }}
+                  onPartnersChange={async partners => {
+                    if (await saveFinancePartners(partners)) setFinanceJournal(current => ({ ...current, partners }));
+                  }}
+                  onTransaction={async transaction => {
+                    const saved = await addFinanceTransaction(transaction);
+                    if (saved) setFinanceJournal(current => ({ ...current, transactions: [saved, ...current.transactions] }));
+                    return !!saved;
+                  }}
+                  onLockChange={async date => {
+                    if (await setFinanceLock(date)) setFinanceJournal(current => ({ ...current, lockedThrough: date || null }));
+                  }}
+                />
+              ) : <>
               {managementLoading && (
                 <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
               )}
@@ -1020,419 +1351,7 @@ export default function App() {
 
               </div>
 
-              {/* ── KPIs ── */}
-              <button onClick={() => setKpisCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                <span>📊 KPIs</span>
-                <span style={styles.collapseChevron}>{kpisCollapsed ? "▶" : "▼"}</span>
-              </button>
-
-              {!kpisCollapsed && <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-
-                {/* ── Row: Avg Value + Refill Rate ── */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <div className="card-enter d-0" style={styles.kpiCard}>
-                    <span style={styles.kpiLabel}>Avg Order Value</span>
-                    <span style={styles.kpiValue}>{totalOrders > 0 ? formatCurrency(Math.round(avgOrderValue)) : "—"}</span>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: avgStatus.color, background: avgStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{avgStatus.label}</span>
-                    <span style={styles.kpiSub}>{avgStatus.tip}</span>
-                  </div>
-                  <div className="card-enter d-1" style={styles.kpiCard}>
-                    <span style={styles.kpiLabel}>Refill Rate</span>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                      <span style={styles.kpiValue}>{refillRate}%</span>
-                    </div>
-                    <div style={{ height: 4, borderRadius: 99, background: "rgba(0,0,0,0.07)", overflow: "hidden", marginTop: 4 }}>
-                      <div style={{ height: "100%", width: `${refillRate}%`, background: refillStatus.color, borderRadius: 99 }} />
-                    </div>
-                    <span style={{ fontSize: 10, fontWeight: 800, color: refillStatus.color, background: refillStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 4 }}>{refillStatus.label}</span>
-                    <span style={styles.kpiSub}>{refillStatus.tip}</span>
-                  </div>
-                </div>
-
-                {/* ── Row: Pace + Active ── */}
-                <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                  <div className="card-enter d-2" style={styles.kpiCard}>
-                    <span style={styles.kpiLabel}>Session Pace</span>
-                    <div style={{ display: "flex", alignItems: "baseline", gap: 3 }}>
-                      <span style={styles.kpiValue}>{ordersPerHour ?? "—"}</span>
-                      {ordersPerHour && <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>/ hr</span>}
-                    </div>
-                    {ordersPerHour && <span style={{ fontSize: 10, fontWeight: 800, color: paceStatus.color, background: paceStatus.bg, padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>{paceStatus.label}</span>}
-                    <span style={styles.kpiSub}>{sessionMins ? `${sessionMins} min session · ${totalOrders} orders` : "Not enough data yet"}</span>
-                  </div>
-                  <div className="card-enter d-3" style={{ ...styles.kpiCard, background: displayCurrentOrders.length > 0 ? "rgba(22,163,74,0.08)" : undefined, border: displayCurrentOrders.length > 0 ? "1px solid rgba(22,163,74,0.25)" : undefined }}>
-                    <span style={styles.kpiLabel}>{isViewingToday ? "Active Now" : "Active"}</span>
-                    <span style={{ ...styles.kpiValue, color: displayCurrentOrders.length > 0 ? "#16a34a" : "#94a3b8" }}>{displayCurrentOrders.length}</span>
-                    <span style={styles.kpiSub}>{deliveryRate}% delivered · {displayDeliveredOrders.length} done</span>
-                  </div>
-                </div>
-
-                {/* ── Flavour performance (full width) ── */}
-                <div className="card-enter d-4" style={styles.kpiCard}>
-                  <span style={styles.kpiLabel}>Flavour Performance</span>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginTop: 4 }}>
-                    <div>
-                      <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>🏆 Best seller</span>
-                      {topFlavour && topFlavourCount > 0 ? (
-                        <div style={{ fontSize: 14, fontWeight: 900, color: topFlavour.color, marginTop: 2 }}>{topFlavour.icon} {topFlavour.name} · {topFlavourCount}×</div>
-                      ) : <div style={{ fontSize: 13, color: "#94a3b8", marginTop: 2 }}>No orders yet</div>}
-                    </div>
-                    {leastFlavour && leastFlavourCount === 0 && totalOrders > 0 && (
-                      <div style={{ textAlign: "right" }}>
-                        <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>💡 Push this</span>
-                        <div style={{ fontSize: 14, fontWeight: 900, color: leastFlavour.color, marginTop: 2 }}>{leastFlavour.icon} {leastFlavour.name}</div>
-                      </div>
-                    )}
-                  </div>
-                  <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
-                    {sortedFlavours.map(f => {
-                      const count = displayFlavourCounts[f.id] || 0;
-                      const pct = totalOrders > 0 ? (count / totalOrders) * 100 : 0;
-                      return (
-                        <div key={f.id} style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                          <span style={{ fontSize: 11, width: 16 }}>{f.icon}</span>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: "#334155", width: 72, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{f.name}</span>
-                          <div style={{ flex: 1, height: 6, borderRadius: 99, background: "rgba(0,0,0,0.06)", overflow: "hidden" }}>
-                            <div style={{ height: "100%", width: `${pct}%`, background: f.color, borderRadius: 99, transition: "width 0.4s ease" }} />
-                          </div>
-                          <span style={{ fontSize: 11, fontWeight: 800, color: count > 0 ? f.color : "#cbd5e1", minWidth: 18, textAlign: "right" }}>{count}</span>
-                        </div>
-                      );
-                    })}
-                  </div>
-                  <span style={{ ...styles.kpiSub, marginTop: 6 }}>{activeFlavours} of {FLAVOURS.length} flavours ordered this session</span>
-                </div>
-
-                {/* ── Row: Expected Revenue + Hubbly Capacity ── */}
-                {(() => {
-                  const coalItem      = stock.find(i => i.name === "Coal");
-                  const mouthItem     = stock.find(i => i.name === "Mouth Pieces");
-                  const flavourItem   = stock.find(i => i.subItems);
-                  const COAL_PER_ORDER = 2;
-                  const capCoal  = coalItem  ? Math.floor(coalItem.quantity / COAL_PER_ORDER) : Infinity;
-                  const capMouth = mouthItem ? Math.floor(mouthItem.quantity)                 : Infinity;
-                  const capFlavour = flavourItem
-                    ? Math.floor(flavourItem.subItems.reduce((sum, s) => sum + s.quantity / (FLAVOUR_PER_SALE[s.id] ?? (1/4)), 0))
-                    : Infinity;
-                  const remaining = Math.min(capCoal, capMouth, capFlavour === Infinity ? 0 : capFlavour);
-                  const limitedBy = capCoal <= capMouth && capCoal <= capFlavour ? "coal"
-                    : capMouth <= capCoal && capMouth <= capFlavour ? "mouth pieces" : "flavour";
-                  const progressPct = avgDailyRevenue ? Math.min((displayTotals.gross / avgDailyRevenue) * 100, 100) : 0;
-                  const onTrack = avgDailyRevenue && displayTotals.gross >= avgDailyRevenue * 0.75;
-                  return (
-                    <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <div style={styles.kpiCard}>
-                        <span style={styles.kpiLabel}>Expected Today</span>
-                        <span style={styles.kpiValue}>{avgDailyRevenue ? formatCurrency(Math.round(avgDailyRevenue)) : "—"}</span>
-                        {avgDailyRevenue ? <>
-                          <div style={{ height: 4, borderRadius: 99, background: "rgba(0,0,0,0.07)", overflow: "hidden", marginTop: 6 }}>
-                            <div style={{ height: "100%", width: `${progressPct}%`, background: onTrack ? "#16a34a" : "#f59e0b", borderRadius: 99, transition: "width 0.4s ease" }} />
-                          </div>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: onTrack ? "#16a34a" : "#b45309", background: onTrack ? "rgba(22,163,74,0.08)" : "#fffbeb", padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 4 }}>{Math.round(progressPct)}% of avg</span>
-                          <span style={styles.kpiSub}>Based on past session history</span>
-                        </> : <span style={styles.kpiSub}>No history yet — run a few sessions first</span>}
-                      </div>
-                      <div style={styles.kpiCard}>
-                        <span style={styles.kpiLabel}>Hubblys</span>
-                        <div style={{ display: "flex", alignItems: "baseline", gap: 4 }}>
-                          <span style={styles.kpiValue}>{totalOrders}</span>
-                          <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>served</span>
-                        </div>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 4 }}>
-                          <span style={{ fontSize: 18, fontWeight: 900, color: remaining > 10 ? "#16a34a" : remaining > 3 ? "#f59e0b" : "#dc2626", fontFamily: "'JetBrains Mono', ui-monospace, monospace" }}>{remaining}</span>
-                          <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 700, lineHeight: 1.2 }}>left in<br/>stock</span>
-                        </div>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: remaining > 10 ? "#16a34a" : remaining > 3 ? "#b45309" : "#dc2626", background: remaining > 10 ? "rgba(22,163,74,0.08)" : remaining > 3 ? "#fffbeb" : "#fef2f2", padding: "2px 7px", borderRadius: 99, alignSelf: "flex-start", marginTop: 2 }}>
-                          {remaining > 10 ? "Well stocked" : remaining > 3 ? `Low — restock soon` : remaining === 0 ? "Out of stock" : "Critical — restock now"}
-                        </span>
-                        <span style={styles.kpiSub}>Limited by {limitedBy}</span>
-                      </div>
-                    </div>
-                  );
-                })()}
-
-              </div>}
-
-
-              {/* ── Accounting ── */}
-              <button onClick={() => setAccountingCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                <span>💰 Accounting</span>
-                <span style={styles.collapseChevron}>{accountingCollapsed ? "▶" : "▼"}</span>
-              </button>
-              {!accountingCollapsed && (() => {
-                // Single source of truth: mirrors stock tab order exactly
-                const stockExpenseOptions = stock.flatMap(i => {
-                  if (i.subItems) {
-                    return i.subItems.map(s => {
-                      const fl = FLAVOURS.find(f => f.id === s.id);
-                      return { key: `Flavour-${s.id}`, label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc", group: "flavour" };
-                    });
-                  }
-                  return [{ key: i.name, label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#334155" : "#0369a1", bg: i.category === "equipment" ? "#f1f5f9" : "#eff6ff", group: i.category }];
-                });
-                const EXTRA_EXPENSE_OPTS = {
-                  Wages:     { icon: "👥", label: "Wages",     color: "#7c3aed", bg: "#f5f3ff" },
-                  Transport: { icon: "🚗", label: "Transport", color: "#0f766e", bg: "#f0fdfa" },
-                };
-                const totalExpenses = displayExpenses.reduce((s, e) => s + e.amount, 0);
-                const profit = displayTotals.gross - totalExpenses;
-                const margin = displayTotals.gross > 0 ? Math.round((profit / displayTotals.gross) * 100) : 0;
-                const profitColor = profit >= 0 ? "#16a34a" : "#dc2626";
-
-                const buildOrdersReport = () => {
-                  const lines = [`Orders Report · ${mgmtDateLabel}`, ""];
-                  lines.push(`SUMMARY`);
-                  lines.push(`  Orders:  ${totalOrders} (${newPipeOrders.length} new pipe · ${refillOrders.length} refill)`);
-                  lines.push(`  Revenue: R${displayTotals.gross} (💳 R${displayTotals.card} · 💵 R${displayTotals.cash})`);
-                  lines.push("");
-                  lines.push(`FLAVOURS`);
-                  [...FLAVOURS]
-                    .filter(f => (displayFlavourCounts[f.id] || 0) > 0)
-                    .sort((a, b) => (displayFlavourCounts[b.id] || 0) - (displayFlavourCounts[a.id] || 0))
-                    .forEach(f => lines.push(`  ${f.icon} ${f.name}: ${displayFlavourCounts[f.id]}`));
-                  lines.push("");
-                  lines.push(`ORDERS (${totalOrders})`);
-                  displayOrders.forEach((o, i) => {
-                    const fl = normalizeFlavour(o.flavour);
-                    const time = formatTime(new Date(o.time));
-                    const type = o.type === "full" ? "New Pipe" : "Refill";
-                    const pay = o.payment === "card" ? "💳" : "💵";
-                    const status = o.status === "delivered" ? "✓" : "·";
-                    lines.push(`  ${i + 1}. ${time} ${status} ${fl.icon} ${fl.name} — ${type} ${pay} R${o.price}${o.soldBy ? ` (${o.soldBy})` : ""}`);
-                  });
-                  return lines.join("\n");
-                };
-
-                const buildAccountingReport = () => {
-                  const lines = [`Accounting Report · ${mgmtDateLabel}`, ""];
-                  lines.push(`REVENUE`);
-                  lines.push(`  Card:  R${displayTotals.card}`);
-                  lines.push(`  Cash:  R${displayTotals.cash}`);
-                  lines.push(`  Total: R${displayTotals.gross}`);
-                  lines.push("");
-                  lines.push(`EXPENSES`);
-                  displayExpenses.forEach(e => {
-                    const opt = stockExpenseOptions.find(o => o.key === e.category) ?? EXTRA_EXPENSE_OPTS[e.category];
-                    lines.push(`  ${opt?.icon ?? "📦"} ${opt?.label ?? e.category}${e.qty ? ` ×${e.qty}` : ""}: R${e.amount}`);
-                  });
-                  lines.push(`  Total: R${totalExpenses}`);
-                  lines.push("");
-                  lines.push(`NET ${profit >= 0 ? "PROFIT" : "LOSS"}: R${Math.abs(profit)} (${margin}% margin)`);
-                  return lines.join("\n");
-                };
-
-                const commitExpense = () => {
-                  const amt = Number(newExpenseAmt);
-                  const qty = Number(newExpenseDesc) || 0;
-                  if (amt <= 0) return;
-                  setExpenses(prev => [...prev, { id: Date.now(), category: newExpenseCat, qty: qty || null, amount: amt, time: new Date().toISOString(), shiftId: null }]);
-                  if (qty > 0) {
-                    const selectedOpt = stockExpenseOptions.find(o => o.key === newExpenseCat);
-                    if (newExpenseCat.startsWith("Flavour-")) {
-                      const subId = newExpenseCat.replace("Flavour-", "");
-                      setStock(prev => prev.map(i => i.name === "Flavour" && i.subItems
-                        ? { ...i, subItems: i.subItems.map(s => s.id === subId ? { ...s, quantity: s.quantity + qty } : s) }
-                        : i
-                      ));
-                    } else if (selectedOpt?.group === "equipment") {
-                      setStock(prev => prev.map(i => i.category === "equipment" && i.name === newExpenseCat
-                        ? { ...i, quantity: i.quantity + qty }
-                        : i
-                      ));
-                    } else {
-                      const packDef = RESTOCK_PACK[newExpenseCat];
-                      setStock(prev => prev.map(i => i.name === newExpenseCat
-                        ? { ...i, quantity: i.quantity + (packDef ? qty * packDef.size : qty) }
-                        : i
-                      ));
-                    }
-                  }
-                  setNewExpenseDesc(""); setNewExpenseAmt("");
-                };
-
-                return (
-                  <div className="expand-down">
-                    <div style={styles.summaryDivider}>
-                      <div style={styles.summaryDividerLine} />
-                      <span style={styles.summaryDividerLabel}>Accounting</span>
-                      <div style={styles.summaryDividerLine} />
-                    </div>
-
-                    {/* P&L Card */}
-                    <div style={{ ...styles.kpiCard, gap: 0 }}>
-                      <span style={styles.kpiLabel}>Profit & Loss</span>
-                      <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 10 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Revenue</span>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: "#16a34a" }}>+ {formatCurrency(displayTotals.gross)}</span>
-                        </div>
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 13, fontWeight: 700, color: "#64748b" }}>Expenses</span>
-                          <span style={{ fontSize: 15, fontWeight: 900, color: "#dc2626" }}>− {formatCurrency(totalExpenses)}</span>
-                        </div>
-                        <div style={{ height: 1, background: "rgba(0,0,0,0.08)", margin: "4px 0" }} />
-                        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                          <span style={{ fontSize: 14, fontWeight: 800, color: "#0f172a" }}>Net {profit >= 0 ? "Profit" : "Loss"}</span>
-                          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: profitColor, background: profit >= 0 ? "#dcfce7" : "#fee2e2", padding: "2px 8px", borderRadius: 99 }}>{margin}%</span>
-                            <span style={{ fontSize: 18, fontWeight: 900, color: profitColor }}>{profit >= 0 ? "" : "−"}{formatCurrency(Math.abs(profit))}</span>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-
-                    {/* Expense entries */}
-                    <button onClick={() => setExpensesCollapsed(c => !c)} style={{ ...styles.collapsibleHeader, marginTop: 4 }}>
-                      <span>Expenses {displayExpenses.length > 0 ? `(${displayExpenses.length})` : ""}</span>
-                      <span style={styles.collapseChevron}>{expensesCollapsed ? "▶" : "▼"}</span>
-                    </button>
-                    {!expensesCollapsed && displayExpenses.length > 0 && (() => {
-                      const groups = [];
-                      const seen = new Map();
-                      [...displayExpenses].reverse().forEach(exp => {
-                        const key = exp.category;
-                        if (seen.has(key)) {
-                          const g = seen.get(key);
-                          g.totalQty = (g.totalQty || 0) + (exp.qty || 0);
-                          g.totalAmount += exp.amount;
-                          g.ids.push(exp.id);
-                        } else {
-                          const g = { key, category: exp.category, time: exp.time, totalQty: exp.qty || 0, totalAmount: exp.amount, ids: [exp.id] };
-                          seen.set(key, g);
-                          groups.push(g);
-                        }
-                      });
-                      return (
-                        <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>{groups.length} {groups.length === 1 ? "entry" : "entries"}</span>
-                            <button onClick={() => { const ids = new Set(displayExpenses.map(e => e.id)); setExpenses(prev => prev.filter(e => !ids.has(e.id))); }} style={{ fontSize: 10, fontWeight: 700, color: "#94a3b8", background: "none", border: "none", cursor: "pointer" }}>Clear all</button>
-                          </div>
-                          {groups.map((g, gi) => {
-                            const opt = stockExpenseOptions.find(o => o.key === g.category) ?? EXTRA_EXPENSE_OPTS[g.category] ?? { icon: "📦", label: g.category, color: "#64748b", bg: "#f8fafc" };
-                            return (
-                              <div key={g.key} className={`card-enter d-${Math.min(gi, 6)}`} style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px" }}>
-                                <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>{opt.icon} {opt.label}</span>
-                                {g.totalQty > 0 && <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b" }}>×{g.totalQty}</span>}
-                                <span style={{ fontSize: 13, fontWeight: 900, color: "#dc2626", marginLeft: "auto", whiteSpace: "nowrap" }}>−{formatCurrency(g.totalAmount)}</span>
-                                <span style={{ fontSize: 10, color: "#94a3b8", fontWeight: 600, whiteSpace: "nowrap" }}>{new Date(g.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}</span>
-                                <button onClick={() => setExpenses(prev => prev.filter(e => !g.ids.includes(e.id)))} style={{ fontSize: 14, color: "#94a3b8", background: "none", border: "none", cursor: "pointer", padding: "0 2px", lineHeight: 1 }}>×</button>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-
-                    {/* Add expense */}
-                    {!expensesCollapsed && (() => {
-                      const isNonStock = ["Wages", "Transport"].includes(newExpenseCat);
-                      const expPack = RESTOCK_PACK[newExpenseCat];
-                      const qtyNum = Number(newExpenseDesc) || 0;
-                      const qtyUnit = expPack ? expPack.plural : newExpenseCat.startsWith("Flavour-") ? "boxes" : "units";
-                      const stockPreview = (() => {
-                        if (isNonStock || !qtyNum) return null;
-                        if (expPack) return `+${qtyNum * expPack.size} ${expPack.unit === "box" ? "pieces" : "pieces"} to stock`;
-                        if (newExpenseCat.startsWith("Flavour-")) return `+${qtyNum} box${qtyNum !== 1 ? "es" : ""} to stock`;
-                        return `+${qtyNum} ${qtyUnit} to stock`;
-                      })();
-                      return (
-                        <div className="expand-down" style={{ background: "rgba(255,255,255,0.65)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 12, padding: 12, display: "flex", flexDirection: "column", gap: 10 }}>
-                          <select
-                            value={newExpenseCat}
-                            onChange={e => { setNewExpenseCat(e.target.value); setNewExpenseDesc(""); }}
-                            style={{ ...styles.stockSelectInput, margin: 0 }}
-                          >
-                            <optgroup label="──────────">
-                              <option value="Wages">👥 Wages</option>
-                              <option value="Transport">🚗 Transport</option>
-                            </optgroup>
-                            <optgroup label="🔥 Consumables">
-                              {stockExpenseOptions.filter(o => o.group === "consumable").map(o =>
-                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
-                              )}
-                            </optgroup>
-                            <optgroup label="🌿 Flavour">
-                              {stockExpenseOptions.filter(o => o.group === "flavour").map(o =>
-                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
-                              )}
-                            </optgroup>
-                            <optgroup label="🛠️ Fixed Assets">
-                              {stockExpenseOptions.filter(o => o.group === "equipment").map(o =>
-                                <option key={o.key} value={o.key}>{o.icon} {o.label}</option>
-                              )}
-                            </optgroup>
-                          </select>
-
-                          <div style={{ display: "flex", gap: 8, alignItems: "flex-end" }}>
-                            {!isNonStock && (
-                              <div style={{ display: "flex", flexDirection: "column", gap: 3 }}>
-                                <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b", textTransform: "capitalize" }}>{qtyUnit}</span>
-                                <div style={{ display: "flex", alignItems: "center", gap: 0, border: "1px solid rgba(203,213,225,0.6)", borderRadius: 8, overflow: "hidden", background: "#fff", minHeight: 44 }}>
-                                  <button
-                                    onClick={() => setNewExpenseDesc(v => String(Math.max(0, (Number(v) || 0) - 1)))}
-                                    style={{ padding: "0 12px", height: 44, background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
-                                  >−</button>
-                                  <input
-                                    type="number"
-                                    min="0"
-                                    value={newExpenseDesc}
-                                    onChange={e => setNewExpenseDesc(e.target.value)}
-                                    style={{ width: 40, textAlign: "center", border: "none", outline: "none", fontSize: 15, fontWeight: 800, color: "#0f172a", background: "transparent", padding: 0, height: 44 }}
-                                    placeholder="0"
-                                  />
-                                  <button
-                                    onClick={() => setNewExpenseDesc(v => String((Number(v) || 0) + 1))}
-                                    style={{ padding: "0 12px", height: 44, background: "none", border: "none", cursor: "pointer", fontSize: 16, fontWeight: 700, color: "#64748b" }}
-                                  >+</button>
-                                </div>
-                              </div>
-                            )}
-                            <div style={{ display: "flex", flexDirection: "column", gap: 3, flex: 1, maxWidth: 120 }}>
-                              <span style={{ fontSize: 10, fontWeight: 700, color: "#64748b" }}>Cost (R)</span>
-                              <input
-                                type="number"
-                                min="0"
-                                placeholder="0"
-                                value={newExpenseAmt}
-                                onChange={e => setNewExpenseAmt(e.target.value)}
-                                onKeyDown={e => { if (e.key === "Enter") commitExpense(); }}
-                                style={{ ...styles.userNameInput, margin: 0 }}
-                              />
-                            </div>
-                            <button onClick={commitExpense} style={styles.addUserBtn}>Add</button>
-                          </div>
-
-                          {stockPreview && (
-                            <span style={{ fontSize: 11, fontWeight: 700, color: "#16a34a" }}>✓ {stockPreview}</span>
-                          )}
-                        </div>
-                      );
-                    })()}
-
-                    <div style={{ display: "flex", gap: 8 }}>
-                      <button
-                        onClick={async () => {
-                          const text = buildOrdersReport();
-                          if (navigator.share) { try { await navigator.share({ title: "Orders Report", text }); return; } catch { navigator.clipboard?.writeText(text); } } else { navigator.clipboard?.writeText(text); }
-                        }}
-                        style={{ ...styles.copyBtn, flex: 1 }}
-                      >
-                        Share Orders
-                      </button>
-                      <button
-                        onClick={async () => {
-                          const text = buildAccountingReport();
-                          if (navigator.share) { try { await navigator.share({ title: "Accounting Report", text }); return; } catch { navigator.clipboard?.writeText(text); } } else { navigator.clipboard?.writeText(text); }
-                        }}
-                        style={{ ...styles.copyBtn, flex: 1 }}
-                      >
-                        Share P&L
-                      </button>
-                    </div>
-                  </div>
-                );
-              })()}
+              </>}
             </div>
             );
 
@@ -2380,6 +2299,30 @@ const styles = {
     fontWeight: 900,
     whiteSpace: "nowrap",
     letterSpacing: "-0.02em",
+  },
+  syncBanner: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 10,
+    padding: "9px 11px",
+    border: "1px solid",
+    borderRadius: 12,
+    color: "#0f172a",
+    fontSize: 10,
+    lineHeight: 1.35,
+  },
+  syncButton: {
+    flexShrink: 0,
+    border: 0,
+    borderRadius: 8,
+    padding: "7px 10px",
+    background: "#0f274f",
+    color: "#fff",
+    fontFamily: "inherit",
+    fontSize: 10,
+    fontWeight: 900,
+    cursor: "pointer",
   },
   headerLogoWrap: {
     width: 38,
