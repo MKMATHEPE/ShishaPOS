@@ -20,6 +20,19 @@ const FLAVOURS = [
   { id: "hh", name: "Honey Hunter", short: "HH", icon: "🍯", bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
 ];
 
+const FLAVOUR_PHOTOS = {
+  lk: "/brand/lady-killer.webp", mc: "/brand/cream-mint.webp",
+  bn: "/brand/berlin-nights.jpg", gm: "/brand/gum-mint.webp",
+  jk: "/brand/joker.jpg", hh: "/brand/honey-hunter.jpg",
+};
+
+function FlavourThumbnail({ flavour, compact = false }) {
+  const name = typeof flavour === "string" ? flavour : flavour?.name;
+  const match = FLAVOURS.find(item => item.id === flavour?.id || item.name === name);
+  if (!match) return <span aria-hidden="true">{flavour?.icon ?? "🌿"}</span>;
+  return <img className={`flavour-thumbnail${compact ? " flavour-thumbnail--compact" : ""}`} src={FLAVOUR_PHOTOS[match.id]} alt="" loading="lazy" />;
+}
+
 function normalizeFlavour(f) {
   if (f && typeof f === 'object') return f;
   return FLAVOURS.find(fl => fl.name === f) ?? { id: 'unknown', name: f ?? 'Unknown', short: '?', icon: '🌿', bg: '#f6f4ef', color: '#6c6a65', border: '#d8d4cb' };
@@ -1063,9 +1076,7 @@ export default function App() {
             {currentOrders.map((o, i) => (
               <div key={o.id} className="card-enter" style={{ ...styles.orderRow, animationDelay: `${i * 0.07}s` }}>
                 <span style={styles.orderIndex}>{String(i + 1).padStart(2, "0")}</span>
-                <span style={{ ...styles.tag, background: o.flavour.bg, color: o.flavour.color }}>
-                  {o.flavour.icon} {o.flavour.short}
-                </span>
+                <FlavourThumbnail flavour={o.flavour} compact />
                 <span style={styles.orderMeta}>
                   <strong>{o.flavour.name}</strong>
                   <small>{o.type === "refill" ? "Refill" : "New Pipe"} · {o.payment === "card" ? "Card" : "Cash"} · {formatTime(o.time)}{o.pendingSync ? " · Waiting to sync" : ""}</small>
@@ -1122,7 +1133,7 @@ export default function App() {
                         <span style={styles.orderCardTime}>{ordersView === "Preparing" ? `${elapsed} min` : formatTime(o.deliveredAt ?? orderedAt)}</span>
                       </div>
                       <div style={styles.orderCardBody}>
-                        <span style={{ ...styles.orderCardFlavour, background: o.flavour.bg, color: o.flavour.color }}>{o.flavour.icon}</span>
+                        <FlavourThumbnail flavour={o.flavour} />
                         <span style={styles.orderMeta}>
                           <strong style={{ fontSize: 12 }}>{o.flavour.name}</strong>
                           <small style={styles.orderCardStaff}>{o.type === "refill" ? "Refill" : "New Pipe"} · Served by {o.soldBy ?? "Unknown"}</small>
@@ -1496,7 +1507,7 @@ export default function App() {
                           const fLow = !fOut && f.quantity <= item.lowThreshold;
                           return (
                             <div key={f.id} style={styles.subItemRow}>
-                              <span style={{ ...styles.subItemTag, background: f.bg, color: f.color }}>{f.icon} {f.name}</span>
+                              <span className="flavour-label"><FlavourThumbnail flavour={f} compact /><span>{f.name}</span></span>
                               {fOut && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca", fontSize: 9 }}>Out</span>}
                               {fLow && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a", fontSize: 9 }}>Low</span>}
 
@@ -1661,7 +1672,7 @@ export default function App() {
                         const tone = urgent ? "#dc2626" : soon ? "#b45309" : "#15803d";
                         return (
                           <div key={item.id} style={styles.purchasePlanRow}>
-                            <span style={styles.purchasePlanIcon}>{item.icon}</span>
+                            <span style={styles.purchasePlanIcon}>{FLAVOURS.some(f => f.name === item.name) ? <FlavourThumbnail flavour={item} compact /> : item.icon}</span>
                             <span style={{ flex: 1, minWidth: 0 }}>
                               <strong style={{ display: "block", color: "#0a0a0a", fontSize: 11 }}>{item.name}</strong>
                               <small style={{ display: "block", marginTop: 2, color: "#6c6a65", fontSize: 9, fontWeight: 700 }}>
@@ -1715,13 +1726,13 @@ export default function App() {
                         <span style={{ fontSize: 10, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Needs Attention</span>
                         {outItems.map(i => (
                           <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.parentName ? <span className="flavour-label"><FlavourThumbnail flavour={i} compact /><span>{i.name} ({i.parentName})</span></span> : <>{i.icon ? `${i.icon} ` : ""}{i.name}</>}</span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "#fef2f2", padding: "2px 8px", borderRadius: 20 }}>Out of stock</span>
                           </div>
                         ))}
                         {lowItems.map(i => (
                           <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.parentName ? <span className="flavour-label"><FlavourThumbnail flavour={i} compact /><span>{i.name} ({i.parentName})</span></span> : <>{i.icon ? `${i.icon} ` : ""}{i.name}</>}</span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309", background: "#fffbeb", padding: "2px 8px", borderRadius: 20 }}>Low</span>
                           </div>
                         ))}
@@ -1752,7 +1763,7 @@ export default function App() {
                             return (
                               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                  {opt.icon} {opt.label}
+                                  {e.category.startsWith("Flavour-") ? <span className="flavour-label"><FlavourThumbnail flavour={opt.label} compact /><span>{opt.label}</span></span> : <>{opt.icon} {opt.label}</>}
                                 </span>
                                 <span style={{ fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>
                                   +{e.qty ?? "?"} {pack ? pack.plural : "units"}{pack && e.qty ? ` (${e.qty * pack.size} pcs)` : ""}

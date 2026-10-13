@@ -269,3 +269,17 @@ button:disabled { cursor: not-allowed; }
 .flavour-pop.d-2 { --flavour-photo: url('/brand/berlin-nights.jpg'); }
 .flavour-pop.d-4 { --flavour-photo: url('/brand/joker.jpg'); }
 .flavour-pop.d-5 { --flavour-photo: url('/brand/honey-hunter.jpg'); }
+
+/* Shared flavour identity in existing order and inventory rows. */
+.flavour-thumbnail {
+  display: inline-block; width: 48px; height: 56px; flex-shrink: 0;
+  object-fit: cover; object-position: center; border-radius: 12px;
+  background: #111; border: 1px solid rgba(10,10,10,.12);
+  vertical-align: middle;
+}
+.flavour-thumbnail--compact { width: 32px; height: 38px; border-radius: 9px; }
+.flavour-label {
+  display: inline-flex; align-items: center; gap: 8px; min-width: 0;
+  color: #0a0a0a; font-family: Georgia, serif; font-weight: 400;
+  font-size: 13px; line-height: 1.25;
+}
