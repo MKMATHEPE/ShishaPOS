@@ -122,7 +122,7 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, dateFrom, dateTo, canAddManualSale, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
+function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -234,9 +234,9 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
 
     <div className="finance-action-grid">
       <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")}>＋ Add expense</button>
-      {canAddManualSale && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
-      <button onClick={() => startPayment("reimbursement")}>Pay someone back</button>
-      <button onClick={() => startPayment("partner_payout")}>Pay partner</button>
+      {isAdmin && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
+      {isAdmin && <button onClick={() => startPayment("reimbursement")}>Pay someone back</button>}
+      {isAdmin && <button onClick={() => startPayment("partner_payout")}>Pay partner</button>}
     </div>
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
@@ -273,7 +273,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
       </div>
     </div>}
 
-    {activeAction === "manual_sale" && <div className="expand-down missing-sale-card finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
+    {isAdmin && activeAction === "manual_sale" && <div className="expand-down missing-sale-card finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#0a0a0a", background: "#ece8df", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
       <div className="finance-field-grid">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Sale date</span><input type="date" max={localToday()} value={sale.date} onChange={event => setSale(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} /></div>
@@ -287,7 +287,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
 
     <ExpensesList stock={stock} expenses={expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />
 
-    {(activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
+    {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
       <div className="finance-field-grid">
         <select value={entry.profileId} onChange={event => setEntry(current => ({ ...current, profileId: event.target.value }))} style={selectField}><option value="">Choose person</option>{users.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
@@ -1193,7 +1193,7 @@ export default function App() {
                   periodLabel={mgmtDateLabel}
                   dateFrom={managementDateFrom}
                   dateTo={managementDateTo}
-                  canAddManualSale
+                  isAdmin={isAdmin}
                   onExpense={async expense => {
                     const now = new Date();
                     const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00+02:00`);
