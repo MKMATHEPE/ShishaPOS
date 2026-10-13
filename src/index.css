@@ -212,3 +212,60 @@ textarea:focus-visible {
 .d-4  { animation-delay: 0.20s;  }
 .d-5  { animation-delay: 0.25s;  }
 .d-6  { animation-delay: 0.30s;  }
+
+/* Rental-app theme: retain existing controls, grid and scrolling. */
+:root { font-family: Arial, Helvetica, sans-serif; color: #0a0a0a; }
+body { background: #e8e5df; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible {
+  outline: 3px solid #8c8982 !important;
+  border-color: #0a0a0a !important;
+}
+::selection { background: #0a0a0a; color: #fff; }
+.flavour-pop {
+  background-color: #111 !important;
+  background-image: linear-gradient(180deg, rgba(0,0,0,.08), rgba(0,0,0,.1) 35%, rgba(0,0,0,.85)), var(--flavour-photo, url('/brand/hookah-hero.webp')) !important;
+  background-size: cover !important;
+  background-position: center !important;
+  color: #fff !important;
+}
+.flavour-pop.d-0 { --flavour-photo: url('/brand/lady-killer.webp'); }
+.flavour-pop.d-1 { --flavour-photo: url('/brand/cream-mint.webp'); }
+.flavour-pop.d-3 { --flavour-photo: url('/brand/gum-mint.webp'); }
+.flavour-pop > span:first-child {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 18px !important;
+  filter: drop-shadow(0 1px 3px #000);
+}
+.flavour-pop > span:last-child:not(:nth-child(2)) { top: 5px !important; right: 5px !important; }
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: .01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: .01ms !important;
+  }
+}
+
+/* Premium refinement: quiet motion and consistent photographic cards. */
+button { transition: background-color .18s ease, color .18s ease, box-shadow .18s ease, transform .18s ease; }
+button:active { transform: scale(.985); opacity: 1; }
+button:disabled { cursor: not-allowed; }
+.flavour-pop { animation: fadeIn .25s ease both; border-color: #292929; }
+.flavour-pop > span:first-child { display: none; }
+.flavour-pop::after {
+  content: ""; position: absolute; top: 8px; right: 8px;
+  width: 21px; height: 21px; border: 1px solid rgba(255,255,255,.65);
+  border-radius: 50%; background: rgba(0,0,0,.22);
+  display: grid; place-items: center; font: 600 13px Arial, sans-serif;
+}
+.flavour-pop[aria-pressed="true"]::after { content: "✓"; color: #0a0a0a; background: #f6f4ef; border-color: #f6f4ef; }
+.flavour-pop > span:last-child:not(:nth-child(2)) { right: auto !important; left: 7px; }
+.glow-active { animation: none; }
+.tab-enter, .card-enter { animation: fadeIn .22s ease both; }
+@media (prefers-reduced-motion: reduce) {
+  .flavour-pop, .tab-enter, .card-enter { animation: none; }
+}
+.flavour-pop.d-2 { --flavour-photo: url('/brand/berlin-nights.jpg'); }
+.flavour-pop.d-4 { --flavour-photo: url('/brand/joker.jpg'); }
+.flavour-pop.d-5 { --flavour-photo: url('/brand/honey-hunter.jpg'); }

@@ -302,3 +302,10 @@ export async function setFinanceLock(lockedThrough) {
   if (error) { console.error('setFinanceLock', error); return false }
   return true
 }
+
+export async function cancelOrder(id) {
+  if (!ok()) return false
+  const { data, error } = await supabase.rpc('cancel_pos_order', { order_id: id })
+  if (error) { console.error('cancelOrder', error); return false }
+  return data === true
+}

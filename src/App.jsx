@@ -1,11 +1,10 @@
 import { useState, useCallback, useRef, useEffect } from "react";
-import chillPipeLogo from "./assets/The_Chill_Pipe.png";
 import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
   fetchUsers, syncUsers,
   fetchStock, syncStock, updateStockItem,
-  fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder,
+  fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
   fetchExpenses, syncExpenses,
   fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
@@ -15,7 +14,7 @@ import { getOfflineOrders, queueOfflineOrder, removeOfflineOrder } from "./offli
 const FLAVOURS = [
   { id: "lk", name: "Lady Killer", short: "LK", icon: "🌹", bg: "#fff1f2", color: "#be123c", border: "#fecdd3" },
   { id: "mc", name: "Mint Cream", short: "MC", icon: "🍃", bg: "#ecfdf5", color: "#047857", border: "#a7f3d0" },
-  { id: "bn", name: "Berlin Nights", short: "BN", icon: "🌙", bg: "#eef2ff", color: "#4338ca", border: "#c7d2fe" },
+  { id: "bn", name: "Berlin Nights", short: "BN", icon: "🌙", bg: "#f6f4ef", color: "#4a4843", border: "#d8d4cb" },
   { id: "gm", name: "Gum & Mint", short: "GM", icon: "🫧", bg: "#f0fdfa", color: "#0f766e", border: "#99f6e4" },
   { id: "jk", name: "Joker", short: "JK", icon: "🃏", bg: "#fffbeb", color: "#b45309", border: "#fde68a" },
   { id: "hh", name: "Honey Hunter", short: "HH", icon: "🍯", bg: "#fff7ed", color: "#c2410c", border: "#fed7aa" },
@@ -23,7 +22,7 @@ const FLAVOURS = [
 
 function normalizeFlavour(f) {
   if (f && typeof f === 'object') return f;
-  return FLAVOURS.find(fl => fl.name === f) ?? { id: 'unknown', name: f ?? 'Unknown', short: '?', icon: '🌿', bg: '#f8fafc', color: '#64748b', border: '#e2e8f0' };
+  return FLAVOURS.find(fl => fl.name === f) ?? { id: 'unknown', name: f ?? 'Unknown', short: '?', icon: '🌿', bg: '#f6f4ef', color: '#6c6a65', border: '#d8d4cb' };
 }
 
 const DEFAULT_PRICES = { full: 170, refill: 120 };
@@ -47,7 +46,9 @@ const RESTOCK_PACK = {
   "Mouth Pieces": { size: 50, unit: "pack", plural: "packs" },
 };
 
-const LOGO_SRC = chillPipeLogo;
+const LOGO_SRC = "/chill-pipe-logo.webp";
+// Enable only after the cancellation database update is approved and applied.
+const CANCELLATION_ENABLED = false;
 
 function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
@@ -88,7 +89,7 @@ function TabIcon({ name, active }) {
     height: 21,
     viewBox: "0 0 24 24",
     fill: "none",
-    stroke: active ? "#ffffff" : "rgba(255,255,255,0.58)",
+    stroke: active ? "#0a0a0a" : "#8c8982",
     strokeWidth: 1.8,
     strokeLinecap: "round",
     strokeLinejoin: "round",
@@ -169,8 +170,8 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     setMessage("");
   };
   const activity = [
-    ...manualSales.map(item => ({ id: `s-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: `Manual ${item.payment} sale`, detail: `${item.description} · ${item.reason}`, status: "Adjustment", tone: "#2563eb", amount: item.amount })),
-    ...expenses.map(item => { const outstanding = item.paidBy && (rows.find(row => row.user.id === item.paidBy)?.reimbursementDue ?? 0) > 0; return { id: `e-${item.id}`, date: String(item.time).slice(0, 10), time: item.time, title: item.paidBy ? `${personName(item.paidBy)} paid ${formatCurrency(item.amount)}` : `Business spent ${formatCurrency(item.amount)}`, detail: item.description || item.category, status: outstanding ? "Needs repayment" : item.paidBy ? "Repaid" : "Business paid", tone: outstanding ? "#b45309" : item.paidBy ? "#16a34a" : "#64748b", amount: -Number(item.amount) }; }),
+    ...manualSales.map(item => ({ id: `s-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: `Manual ${item.payment} sale`, detail: `${item.description} · ${item.reason}`, status: "Adjustment", tone: "#0a0a0a", amount: item.amount })),
+    ...expenses.map(item => { const outstanding = item.paidBy && (rows.find(row => row.user.id === item.paidBy)?.reimbursementDue ?? 0) > 0; return { id: `e-${item.id}`, date: String(item.time).slice(0, 10), time: item.time, title: item.paidBy ? `${personName(item.paidBy)} paid ${formatCurrency(item.amount)}` : `Business spent ${formatCurrency(item.amount)}`, detail: item.description || item.category, status: outstanding ? "Needs repayment" : item.paidBy ? "Repaid" : "Business paid", tone: outstanding ? "#b45309" : item.paidBy ? "#16a34a" : "#6c6a65", amount: -Number(item.amount) }; }),
     ...transactions.map(item => ({ id: `t-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: item.kind === "reimbursement" ? `Paid back ${personName(item.profileId)}` : `Paid partner ${personName(item.profileId)}`, detail: item.description || (item.kind === "reimbursement" ? "Expense reimbursement" : "Profit payout"), status: "Paid", tone: "#16a34a", amount: -item.amount })),
   ].sort((a, b) => String(b.time).localeCompare(String(a.time))).slice(0, 8);
   const businessPaidExpenses = expenses.filter(item => !item.paidBy).reduce((sum, item) => sum + Number(item.amount || 0), 0);
@@ -187,7 +188,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     const manualSaleRows = manualSales.map(item => `<tr><td>${esc(item.date)}</td><td>${esc(item.payment === 'card' ? 'Card' : 'Cash')}</td><td>${esc(item.description)}</td><td>${esc(item.reason)}</td><td class="n">${money(item.amount)}</td></tr>`).join('');
     const personRows = rows.map(row => `<tr><td>${esc(row.user.name)}${partners.some(partner => partner.profileId === row.user.id) ? ' <small>(partner)</small>' : ''}</td><td class="n">${money(row.spent)}</td><td class="n">${money(row.refunded)}</td><td class="n">${money(row.share)}</td><td class="n">${money(row.paid)}</td><td class="n">${money(row.refunded + row.paid)}</td><td class="n"><b>${money(row.reimbursementDue + row.profitDue)}</b></td></tr>`).join('');
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>The Chill Pipe finance report</title><style>
-      *{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#20201e;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}.toolbar{position:sticky;top:0;padding:12px;text-align:center;background:#0f172a}.toolbar button{border:0;border-radius:8px;background:#fff;color:#0f172a;padding:10px 18px;font-weight:800;cursor:pointer}.paper{max-width:1050px;margin:24px auto;background:#fff;padding:46px 48px;box-shadow:0 10px 35px #0001}.head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #216f59;padding-bottom:20px;margin-bottom:32px}.head h1{font-size:36px;line-height:1;margin:0 0 7px}.muted{color:#6d6c67}.issued{text-align:right}.section{margin-top:32px}.section h2{font-size:16px;letter-spacing:.07em;color:#6d6c67;text-transform:uppercase;margin:0 0 18px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px 42px}.summary div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted #aaa;padding:7px 0}.summary b{white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#f1f0eb;color:#4b4a47;text-align:left;font-size:13px}th,td{padding:12px 9px;border-bottom:1px solid #ddd}.n{text-align:right;white-space:nowrap}small{color:#6d6c67}.total td{font-weight:900;font-size:16px}@media(max-width:700px){.paper{margin:0;padding:24px 18px}.summary{grid-template-columns:1fr}.sc{overflow-x:auto}.head h1{font-size:28px}}@media print{body{background:#fff}.toolbar{display:none}.paper{box-shadow:none;margin:0;max-width:none;padding:16px 10px}@page{size:A4 landscape;margin:12mm}}
+      *{box-sizing:border-box}body{margin:0;background:#f3f4f6;color:#20201e;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}.toolbar{position:sticky;top:0;padding:12px;text-align:center;background:#0a0a0a}.toolbar button{border:0;border-radius:8px;background:#fff;color:#0a0a0a;padding:10px 18px;font-weight:800;cursor:pointer}.paper{max-width:1050px;margin:24px auto;background:#fff;padding:46px 48px;box-shadow:0 10px 35px #0001}.head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #216f59;padding-bottom:20px;margin-bottom:32px}.head h1{font-size:36px;line-height:1;margin:0 0 7px}.muted{color:#6d6c67}.issued{text-align:right}.section{margin-top:32px}.section h2{font-size:16px;letter-spacing:.07em;color:#6d6c67;text-transform:uppercase;margin:0 0 18px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px 42px}.summary div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted #aaa;padding:7px 0}.summary b{white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#f1f0eb;color:#4b4a47;text-align:left;font-size:13px}th,td{padding:12px 9px;border-bottom:1px solid #ddd}.n{text-align:right;white-space:nowrap}small{color:#6d6c67}.total td{font-weight:900;font-size:16px}@media(max-width:700px){.paper{margin:0;padding:24px 18px}.summary{grid-template-columns:1fr}.sc{overflow-x:auto}.head h1{font-size:28px}}@media print{body{background:#fff}.toolbar{display:none}.paper{box-shadow:none;margin:0;max-width:none;padding:16px 10px}@page{size:A4 landscape;margin:12mm}}
     </style></head><body><div class="toolbar"><button onclick="window.print()">Download / Save as PDF</button></div><main class="paper"><header class="head"><div><h1>The Chill Pipe</h1><div class="muted">Combined statement of account</div><div class="muted">${esc(periodLabel)}</div></div><div class="issued muted">Issued ${esc(issued)}</div></header>
     <section class="section"><h2>Business summary</h2><div class="summary"><div><span>Income received</span><b>${money(totalRevenue)}</b></div><div><span>Less: expenses</span><b>${money(expenseTotal)}</b></div><div><span>Profit after deductions</span><b>${money(profit)}</b></div><div><span>Profit paid to partners</span><b>${money(profitPaid)}</b></div><div><span>Profit remaining to pay</span><b>${money(profitDue)}</b></div><div><span>Refunds paid</span><b>${money(refundsPaid)}</b></div><div><span>Refunds still owed</span><b>${money(refundsDue)}</b></div><div><span>Business cash</span><b>${money(businessAvailable)}</b></div>${manualRevenue ? `<div><span>Manual sale adjustments</span><b>${money(manualRevenue)}</b></div>` : ''}</div></section>
     <section class="section"><h2>Each person</h2><div class="sc"><table><thead><tr><th>Person</th><th class="n">Spent</th><th class="n">Refunded</th><th class="n">Profit share</th><th class="n">Profit paid</th><th class="n">Total paid</th><th class="n">Still owed</th></tr></thead><tbody>${personRows || '<tr><td colspan="7" class="muted">No balances for this period.</td></tr>'}</tbody></table></div></section>
@@ -203,17 +204,17 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
   };
 
   const card = { background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 13, padding: 13, display: "flex", flexDirection: "column", gap: 10 };
-  const label = { fontSize: 9, fontWeight: 900, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.1em" };
-  const field = { minHeight: 42, border: "1px solid #dbe3ee", borderRadius: 9, background: "#fff", padding: "0 10px", color: "#0f172a", fontFamily: "inherit", fontWeight: 700, minWidth: 0 };
+  const label = { fontSize: 9, fontWeight: 900, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.1em" };
+  const field = { minHeight: 42, border: "1px solid #dbe3ee", borderRadius: 9, background: "#fff", padding: "0 10px", color: "#0a0a0a", fontFamily: "inherit", fontWeight: 700, minWidth: 0 };
   const selectField = { ...field, fontSize: 11, fontWeight: 700, padding: "0 8px" };
   return <div className="expand-down" style={{ display: "flex", flexDirection: "column", gap: 8 }}>
     <div style={styles.managementSectionHeading}>
       <div><span style={styles.managementEyebrow}>Finance journal</span><strong style={styles.managementSectionTitle}>{periodLabel}</strong></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge}>{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #dbe3ee", background: "#fff", color: "#334155", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge}>{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #dbe3ee", background: "#fff", color: "#4a4843", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
       {[
-        ["Received", totalRevenue, "#16a34a"], ["Spent", expenseTotal, "#dc2626"], ["Available", businessAvailable, businessAvailable >= 0 ? "#0f172a" : "#dc2626"],
+        ["Received", totalRevenue, "#16a34a"], ["Spent", expenseTotal, "#dc2626"], ["Available", businessAvailable, businessAvailable >= 0 ? "#0a0a0a" : "#dc2626"],
       ].map(([name, value, color]) => <div key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
     </div>
 
@@ -227,8 +228,8 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     </div>
     {message && !activeAction && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
-    {activeAction === "expense" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(15,23,42,0.05)" }}>
-      <strong style={{ fontSize: 14, color: "#0f172a" }}>Add expense</strong>
+    {activeAction === "expense" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(10,10,10,0.05)" }}>
+      <strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add expense</strong>
       <div style={{ display: "flex", flexDirection: "column", gap: 9, paddingTop: 4 }}>
         <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
           <select value={spend.paidBy} onChange={event => setSpend(current => ({ ...current, paidBy: event.target.value }))} style={selectField} aria-label="Who paid for this expense">
@@ -239,16 +240,16 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
             {['Transport', 'Wages', 'Supplies', 'Rent', 'Utilities', 'Repairs', 'Other'].map(category => <option key={category}>{category}</option>)}
           </select>
           <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 9, fontWeight: 900, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Expense date</span>
+            <span style={{ fontSize: 9, fontWeight: 900, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Expense date</span>
             <input type="date" value={spend.date} max={localToday()} onChange={event => setSpend(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} aria-label="Expense date" />
           </div>
           <input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={spend.amount} onChange={event => setSpend(current => ({ ...current, amount: event.target.value }))} style={field} aria-label="Expense amount" />
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: "#64748b", fontWeight: 700 }}>Date:</span>
+          <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 700 }}>Date:</span>
           {[{ label: "Today", days: 0 }, { label: "Yesterday", days: -1 }].map(option => {
             const date = new Date(); date.setDate(date.getDate() + option.days); const value = dateInputValue(date);
-            return <button key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0f172a" : "1px solid #dbe3ee", borderRadius: 8, background: spend.date === value ? "#0f172a" : "#fff", color: spend.date === value ? "#fff" : "#475569", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
+            return <button key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0a0a0a" : "1px solid #dbe3ee", borderRadius: 8, background: spend.date === value ? "#0a0a0a" : "#fff", color: spend.date === value ? "#fff" : "#6c6a65", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
           })}
         </div>
         <input placeholder="What was the money spent on?" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
@@ -257,7 +258,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     </div>}
 
     {activeAction === "manual_sale" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
-      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0f172a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#1d4ed8", background: "#dbeafe", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#0a0a0a", background: "#ece8df", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Sale date</span><input type="date" max={localToday()} value={sale.date} onChange={event => setSale(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} /></div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Payment</span><select value={sale.payment} onChange={event => setSale(current => ({ ...current, payment: event.target.value }))} style={selectField}><option value="cash">Cash</option><option value="card">Card</option></select></div>
@@ -270,8 +271,8 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
 
     <div style={card}>
       <span style={label}>Who is owed</span>
-      {rows.length === 0 ? <span style={{ fontSize: 12, color: "#94a3b8" }}>No balances due.</span> : rows.map(row => <div key={row.user.id} style={{ borderTop: "1px solid #edf2f7", paddingTop: 9, display: "grid", gridTemplateColumns: "1fr auto", gap: 6 }}>
-        <div><strong style={{ fontSize: 12, color: "#0f172a" }}>{row.user.name}</strong><small style={{ display: "block", color: "#64748b" }}>{row.reimbursementDue > 0 ? `Expenses ${formatCurrency(row.reimbursementDue)}` : ""}{row.reimbursementDue > 0 && row.profitDue > 0 ? " · " : ""}{row.profitDue > 0 ? `Profit ${formatCurrency(row.profitDue)}` : ""}</small><button onClick={() => statement(row)} style={{ border: 0, background: "none", color: "#2563eb", fontSize: 9, fontWeight: 800, padding: "4px 0 0", cursor: "pointer" }}>Copy statement</button></div>
+      {rows.length === 0 ? <span style={{ fontSize: 12, color: "#8c8982" }}>No balances due.</span> : rows.map(row => <div key={row.user.id} style={{ borderTop: "1px solid #edf2f7", paddingTop: 9, display: "grid", gridTemplateColumns: "1fr auto", gap: 6 }}>
+        <div><strong style={{ fontSize: 12, color: "#0a0a0a" }}>{row.user.name}</strong><small style={{ display: "block", color: "#6c6a65" }}>{row.reimbursementDue > 0 ? `Expenses ${formatCurrency(row.reimbursementDue)}` : ""}{row.reimbursementDue > 0 && row.profitDue > 0 ? " · " : ""}{row.profitDue > 0 ? `Profit ${formatCurrency(row.profitDue)}` : ""}</small><button onClick={() => statement(row)} style={{ border: 0, background: "none", color: "#0a0a0a", fontSize: 9, fontWeight: 800, padding: "4px 0 0", cursor: "pointer" }}>Copy statement</button></div>
         <div style={{ textAlign: "right" }}><strong style={{ display: "block", color: "#b45309", marginBottom: 5 }}>{formatCurrency(row.reimbursementDue + row.profitDue)}</strong>{row.reimbursementDue > 0 ? <button onClick={() => startPayment("reimbursement", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay back</button> : row.profitDue > 0 ? <button onClick={() => startPayment("partner_payout", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay profit</button> : null}</div>
       </div>)}
     </div>
@@ -290,23 +291,23 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
 
     <div style={card}>
       <span style={label}>Recent activity</span>
-      {activity.length === 0 ? <span style={{ fontSize: 12, color: "#94a3b8" }}>No activity yet.</span> : activity.map(item => <div key={item.id} style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", gap: 8, alignItems: "center", borderTop: "1px solid #edf2f7", paddingTop: 9 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: ["Paid", "Repaid"].includes(item.status) ? "#dcfce7" : item.status === "Needs repayment" ? "#fff7ed" : "#f1f5f9", color: item.tone, fontWeight: 900 }}>{["Paid", "Repaid"].includes(item.status) ? "✓" : "↓"}</span>
-        <span><strong style={{ display: "block", fontSize: 11, color: "#334155" }}>{item.title}</strong><small style={{ color: "#94a3b8" }}>{item.detail} · {item.date === localToday() ? "Today" : formatDateShort(item.date)}</small></span>
+      {activity.length === 0 ? <span style={{ fontSize: 12, color: "#8c8982" }}>No activity yet.</span> : activity.map(item => <div key={item.id} style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", gap: 8, alignItems: "center", borderTop: "1px solid #edf2f7", paddingTop: 9 }}>
+        <span style={{ width: 28, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: ["Paid", "Repaid"].includes(item.status) ? "#dcfce7" : item.status === "Needs repayment" ? "#fff7ed" : "#ece8df", color: item.tone, fontWeight: 900 }}>{["Paid", "Repaid"].includes(item.status) ? "✓" : "↓"}</span>
+        <span><strong style={{ display: "block", fontSize: 11, color: "#4a4843" }}>{item.title}</strong><small style={{ color: "#8c8982" }}>{item.detail} · {item.date === localToday() ? "Today" : formatDateShort(item.date)}</small></span>
         <span style={{ textAlign: "right" }}><strong style={{ display: "block", fontSize: 11, color: item.amount > 0 ? "#16a34a" : "#dc2626" }}>{item.amount > 0 ? "+" : ""}{formatCurrency(Math.abs(item.amount))}</strong><small style={{ color: item.tone, fontSize: 8, fontWeight: 800 }}>{item.status}</small></span>
       </div>)}
     </div>
 
     <details style={card}>
-      <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#334155" }}>Finance settings</summary>
-      <div><span style={label}>Profit sharing</span><div style={{ fontSize: 11, color: sharesValid ? "#64748b" : "#dc2626", marginTop: 3 }}>{partners.length ? (partnerTotal === 0 ? `Equal split · ${partners.length} partner${partners.length === 1 ? "" : "s"}` : `${partnerTotal.toFixed(1)}% allocated${sharesValid ? " ✓" : " · must total 100%"}`) : "No partners selected"}</div></div>
+      <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#4a4843" }}>Finance settings</summary>
+      <div><span style={label}>Profit sharing</span><div style={{ fontSize: 11, color: sharesValid ? "#6c6a65" : "#dc2626", marginTop: 3 }}>{partners.length ? (partnerTotal === 0 ? `Equal split · ${partners.length} partner${partners.length === 1 ? "" : "s"}` : `${partnerTotal.toFixed(1)}% allocated${sharesValid ? " ✓" : " · must total 100%"}`) : "No partners selected"}</div></div>
       {users.map(user => { const partner = partners.find(item => item.profileId === user.id); return <div key={user.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 76px", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={!!partner} onChange={() => togglePartner(user)} aria-label={`Make ${user.name} a partner`} />
-        <span style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>{user.name}</span>
+        <span style={{ fontSize: 12, fontWeight: 800, color: "#4a4843" }}>{user.name}</span>
         {partner ? <input type="number" min="0" max="100" step="0.1" value={partner.profitShare || ""} placeholder="Equal" onChange={event => updateShare(user.id, event.target.value)} style={{ ...field, width: 76, fontSize: 11 }} aria-label={`${user.name} profit percentage`} /> : <span />}
       </div>; })}
       <div style={{ height: 1, background: "#edf2f7" }} />
-      <div><span style={label}>Period lock</span><div style={{ fontSize: 11, color: journal.lockedThrough ? "#b45309" : "#64748b", marginTop: 3 }}>{journal.lockedThrough ? `Locked through ${formatDateShort(journal.lockedThrough)}` : "No period locked"}</div></div>
+      <div><span style={label}>Period lock</span><div style={{ fontSize: 11, color: journal.lockedThrough ? "#b45309" : "#6c6a65", marginTop: 3 }}>{journal.lockedThrough ? `Locked through ${formatDateShort(journal.lockedThrough)}` : "No period locked"}</div></div>
       <div style={{ display: "flex", gap: 8 }}>
         <input type="date" aria-label="Lock accounting through date" value={journal.lockedThrough ?? ""} max={localToday()} onChange={event => onLockChange(event.target.value)} style={{ ...field, flex: 1 }} />
         {journal.lockedThrough && <button onClick={() => onLockChange(null)} style={{ ...styles.copyBtn, minWidth: 74 }}>Reopen</button>}
@@ -379,6 +380,9 @@ export default function App() {
   const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
+  const [cancellingOrderId, setCancellingOrderId] = useState(null);
+  const cancellationRunning = useRef(false);
+  const [cancellationError, setCancellationError] = useState("");
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
   const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
@@ -711,6 +715,34 @@ export default function App() {
     }
   }, [loginUsername, loginPassword]);
 
+  const cancelUndelivered = useCallback(async (order) => {
+    if (!order || order.status === "delivered" || cancellationRunning.current) return;
+    // Queued orders must finish syncing before server-side cancellation.
+    if (order.pendingSync) return;
+    cancellationRunning.current = true;
+    setCancellingOrderId(order.id);
+    setCancellationError("");
+    try {
+      if (!await cancelOrder(order.id)) {
+        setCancellationError("Could not cancel this order. It may already be delivered. Refresh and try again.");
+        return;
+      }
+      setOrders(prev => prev.filter(o => o.id !== order.id));
+      setManagerCurrentOrders(prev => prev.filter(o => o.id !== order.id));
+      setManagementOrders(prev => prev.filter(o => o.id !== order.id));
+      setStockPlanningOrders(prev => prev.filter(o => o.id !== order.id));
+      setOrderDeleteConfirmId(null);
+      if (undoTarget === order.id) { setUndoTarget(null); clearTimeout(undoTimer.current); }
+      const remoteStock = await fetchStock();
+      if (remoteStock) setStock(remoteStock);
+    } catch {
+      setCancellationError("Cancellation failed. Please try again when connected.");
+    } finally {
+      cancellationRunning.current = false;
+      setCancellingOrderId(null);
+    }
+  }, [undoTarget]);
+
   const undoLast = useCallback(async () => {
     if (!undoTarget) return;
     const pending = orders.find(order => order.id === undoTarget)?.pendingSync;
@@ -887,14 +919,14 @@ export default function App() {
           <h1 style={styles.screenTitle}>{screenTitle}</h1>
           {confirmLogout ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
-              <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>Switch user?</span>
+              <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>Switch user?</span>
               <button
                 onClick={async () => { await signOut(); setActiveUser(null); setUsers([]); setDbReady(false); setConfirmLogout(false); }}
-                style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#0f172a", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#0a0a0a", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
               >Yes</button>
               <button
                 onClick={() => setConfirmLogout(false)}
-                style={{ fontSize: 12, fontWeight: 800, color: "#64748b", background: "rgba(0,0,0,0.06)", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
+                style={{ fontSize: 12, fontWeight: 800, color: "#6c6a65", background: "rgba(0,0,0,0.06)", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
               >No</button>
             </div>
           ) : (
@@ -909,8 +941,9 @@ export default function App() {
         </div>
 
         <main style={styles.mainContent}>
+          {cancellationError && <div role="alert" style={{ padding: 12, background: "#fef2f2", color: "#991b1b", borderRadius: 12 }}>{cancellationError}</div>}
           {(!isOnline || pendingOrderCount > 0 || syncMessage) && (
-            <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#eff6ff" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#bfdbfe" : "#a7f3d0" }}>
+            <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#f6f4ef" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#d8d4cb" : "#a7f3d0" }}>
               <div>
                 <strong>{!isOnline ? "Offline mode" : pendingOrderCount > 0 ? `${pendingOrderCount} waiting to sync` : syncMessage}</strong>
                 <span>{!isOnline ? " Orders stay on this device. Stock will not change." : pendingOrderCount > 0 ? " Stock will not be adjusted." : ""}</span>
@@ -921,9 +954,9 @@ export default function App() {
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
         <div style={styles.availabilityCard}>
-          <span style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#64748b" }}>Available pipes</span>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0f172a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
-          <div style={{ height: 5, borderRadius: 99, background: "#e2e8f0", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
+          <span style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#6c6a65" }}>Available pipes</span>
+          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0a0a0a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
+          <div style={{ height: 5, borderRadius: 99, background: "#d8d4cb", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
         </div>
         <div style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
@@ -964,13 +997,14 @@ export default function App() {
                 key={f.id}
                 onClick={() => setSelectedFlavour(f)}
                 className={`flavour-pop d-${fi}`}
+                aria-pressed={selectedFlavour?.id === f.id}
                 style={{
                   ...styles.flavourBtn,
                   background: flash === f.id ? f.color : selectedFlavour?.id === f.id ? f.color : f.bg,
-                  color: flash === f.id ? "#fff" : selectedFlavour?.id === f.id ? "#fff" : "#111827",
-                  border: `1px solid ${selectedFlavour?.id === f.id ? f.color : f.border}`,
-                  transform: selectedFlavour?.id === f.id ? "translateY(-3px) scale(1.03)" : "translateY(0)",
-                  boxShadow: selectedFlavour?.id === f.id ? `0 6px 18px ${f.color}44` : undefined,
+                  color: flash === f.id ? "#fff" : selectedFlavour?.id === f.id ? "#fff" : "#0a0a0a",
+                  border: `1px solid ${selectedFlavour?.id === f.id ? "#f6f4ef" : "#292929"}`,
+                  transform: selectedFlavour?.id === f.id ? "translateY(-1px)" : "translateY(0)",
+                  boxShadow: selectedFlavour?.id === f.id ? "0 0 0 2px #f6f4ef, 0 0 0 3px #0a0a0a" : undefined,
                   transition: "all 0.18s cubic-bezier(0.34, 1.56, 0.64, 1)",
                 }}
               >
@@ -1038,12 +1072,13 @@ export default function App() {
                 </span>
                 <span style={styles.orderPrice}>{formatCurrency(o.price)}</span>
                 <button onClick={() => markDelivered(o)} disabled={o.pendingSync} style={{ ...styles.deliverBtn, ...(o.pendingSync ? { opacity: 0.55, cursor: "not-allowed" } : {}) }}>{o.pendingSync ? "Sync first" : "Delivered"}</button>
-                {isAdmin && (orderDeleteConfirmId === o.id ? (
-                  <div style={styles.orderDeleteConfirm}>
-                    <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
-                    <button onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Cancel</button>
+                {o.status !== "delivered" && (orderDeleteConfirmId === o.id ? (
+                  <div style={{ ...styles.orderDeleteConfirm, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10 }}>Cancel this order?</span>
+                    <button disabled={cancellingOrderId !== null} onClick={() => cancelUndelivered(o)} style={styles.orderDeleteYes}>{cancellingOrderId === o.id ? "Cancelling…" : "Yes, cancel"}</button>
+                    <button disabled={cancellingOrderId !== null} onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Keep order</button>
                   </div>
-                ) : <button onClick={() => setOrderDeleteConfirmId(o.id)} aria-label={`Delete order ${o.id}`} style={styles.deleteBtn}>×</button>)}
+                ) : <button disabled={!CANCELLATION_ENABLED || o.pendingSync || cancellingOrderId !== null} title={!CANCELLATION_ENABLED ? "Cancellation is awaiting activation" : undefined} onClick={() => setOrderDeleteConfirmId(o.id)} style={{ ...styles.orderDeleteNo, opacity: !CANCELLATION_ENABLED || o.pendingSync ? 0.5 : 1 }}>{o.pendingSync ? "Sync to cancel" : "Cancel order"}</button>)}
               </div>
             ))}
           </div>
@@ -1065,7 +1100,7 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
                 {[{ label: "Preparing", count: canViewAllOrders ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
-                  <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0f172a" : "transparent", color: ordersView === tab.label ? "#fff" : "#64748b", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
+                  <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0a0a0a" : "transparent", color: ordersView === tab.label ? "#fff" : "#6c6a65", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
                 ))}
@@ -1081,7 +1116,7 @@ export default function App() {
                     <div key={`${o.id}-${ordersView}`} className="card-enter" style={{ ...styles.deliveredRow, animationDelay: `${i * 0.04}s`, border: overdue ? "1px solid #f59e0b" : undefined, background: overdue ? "#fffbeb" : undefined }}>
                       <div style={styles.orderCardHeader}>
                         <span style={styles.orderCardNumber}>Order #{String(o.id).slice(-4)}</span>
-                        <span style={{ ...styles.orderStatusPill, color: overdue || ordersView === "Return Pipes" ? "#b45309" : ordersView === "Preparing" ? "#1d4ed8" : "#15803d", background: overdue || ordersView === "Return Pipes" ? "#fef3c7" : ordersView === "Preparing" ? "#dbeafe" : "#dcfce7" }}>
+                        <span style={{ ...styles.orderStatusPill, color: overdue || ordersView === "Return Pipes" ? "#b45309" : ordersView === "Preparing" ? "#0a0a0a" : "#15803d", background: overdue || ordersView === "Return Pipes" ? "#fef3c7" : ordersView === "Preparing" ? "#ece8df" : "#dcfce7" }}>
                           {overdue ? "Overdue" : ordersView === "Preparing" ? "Preparing" : ordersView === "Return Pipes" ? "Pipe out" : "Delivered"}
                         </span>
                         <span style={styles.orderCardTime}>{ordersView === "Preparing" ? `${elapsed} min` : formatTime(o.deliveredAt ?? orderedAt)}</span>
@@ -1098,7 +1133,14 @@ export default function App() {
                         </span>
                       </div>
                       {ordersView === "Preparing" ? <button onClick={() => markDelivered(o)} style={{ ...styles.deliverBtn, minHeight: 36, flexBasis: "100%", fontSize: 11 }}>{overdue ? "✓ Mark ready (overdue)" : "✓ Mark ready"}</button> : o.type === "full" && !o.pipeReturned ? <button onClick={() => returnPipe(o.id)} style={{ ...styles.deliverBtn, minHeight: 30, marginLeft: "auto", padding: "0 10px", background: "#fff7ed", borderColor: "#fed7aa", color: "#c2410c", fontSize: 9 }}>Return pipe</button> : <span style={{ marginLeft: "auto", fontSize: 9, color: "#16a34a", fontWeight: 800 }}>✓ Complete</span>}
-                      {isAdmin && (orderDeleteConfirmId === o.id ? (
+                      {o.status !== "delivered" && (orderDeleteConfirmId === o.id ? (
+                  <div style={{ ...styles.orderDeleteConfirm, flexWrap: "wrap" }}>
+                    <span style={{ fontSize: 10 }}>Cancel this order?</span>
+                    <button disabled={cancellingOrderId !== null} onClick={() => cancelUndelivered(o)} style={styles.orderDeleteYes}>{cancellingOrderId === o.id ? "Cancelling…" : "Yes, cancel"}</button>
+                    <button disabled={cancellingOrderId !== null} onClick={() => setOrderDeleteConfirmId(null)} style={styles.orderDeleteNo}>Keep order</button>
+                  </div>
+                ) : <button disabled={!CANCELLATION_ENABLED || o.pendingSync || cancellingOrderId !== null} title={!CANCELLATION_ENABLED ? "Cancellation is awaiting activation" : undefined} onClick={() => setOrderDeleteConfirmId(o.id)} style={{ ...styles.orderDeleteNo, opacity: !CANCELLATION_ENABLED || o.pendingSync ? 0.5 : 1 }}>{o.pendingSync ? "Sync to cancel" : "Cancel order"}</button>)}
+                      {isAdmin && o.status === "delivered" && (orderDeleteConfirmId === o.id ? (
                         <div style={{ ...styles.orderDeleteConfirm, flexBasis: "100%" }}>
                           <span style={{ marginRight: "auto", fontSize: 10, color: "#991b1b", fontWeight: 800 }}>Delete this order permanently?</span>
                           <button onClick={() => { removeOrder(o); setOrderDeleteConfirmId(null); }} style={styles.orderDeleteYes}>Delete</button>
@@ -1225,9 +1267,9 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(15,23,42,0.06)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
                 {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
-                  <button key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0f172a" : "transparent", color: managementView === view.id ? "#fff" : "#64748b", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                  <button key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
                 ))}
               </div>
 
@@ -1240,7 +1282,7 @@ export default function App() {
                     if (preset === "7 Days") start.setDate(start.getDate() - 6);
                     if (preset === "Month") start.setDate(1);
                     setManagementDateFrom(dateInputValue(start)); setManagementDateTo(dateInputValue(end)); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59");
-                  }} style={{ border: "1px solid rgba(15,23,42,0.08)", background: (preset === "Today" && isViewingToday) ? "#0f172a" : "rgba(255,255,255,0.7)", color: (preset === "Today" && isViewingToday) ? "#fff" : "#475569", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>
+                  }} style={{ border: "1px solid rgba(10,10,10,0.08)", background: (preset === "Today" && isViewingToday) ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: (preset === "Today" && isViewingToday) ? "#fff" : "#6c6a65", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>
                 ))}
               </div>
 
@@ -1282,7 +1324,7 @@ export default function App() {
                 />
               ) : <>
               {managementLoading && (
-                <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#94a3b8", fontWeight: 600 }}>Loading…</div>
+                <div style={{ textAlign: "center", padding: 16, fontSize: 13, color: "#8c8982", fontWeight: 600 }}>Loading…</div>
               )}
 
               {/* ── Always-visible order summary ── */}
@@ -1293,10 +1335,10 @@ export default function App() {
                 </div>
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 8 }}>
                   {[
-                    { label: "Revenue", value: formatCurrency(displayTotals.gross), note: `Card ${formatCurrency(displayTotals.card)} · Cash ${formatCurrency(displayTotals.cash)}`, color: "#0f172a" },
+                    { label: "Revenue", value: formatCurrency(displayTotals.gross), note: `Card ${formatCurrency(displayTotals.card)} · Cash ${formatCurrency(displayTotals.cash)}`, color: "#0a0a0a" },
                     { label: "Net profit", value: formatCurrency(displayNetProfit), note: `${formatCurrency(displayExpenseTotal)} expenses`, color: displayNetProfit >= 0 ? "#16a34a" : "#dc2626" },
-                    { label: "Orders", value: String(totalOrders), note: `${newPipeOrders.length} new · ${refillOrders.length} refills`, color: "#0f172a" },
-                    { label: "Average order", value: totalOrders ? formatCurrency(Math.round(avgOrderValue)) : "—", note: `${deliveryRate}% delivered`, color: "#2563eb" },
+                    { label: "Orders", value: String(totalOrders), note: `${newPipeOrders.length} new · ${refillOrders.length} refills`, color: "#0a0a0a" },
+                    { label: "Average order", value: totalOrders ? formatCurrency(Math.round(avgOrderValue)) : "—", note: `${deliveryRate}% delivered`, color: "#0a0a0a" },
                   ].map((metric) => (
                     <div key={metric.label} style={{ ...styles.kpiCard, minHeight: 98 }}>
                       <span style={styles.kpiLabel}>{metric.label}</span>
@@ -1309,7 +1351,7 @@ export default function App() {
                 <div style={styles.managementAttentionCard}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                     <div><span style={styles.managementEyebrow}>Live operations</span><strong style={{ ...styles.managementSectionTitle, fontSize: 14 }}>Needs attention</strong></div>
-                    <span style={{ fontSize: 10, color: "#64748b", fontWeight: 800 }}>Now</span>
+                    <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 800 }}>Now</span>
                   </div>
                   <div style={styles.managementAttentionGrid}>
                     {[
@@ -1327,24 +1369,24 @@ export default function App() {
                 <div style={{ ...styles.kpiCard, minHeight: 150 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={styles.kpiLabel}>Sales by hour</span>
-                    <span style={{ fontSize: 9, color: "#64748b", fontWeight: 800 }}>Rands (R)</span>
+                    <span style={{ fontSize: 9, color: "#6c6a65", fontWeight: 800 }}>Rands (R)</span>
                   </div>
                   <div style={{ display: "flex", alignItems: "flex-end", gap: 5, height: 88, paddingTop: 10, borderBottom: "1px solid #cbd5e1" }}>
                     {hourlySales.map((item) => (
-                      <div key={item.hour} title={`${item.hour}:00 · ${formatCurrency(item.total)}`} style={{ flex: 1, height: `${Math.max(4, (item.total / hourlyMax) * 100)}%`, minWidth: 3, borderRadius: "3px 3px 0 0", background: item.total ? "#60a5fa" : "#e2e8f0" }} />
+                      <div key={item.hour} title={`${item.hour}:00 · ${formatCurrency(item.total)}`} style={{ flex: 1, height: `${Math.max(4, (item.total / hourlyMax) * 100)}%`, minWidth: 3, borderRadius: "3px 3px 0 0", background: item.total ? "#60a5fa" : "#d8d4cb" }} />
                     ))}
                   </div>
-                  <div style={{ display: "flex", justifyContent: "space-between", color: "#94a3b8", fontSize: 8, fontWeight: 700 }}><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span></div>
+                  <div style={{ display: "flex", justifyContent: "space-between", color: "#8c8982", fontSize: 8, fontWeight: 700 }}><span>10</span><span>12</span><span>14</span><span>16</span><span>18</span><span>20</span></div>
                 </div>
 
                 <div style={{ ...styles.kpiCard, gap: 8 }}>
                   <span style={styles.kpiLabel}>Staff performance</span>
                   {staffPerformance.length === 0 && <span style={styles.kpiSub}>No orders in this period</span>}
                   {staffPerformance.slice(0, 4).map(([name, result], index) => (
-                    <div key={name} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", alignItems: "center", gap: 8, paddingTop: index ? 8 : 2, borderTop: index ? "1px solid rgba(15,23,42,0.07)" : 0 }}>
-                      <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 99, background: index === 0 ? "#fef3c7" : "#f1f5f9", color: index === 0 ? "#b45309" : "#64748b", fontSize: 10, fontWeight: 900 }}>{index + 1}</span>
-                      <span style={{ fontSize: 12, fontWeight: 800, color: "#334155" }}>{name}<small style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#94a3b8" }}>{result.orders} order{result.orders === 1 ? "" : "s"}</small></span>
-                      <strong style={{ fontSize: 12, color: "#0f172a" }}>{formatCurrency(result.revenue)}</strong>
+                    <div key={name} style={{ display: "grid", gridTemplateColumns: "24px 1fr auto", alignItems: "center", gap: 8, paddingTop: index ? 8 : 2, borderTop: index ? "1px solid rgba(10,10,10,0.07)" : 0 }}>
+                      <span style={{ width: 22, height: 22, display: "grid", placeItems: "center", borderRadius: 99, background: index === 0 ? "#fef3c7" : "#ece8df", color: index === 0 ? "#b45309" : "#6c6a65", fontSize: 10, fontWeight: 900 }}>{index + 1}</span>
+                      <span style={{ fontSize: 12, fontWeight: 800, color: "#4a4843" }}>{name}<small style={{ display: "block", fontSize: 9, fontWeight: 700, color: "#8c8982" }}>{result.orders} order{result.orders === 1 ? "" : "s"}</small></span>
+                      <strong style={{ fontSize: 12, color: "#0a0a0a" }}>{formatCurrency(result.revenue)}</strong>
                     </div>
                   ))}
                 </div>
@@ -1445,7 +1487,7 @@ export default function App() {
                           {anyLow && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fffbeb", color: "#b45309", border: "1px solid #fde68a" }}>Low</span>}
                         </div>
                       </div>
-                      <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 700, marginRight: 4 }}>{isOpen ? "▲ Hide" : "▼ Show"}</span>
+                      <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700, marginRight: 4 }}>{isOpen ? "▲ Hide" : "▼ Show"}</span>
                     </div>
                     {isOpen && (
                       <div style={styles.subItemList}>
@@ -1462,13 +1504,13 @@ export default function App() {
                                   <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-end", gap: 3 }}>
                                     {(() => {
                                       const perSale = FLAVOUR_PER_SALE[f.id];
-                                      if (!perSale) return <span style={{ fontSize: 12, color: "#94a3b8" }}>{f.quantity.toFixed(2)} bx</span>;
+                                      if (!perSale) return <span style={{ fontSize: 12, color: "#8c8982" }}>{f.quantity.toFixed(2)} bx</span>;
                                       const qty = Math.round(f.quantity * 1000) / 1000;
                                       if (qty === 0) return (
                                         <span style={{ fontSize: 10, color: "#dc2626", fontWeight: 800 }}>0 orders</span>
                                       );
                                       return <>
-                                        <span style={{ fontSize: 10, fontWeight: 800, color: "#0f172a", whiteSpace: "nowrap" }}>
+                                        <span style={{ fontSize: 10, fontWeight: 800, color: "#0a0a0a", whiteSpace: "nowrap" }}>
                                           {qty.toFixed(2)} boxes
                                         </span>
                                         <span style={{ fontSize: 9, fontWeight: 800, color: f.color, background: f.bg, padding: "2px 7px", borderRadius: 20, whiteSpace: "nowrap" }}>
@@ -1545,7 +1587,7 @@ export default function App() {
                       <span style={styles.stockUnit}>{item.unit}</span>
                       {orderCapacity !== null && <span style={{ ...styles.stockUnit, color: orderCapacity <= 5 ? "#dc2626" : "#047857", fontWeight: 800 }}>· ≈ {orderCapacity} orders</span>}
                       {pack && (
-                        <span style={{ ...styles.stockUnit, color: "#94a3b8" }}>
+                        <span style={{ ...styles.stockUnit, color: "#8c8982" }}>
                           · {Math.floor(item.quantity / pack.size)} {pack.plural} + {item.quantity % pack.size} pcs
                         </span>
                       )}
@@ -1590,13 +1632,13 @@ export default function App() {
                 </div>
 
                 <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Fixed Assets", value: stock.filter(item => item.category === "equipment").length, color: "#2563eb", bg: "#eff6ff", filter: "Fixed Assets" }].map((summary) => (
-                    <button key={summary.label} onClick={() => setStockCategory(summary.filter)} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center", fontFamily: "inherit" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0f172a", fontSize: 21 }}>{summary.value}</strong></button>
+                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Fixed Assets", value: stock.filter(item => item.category === "equipment").length, color: "#0a0a0a", bg: "#f6f4ef", filter: "Fixed Assets" }].map((summary) => (
+                    <button key={summary.label} onClick={() => setStockCategory(summary.filter)} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center", fontFamily: "inherit" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0a0a0a", fontSize: 21 }}>{summary.value}</strong></button>
                   ))}
                 </div>
                 <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-                  {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(15,23,42,0.08)", background: stockCategory === category ? "#0f172a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#475569", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
+                  {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
 
                 {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}
@@ -1610,7 +1652,7 @@ export default function App() {
                     <span style={styles.purchasePlannerTarget}>7-day target</span>
                   </div>
                   {stockPlanningOrders.length === 0 ? (
-                    <div style={{ color: "#64748b", fontSize: 11, fontWeight: 700 }}>Recommendations will appear after sales history is available.</div>
+                    <div style={{ color: "#6c6a65", fontSize: 11, fontWeight: 700 }}>Recommendations will appear after sales history is available.</div>
                   ) : (
                     <div style={styles.purchasePlanList}>
                       {purchasePlan.map(item => {
@@ -1621,14 +1663,14 @@ export default function App() {
                           <div key={item.id} style={styles.purchasePlanRow}>
                             <span style={styles.purchasePlanIcon}>{item.icon}</span>
                             <span style={{ flex: 1, minWidth: 0 }}>
-                              <strong style={{ display: "block", color: "#0f172a", fontSize: 11 }}>{item.name}</strong>
-                              <small style={{ display: "block", marginTop: 2, color: "#64748b", fontSize: 9, fontWeight: 700 }}>
+                              <strong style={{ display: "block", color: "#0a0a0a", fontSize: 11 }}>{item.name}</strong>
+                              <small style={{ display: "block", marginTop: 2, color: "#6c6a65", fontSize: 9, fontWeight: 700 }}>
                                 {Number.isFinite(item.daysLeft) ? `${item.daysLeft.toFixed(1)} selling days left` : "No recent usage"}
                               </small>
                             </span>
                             <span style={{ textAlign: "right" }}>
                               <strong style={{ display: "block", color: tone, fontSize: 11 }}>{item.buy > 0 ? `Buy ${item.buy}` : "No purchase"}</strong>
-                              <small style={{ color: "#94a3b8", fontSize: 8, fontWeight: 800 }}>{item.buy > 0 ? item.unit : `${item.quantity.toFixed?.(1) ?? item.quantity} available`}</small>
+                              <small style={{ color: "#8c8982", fontSize: 8, fontWeight: 800 }}>{item.buy > 0 ? item.unit : `${item.quantity.toFixed?.(1) ?? item.quantity} available`}</small>
                             </span>
                           </div>
                         );
@@ -1641,7 +1683,7 @@ export default function App() {
                 {consumables.length > 0 && (
                   <>
                     <button onClick={() => setConsumablesCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                      <span>🔥 Consumables <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({consumables.length})</span></span>
+                      <span>🔥 Consumables <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 600 }}>({consumables.length})</span></span>
                       <span style={styles.collapseChevron}>{consumablesCollapsed ? "▶" : "▼"}</span>
                     </button>
                     {!consumablesCollapsed && <div className="expand-down" style={styles.stockList}>{consumables.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
@@ -1651,7 +1693,7 @@ export default function App() {
                 {equipment.length > 0 && (
                   <>
                     <button onClick={() => setEquipmentCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                      <span>🛠️ Fixed Assets <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600 }}>({equipment.length})</span></span>
+                      <span>🛠️ Fixed Assets <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 600 }}>({equipment.length})</span></span>
                       <span style={styles.collapseChevron}>{equipmentCollapsed ? "▶" : "▼"}</span>
                     </button>
                     {!equipmentCollapsed && <div className="expand-down" style={styles.stockList}>{equipment.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
@@ -1670,16 +1712,16 @@ export default function App() {
 
                     {(outItems.length > 0 || lowItems.length > 0) && (
                       <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Needs Attention</span>
+                        <span style={{ fontSize: 10, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Needs Attention</span>
                         {outItems.map(i => (
                           <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "#fef2f2", padding: "2px 8px", borderRadius: 20 }}>Out of stock</span>
                           </div>
                         ))}
                         {lowItems.map(i => (
                           <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0f172a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
+                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.icon ? `${i.icon} ` : ""}{i.name}{i.parentName ? ` (${i.parentName})` : ""}</span>
                             <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309", background: "#fffbeb", padding: "2px 8px", borderRadius: 20 }}>Low</span>
                           </div>
                         ))}
@@ -1697,25 +1739,25 @@ export default function App() {
                       if (!stockExpenses.length) return null;
                       const RESTOCK_OPT_MAP = Object.fromEntries(
                         stock.flatMap(i => i.subItems
-                          ? i.subItems.map(s => { const fl = FLAVOURS.find(f => f.id === s.id); return [`Flavour-${s.id}`, { label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#64748b", bg: fl?.bg ?? "#f8fafc" }]; })
-                          : [[i.name, { label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#334155" : "#0369a1", bg: i.category === "equipment" ? "#f1f5f9" : "#eff6ff" }]]
+                          ? i.subItems.map(s => { const fl = FLAVOURS.find(f => f.id === s.id); return [`Flavour-${s.id}`, { label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#6c6a65", bg: fl?.bg ?? "#f6f4ef" }]; })
+                          : [[i.name, { label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#4a4843" : "#4a4843", bg: i.category === "equipment" ? "#ece8df" : "#f6f4ef" }]]
                         )
                       );
                       return (
                         <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: "#64748b", textTransform: "uppercase", letterSpacing: "0.08em" }}>Restock History</span>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Restock History</span>
                           {[...stockExpenses].reverse().map(e => {
-                            const opt = RESTOCK_OPT_MAP[e.category] ?? { label: e.category, icon: "📦", color: "#334155", bg: "#f1f5f9" };
+                            const opt = RESTOCK_OPT_MAP[e.category] ?? { label: e.category, icon: "📦", color: "#4a4843", bg: "#ece8df" };
                             const pack = RESTOCK_PACK[e.category];
                             return (
                               <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
                                 <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
                                   {opt.icon} {opt.label}
                                 </span>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: "#0f172a" }}>
+                                <span style={{ fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>
                                   +{e.qty ?? "?"} {pack ? pack.plural : "units"}{pack && e.qty ? ` (${e.qty * pack.size} pcs)` : ""}
                                 </span>
-                                <span style={{ fontSize: 11, color: "#94a3b8", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
+                                <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
                                   {new Date(e.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
                                 </span>
                               </div>
@@ -1739,26 +1781,26 @@ export default function App() {
                         Share Stock Report
                       </button>
                       {showShareMenu && (
-                        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, boxShadow: "0 8px 24px rgba(15,23,42,0.12)", overflow: "hidden", zIndex: 10 }}>
+                        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, boxShadow: "0 8px 24px rgba(10,10,10,0.12)", overflow: "hidden", zIndex: 10 }}>
                           <a
                             href={`https://wa.me/?text=${encodeURIComponent(buildStockReport())}`}
                             target="_blank"
                             rel="noopener noreferrer"
                             onClick={() => setShowShareMenu(false)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0a0a0a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
                           >
                             <span style={{ fontSize: 20 }}>💬</span> WhatsApp
                           </a>
                           <a
                             href={`mailto:?subject=Stock Report · ${todayLabel}&body=${encodeURIComponent(buildStockReport())}`}
                             onClick={() => setShowShareMenu(false)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0f172a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0a0a0a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
                           >
                             <span style={{ fontSize: 20 }}>✉️</span> Email
                           </a>
                           <button
                             onClick={() => { navigator.clipboard?.writeText(buildStockReport()); setShowShareMenu(false); }}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", width: "100%", background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, color: "#0f172a", fontFamily: "inherit" }}
+                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", width: "100%", background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, color: "#0a0a0a", fontFamily: "inherit" }}
                           >
                             <span style={{ fontSize: 20 }}>📋</span> Copy to clipboard
                           </button>
@@ -1825,20 +1867,20 @@ export default function App() {
                   <div style={styles.settingsSectionLabel}>Choose a section</div>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
                     {[
-                      { key: "pricing", icon: "R", title: "Pricing", text: "Pipe and refill prices", tone: "#2563eb", bg: "#eff6ff" },
+                      { key: "pricing", icon: "R", title: "Pricing", text: "Pipe and refill prices", tone: "#0a0a0a", bg: "#f6f4ef" },
                       { key: "team", icon: "👥", title: "Team & access", text: `${users.length} users and permissions`, tone: "#7c3aed", bg: "#f5f3ff" },
                       { key: "security", icon: "🔐", title: "Security", text: "Passwords and sessions", tone: "#dc2626", bg: "#fef2f2" },
                       { key: "business", icon: "⚙", title: "Business", text: "Payments and stock rules", tone: "#047857", bg: "#ecfdf5" },
                     ].map((section) => (
-                      <button key={section.key} onClick={() => setSettingsSection(section.key)} style={{ border: "1px solid rgba(15,23,42,0.07)", background: section.bg, borderRadius: 16, padding: 16, minHeight: 132, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", justifyContent: "space-between", fontFamily: "inherit" }}>
-                        <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: "#fff", color: section.tone, fontSize: section.icon === "R" ? 16 : 18, fontWeight: 900, boxShadow: "0 4px 12px rgba(15,23,42,0.06)" }}>{section.icon}</span>
-                        <span><strong style={{ display: "block", color: "#0f172a", fontSize: 14 }}>{section.title}</strong><span style={{ display: "block", color: "#64748b", fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>{section.text}</span></span>
+                      <button key={section.key} onClick={() => setSettingsSection(section.key)} style={{ border: "1px solid rgba(10,10,10,0.07)", background: section.bg, borderRadius: 16, padding: 16, minHeight: 132, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", justifyContent: "space-between", fontFamily: "inherit" }}>
+                        <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: "#fff", color: section.tone, fontSize: section.icon === "R" ? 16 : 18, fontWeight: 900, boxShadow: "0 4px 12px rgba(10,10,10,0.06)" }}>{section.icon}</span>
+                        <span><strong style={{ display: "block", color: "#0a0a0a", fontSize: 14 }}>{section.title}</strong><span style={{ display: "block", color: "#6c6a65", fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>{section.text}</span></span>
                       </button>
                     ))}
                   </div>
                 </>
               ) : (
-                <button onClick={() => setSettingsSection("overview")} style={{ alignSelf: "flex-start", border: 0, background: "rgba(255,255,255,0.65)", borderRadius: 10, padding: "8px 12px", color: "#334155", fontWeight: 800, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← All settings</button>
+                <button onClick={() => setSettingsSection("overview")} style={{ alignSelf: "flex-start", border: 0, background: "rgba(255,255,255,0.65)", borderRadius: 10, padding: "8px 12px", color: "#4a4843", fontWeight: 800, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← All settings</button>
               )}
 
               {settingsSection === "pricing" && <>
@@ -1888,8 +1930,8 @@ export default function App() {
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
                 {["Staff", "Manager", "Admin"].map((role) => (
                   <div key={role} style={{ background: "rgba(255,255,255,0.65)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, padding: 11 }}>
-                    <strong style={{ display: "block", fontSize: 20, color: "#0f172a" }}>{users.filter((u) => u.role === role && !u.paused).length}</strong>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: "#64748b", textTransform: "uppercase" }}>{role}</span>
+                    <strong style={{ display: "block", fontSize: 20, color: "#0a0a0a" }}>{users.filter((u) => u.role === role && !u.paused).length}</strong>
+                    <span style={{ fontSize: 9, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase" }}>{role}</span>
                   </div>
                 ))}
               </div>
@@ -1914,7 +1956,7 @@ export default function App() {
                     return (
                     <div key={u.id} className={`card-enter d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
                       <div style={{ ...styles.userRow, cursor: "pointer" }} onClick={() => toggleUserExpanded(u.id)}>
-                        <div style={{ ...styles.userAvatar, background: u.paused ? "#94a3b8" : undefined }}>
+                        <div style={{ ...styles.userAvatar, background: u.paused ? "#8c8982" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}
                         </div>
                         <div style={styles.userMeta}>
@@ -2009,8 +2051,8 @@ export default function App() {
                             ))}
                           </div>
                           {resetPinId === u.id && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(15,23,42,0.07)" }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "#64748b", whiteSpace: "nowrap" }}>New password</span>
+                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(10,10,10,0.07)" }}>
+                              <span style={{ fontSize: 11, fontWeight: 700, color: "#6c6a65", whiteSpace: "nowrap" }}>New password</span>
                               <input
                                 type="password"
                                 autoFocus
@@ -2050,10 +2092,10 @@ export default function App() {
               )}
 
               {isAdmin && (
-                <div className="card-enter" style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 10px 30px rgba(15,23,42,0.06)" }}>
+                <div className="card-enter" style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 10px 30px rgba(10,10,10,0.06)" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0f172a" }}>Add a new user</div>
-                    <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.5, color: "#64748b" }}>Create secure login details and choose what this person can access.</div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0a0a0a" }}>Add a new user</div>
+                    <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.5, color: "#6c6a65" }}>Create secure login details and choose what this person can access.</div>
                   </div>
 
                   <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -2071,7 +2113,7 @@ export default function App() {
                   <label style={{ display: "flex", flexDirection: "column", gap: 6 }}>
                     <span style={styles.loginLabel}>Username</span>
                     <div style={{ position: "relative" }}>
-                      <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#94a3b8", fontWeight: 800 }}>@</span>
+                      <span style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", color: "#8c8982", fontWeight: 800 }}>@</span>
                       <input
                         type="text"
                         autoComplete="off"
@@ -2082,7 +2124,7 @@ export default function App() {
                         style={{ ...styles.userNameInput, flex: "none", width: "100%", paddingLeft: 30 }}
                       />
                     </div>
-                    <span style={{ fontSize: 10, color: newUsername && !usernameIsValid ? "#dc2626" : "#64748b" }}>
+                    <span style={{ fontSize: 10, color: newUsername && !usernameIsValid ? "#dc2626" : "#6c6a65" }}>
                       3–32 characters · letters, numbers, dots, dashes or underscores
                     </span>
                   </label>
@@ -2115,10 +2157,10 @@ export default function App() {
                       <button
                         type="button"
                         onClick={() => setShowNewUserPassword((show) => !show)}
-                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", color: "#475569", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
+                        style={{ position: "absolute", right: 8, top: "50%", transform: "translateY(-50%)", border: 0, background: "transparent", color: "#6c6a65", fontSize: 11, fontWeight: 800, cursor: "pointer" }}
                       >{showNewUserPassword ? "Hide" : "Show"}</button>
                     </div>
-                    <span style={{ fontSize: 10, color: newUserPin && !passwordIsValid ? "#dc2626" : "#64748b" }}>
+                    <span style={{ fontSize: 10, color: newUserPin && !passwordIsValid ? "#dc2626" : "#6c6a65" }}>
                       Minimum 10 characters. Share it privately with the new user.
                     </span>
                   </label>
@@ -2156,7 +2198,7 @@ export default function App() {
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={styles.settingsSectionLabel}>Security</div>
                   <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
-                    <div><strong style={{ color: "#0f172a", fontSize: 14 }}>Change my password</strong><p style={{ margin: "4px 0 0", color: "#64748b", fontSize: 10, lineHeight: 1.5 }}>Use at least 10 characters. Your current password is required.</p></div>
+                    <div><strong style={{ color: "#0a0a0a", fontSize: 14 }}>Change my password</strong><p style={{ margin: "4px 0 0", color: "#6c6a65", fontSize: 10, lineHeight: 1.5 }}>Use at least 10 characters. Your current password is required.</p></div>
                     <input type="password" autoComplete="current-password" value={currentPassword} onChange={(e) => { setCurrentPassword(e.target.value); setSecurityMessage(""); }} placeholder="Current password" style={{ ...styles.userNameInput, width: "100%" }} />
                     <input type="password" autoComplete="new-password" value={nextPassword} onChange={(e) => { setNextPassword(e.target.value); setSecurityMessage(""); }} placeholder="New password" style={{ ...styles.userNameInput, width: "100%" }} />
                     <button disabled={securityBusy || !currentPassword || nextPassword.length < 10} onClick={async () => {
@@ -2170,8 +2212,8 @@ export default function App() {
                     {securityMessage && <div style={styles.loginErrorMsg}>{securityMessage}</div>}
                   </div>
                   <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16 }}>
-                    <strong style={{ color: "#0f172a", fontSize: 14 }}>Active sessions</strong>
-                    <p style={{ color: "#64748b", fontSize: 10, lineHeight: 1.5 }}>Sign out this account on every device. You will need to sign in again.</p>
+                    <strong style={{ color: "#0a0a0a", fontSize: 14 }}>Active sessions</strong>
+                    <p style={{ color: "#6c6a65", fontSize: 10, lineHeight: 1.5 }}>Sign out this account on every device. You will need to sign in again.</p>
                     <button onClick={async () => { await signOutEverywhere(); setActiveUser(null); setUsers([]); setDbReady(false); }} style={{ width: "100%", minHeight: 42, border: "1px solid rgba(220,38,38,0.2)", background: "#fef2f2", color: "#b91c1c", borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Sign out all devices</button>
                   </div>
                 </div>
@@ -2187,7 +2229,7 @@ export default function App() {
                     { title: "Data sync", value: supabase ? "Supabase connected" : "Not configured", note: "Protected by authenticated database policies" },
                   ].map((item) => (
                     <div key={item.title} style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 15, display: "flex", justifyContent: "space-between", gap: 14 }}>
-                      <span><strong style={{ display: "block", color: "#0f172a", fontSize: 13 }}>{item.title}</strong><span style={{ display: "block", color: "#64748b", fontSize: 9, marginTop: 4 }}>{item.note}</span></span>
+                      <span><strong style={{ display: "block", color: "#0a0a0a", fontSize: 13 }}>{item.title}</strong><span style={{ display: "block", color: "#6c6a65", fontSize: 9, marginTop: 4 }}>{item.note}</span></span>
                       <strong style={{ color: "#047857", fontSize: 11, textAlign: "right", whiteSpace: "nowrap" }}>{item.value}</strong>
                     </div>
                   ))}
@@ -2231,9 +2273,9 @@ export default function App() {
               <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "all 0.2s ease" }}>
                 <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
                   <TabIcon name={t.icon} active={active} />
-                  <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#fff" : "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{t.label}</span>
+                  <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#0a0a0a" : "#6c6a65", whiteSpace: "nowrap" }}>{t.label}</span>
                   {t.badge > 0 && (
-                    <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0f172a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
+                    <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0a0a0a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
                   )}
                 </div>
               </button>
@@ -2250,21 +2292,21 @@ export default function App() {
 
 const styles = {
   container: {
-    fontFamily: "'Inter', 'DM Sans', -apple-system, BlinkMacSystemFont, sans-serif",
+    fontFamily: "Arial, Helvetica, sans-serif",
     minHeight: "100dvh",
     padding: 0,
     background: "transparent",
-    color: "#111827",
+    color: "#0a0a0a",
   },
   appChrome: {
     maxWidth: 430,
     height: "100dvh",
     margin: "0 auto",
-    padding: "66px 10px 76px",
+    padding: "78px 10px 80px",
     display: "flex",
     flexDirection: "column",
     gap: 10,
-    background: "transparent",
+    background: "#f6f4ef",
     overflow: "hidden",
   },
   topBar: {
@@ -2280,25 +2322,26 @@ const styles = {
     alignItems: "center",
     gap: 12,
     padding: "11px 12px",
-    minHeight: 56,
-    background: "rgba(248,250,252,0.94)",
+    minHeight: 68,
+    background: "#0a0a0a",
     backdropFilter: "blur(20px)",
     WebkitBackdropFilter: "blur(20px)",
-    borderBottom: "1px solid rgba(255,255,255,0.9)",
+    borderBottom: "1px solid #262626",
     borderRadius: 0,
-    boxShadow: "0 1px 0 rgba(15,23,42,0.06)",
+    boxShadow: "0 1px 0 rgba(10,10,10,0.06)",
   },
   screenTitle: {
     position: "absolute",
     left: "50%",
     transform: "translateX(-50%)",
     margin: 0,
-    color: "#0f172a",
-    fontSize: 15,
+    color: "#f6f4ef",
+    fontSize: 18,
     lineHeight: 1,
-    fontWeight: 900,
+    fontWeight: 400,
     whiteSpace: "nowrap",
-    letterSpacing: "-0.02em",
+    letterSpacing: "-0.025em",
+    fontFamily: "Georgia, serif",
   },
   syncBanner: {
     display: "flex",
@@ -2308,7 +2351,7 @@ const styles = {
     padding: "9px 11px",
     border: "1px solid",
     borderRadius: 12,
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 10,
     lineHeight: 1.35,
   },
@@ -2317,7 +2360,7 @@ const styles = {
     border: 0,
     borderRadius: 8,
     padding: "7px 10px",
-    background: "#0f274f",
+    background: "#171717",
     color: "#fff",
     fontFamily: "inherit",
     fontSize: 10,
@@ -2325,28 +2368,29 @@ const styles = {
     cursor: "pointer",
   },
   headerLogoWrap: {
-    width: 38,
-    height: 38,
+    width: 68,
+    height: 48,
     display: "grid",
     placeItems: "center",
     overflow: "hidden",
     borderRadius: 10,
-    background: "#ffffff",
-    border: "1px solid #e2e8f0",
+    background: "transparent",
+    border: "none",
   },
   headerLogo: {
-    width: 34,
-    height: 34,
+    width: 64,
+    height: 44,
     objectFit: "contain",
+    filter: "invert(1)",
   },
   headerIconBtn: {
     marginLeft: "auto",
     width: 36,
     height: 36,
-    borderRadius: 10,
-    border: "1px solid #e2e8f0",
-    background: "rgba(255,255,255,0.8)",
-    color: "#0f172a",
+    borderRadius: 999,
+    border: "1px solid #444",
+    background: "#202020",
+    color: "#fff",
     display: "grid",
     placeItems: "center",
     fontWeight: 900,
@@ -2357,9 +2401,9 @@ const styles = {
     marginBottom: 9,
     padding: "12px 14px",
     background: "rgba(255,255,255,0.82)",
-    border: "1px solid rgba(15,23,42,0.08)",
-    borderRadius: 12,
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    border: "1px solid rgba(10,10,10,0.08)",
+    borderRadius: 16,
+    boxShadow: "none",
   },
   mainContent: {
     flex: 1,
@@ -2390,7 +2434,7 @@ const styles = {
     fontWeight: 900,
     letterSpacing: "0.16em",
     textTransform: "uppercase",
-    color: "#64748b",
+    color: "#6c6a65",
     marginBottom: 3,
   },
   logo: {
@@ -2399,17 +2443,17 @@ const styles = {
     letterSpacing: "-0.05em",
     margin: 0,
     lineHeight: 1,
-    color: "#0f172a",
+    color: "#0a0a0a",
   },
   terminalMeta: {
     marginTop: 4,
     fontSize: 11,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#6c6a65",
   },
   summaryBtn: {
-    background: "#0f172a",
-    border: "1px solid #0f172a",
+    background: "#0a0a0a",
+    border: "1px solid #0a0a0a",
     borderRadius: 8,
     color: "#ffffff",
     padding: "10px 13px",
@@ -2421,21 +2465,21 @@ const styles = {
   salePanel: {
     display: "flex",
     flexDirection: "column",
-    gap: 10,
-    padding: 14,
-    background: "rgba(255,255,255,0.88)",
+    gap: 12,
+    padding: 16,
+    background: "#f6f4ef",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(15,23,42,0.07)",
-    borderRadius: 12,
-    boxShadow: "0 4px 14px rgba(15,23,42,0.04)",
+    border: "1px solid #e5e0d6",
+    borderRadius: "26px 26px 18px 18px",
+    boxShadow: "none",
   },
   sectionHeaderLabel: {
-    fontSize: 11,
-    fontWeight: 900,
+    fontSize: 10,
+    fontWeight: 600,
     textTransform: "uppercase",
-    letterSpacing: "0.12em",
-    color: "#64748b",
+    letterSpacing: "0.15em",
+    color: "#6c6a65",
   },
   panelHeader: {
     display: "flex",
@@ -2445,9 +2489,9 @@ const styles = {
     marginTop: 4,
   },
   panelHint: {
-    fontSize: 11,
-    fontWeight: 700,
-    color: "#94a3b8",
+    fontSize: 10,
+    fontWeight: 400,
+    color: "#6c6a65",
   },
   toggleRow: {
     display: "grid",
@@ -2459,52 +2503,52 @@ const styles = {
     gridTemplateColumns: "1fr 1fr",
     gap: 4,
     padding: 4,
-    background: "rgba(241,245,249,0.7)",
-    border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 9,
+    background: "#ece8df",
+    border: "1px solid #e4e0d7",
+    borderRadius: 999,
   },
   toggleBtn: {
     minHeight: 48,
     padding: "7px 8px",
     border: "1px solid transparent",
-    borderRadius: 7,
+    borderRadius: 999,
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     justifyContent: "center",
     gap: 2,
     fontSize: 12,
-    fontWeight: 800,
+    fontWeight: 600,
     cursor: "pointer",
     background: "transparent",
-    color: "#64748b",
+    color: "#6c6a65",
     fontFamily: "inherit",
   },
   toggleActive: {
-    background: "#0f172a",
-    border: "1px solid #0f172a",
+    background: "#0a0a0a",
+    border: "1px solid #0a0a0a",
     color: "#ffffff",
-    boxShadow: "0 6px 16px rgba(15,23,42,0.18)",
+    boxShadow: "0 2px 5px rgba(0,0,0,.09)",
   },
   flavourGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
-    gap: 9,
+    gap: 10,
   },
   flavourBtn: {
     position: "relative",
-    minHeight: 108,
-    padding: "14px 8px 12px",
-    border: "1px solid",
-    borderRadius: 10,
+    minHeight: 124,
+    padding: "12px 5px",
+    border: "1px solid #242424",
+    borderRadius: 16,
     cursor: "pointer",
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
-    justifyContent: "center",
+    justifyContent: "flex-end",
     gap: 5,
     fontFamily: "inherit",
-    boxShadow: "inset 0 1px 0 rgba(255,255,255,0.7), 0 4px 10px rgba(15,23,42,0.06)",
+    boxShadow: "none",
     transition: "all 0.15s ease",
   },
   flavourIcon: {
@@ -2512,10 +2556,13 @@ const styles = {
     lineHeight: 1,
   },
   flavourName: {
-    fontSize: 13,
-    fontWeight: 900,
+    fontSize: 15,
+    fontWeight: 400,
     textAlign: "center",
-    lineHeight: 1.15,
+    lineHeight: 1.2,
+    fontFamily: "Georgia, serif",
+    color: "#fff",
+    textShadow: "0 1px 6px rgba(0,0,0,.7)",
   },
   flavourPrice: {
     fontSize: 12,
@@ -2540,14 +2587,14 @@ const styles = {
     width: "100%",
     padding: "14px 16px",
     border: "none",
-    borderRadius: 9,
-    background: "#071a3d",
+    borderRadius: 999,
+    background: "#0a0a0a",
     color: "#fff",
     fontSize: 14,
-    fontWeight: 900,
+    fontWeight: 600,
     cursor: "pointer",
     fontFamily: "inherit",
-    boxShadow: "0 10px 22px rgba(7,26,61,0.18)",
+    boxShadow: "0 4px 12px rgba(0,0,0,.1)",
     display: "flex",
     alignItems: "center",
     justifyContent: "space-between",
@@ -2556,7 +2603,7 @@ const styles = {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
-    background: "#0f172a",
+    background: "#0a0a0a",
     color: "#fff",
     padding: "9px 12px",
     borderRadius: 8,
@@ -2579,75 +2626,75 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     padding: 14,
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(15,23,42,0.07)",
-    borderRadius: 16,
-    boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
+    border: "1px solid #e5e0d6",
+    borderRadius: 22,
+    boxShadow: "none",
   },
   deliveredPanel: {
     display: "flex",
     flexDirection: "column",
     gap: 10,
     padding: 14,
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(15,23,42,0.07)",
-    borderRadius: 16,
-    boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
+    border: "1px solid #e8e4dc",
+    borderRadius: 22,
+    boxShadow: "0 4px 18px rgba(10,10,10,0.035)",
   },
   settingsPanel: {
     display: "flex",
     flexDirection: "column",
     gap: 10,
     padding: 14,
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(15,23,42,0.07)",
-    borderRadius: 16,
-    boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
+    border: "1px solid #e8e4dc",
+    borderRadius: 22,
+    boxShadow: "0 4px 18px rgba(10,10,10,0.035)",
   },
   totalBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "linear-gradient(135deg, #071a3d 0%, #102a56 100%)",
+    background: "#0a0a0a",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
     padding: "14px 16px",
-    borderRadius: 13,
-    boxShadow: "0 8px 20px rgba(7,26,61,0.16)",
+    borderRadius: 16,
+    boxShadow: "0 8px 20px rgba(10,10,10,0.16)",
   },
   deliveredBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "linear-gradient(135deg, #071a3d 0%, #102a56 100%)",
+    background: "linear-gradient(135deg, #0a0a0a 0%, #171717 100%)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
     padding: "14px 16px",
     borderRadius: 13,
-    boxShadow: "0 8px 20px rgba(7,26,61,0.16)",
+    boxShadow: "0 8px 20px rgba(10,10,10,0.16)",
   },
   settingsBar: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     gap: 12,
-    background: "linear-gradient(135deg, #071a3d 0%, #102a56 100%)",
+    background: "linear-gradient(135deg, #0a0a0a 0%, #171717 100%)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     color: "#fff",
     padding: "14px 16px",
     borderRadius: 13,
-    boxShadow: "0 8px 20px rgba(7,26,61,0.16)",
+    boxShadow: "0 8px 20px rgba(10,10,10,0.16)",
   },
   totalLeft: {
     display: "flex",
@@ -2655,6 +2702,7 @@ const styles = {
     minWidth: 0,
   },
   totalLabel: {
+    fontFamily: "Georgia, serif",
     fontSize: 13,
     fontWeight: 900,
     opacity: 0.9,
@@ -2694,7 +2742,7 @@ const styles = {
     background: "rgba(255,255,255,0.65)",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 13,
     fontWeight: 900,
     cursor: "pointer",
@@ -2707,7 +2755,7 @@ const styles = {
   pageInfo: {
     fontSize: 12,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#6c6a65",
   },
   settingsGrid: {
     display: "grid",
@@ -2728,7 +2776,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.75)",
     borderRadius: 16,
     overflow: "hidden",
-    boxShadow: "0 4px 16px rgba(15,23,42,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
+    boxShadow: "0 4px 16px rgba(10,10,10,0.06), inset 0 1px 0 rgba(255,255,255,0.8)",
   },
   userPermissions: {
     display: "flex",
@@ -2745,7 +2793,7 @@ const styles = {
     background: "rgba(255,255,255,0.5)",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
-    color: "#94a3b8",
+    color: "#8c8982",
     fontSize: 11,
     fontWeight: 700,
     cursor: "pointer",
@@ -2753,16 +2801,16 @@ const styles = {
     transition: "all 0.15s ease",
   },
   permissionPillOn: {
-    background: "rgba(15,23,42,0.85)",
+    background: "rgba(10,10,10,0.85)",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
-    border: "1px solid rgba(15,23,42,0.7)",
+    border: "1px solid rgba(10,10,10,0.7)",
     color: "#ffffff",
   },
   permissionPillAlwaysOn: {
-    background: "rgba(15,23,42,0.07)",
-    border: "1px solid rgba(15,23,42,0.1)",
-    color: "#64748b",
+    background: "rgba(10,10,10,0.07)",
+    border: "1px solid rgba(10,10,10,0.1)",
+    color: "#6c6a65",
     cursor: "default",
   },
   settingsSectionLabel: {
@@ -2770,7 +2818,7 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
-    color: "#64748b",
+    color: "#6c6a65",
     paddingLeft: 2,
     marginTop: 4,
   },
@@ -2789,7 +2837,7 @@ const styles = {
     width: 36,
     height: 36,
     borderRadius: "50%",
-    background: "linear-gradient(135deg, #1e293b 0%, #334155 100%)",
+    background: "linear-gradient(135deg, #1e293b 0%, #4a4843 100%)",
     color: "#ffffff",
     fontSize: 14,
     fontWeight: 900,
@@ -2797,7 +2845,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
-    boxShadow: "0 2px 8px rgba(15,23,42,0.25)",
+    boxShadow: "0 2px 8px rgba(10,10,10,0.25)",
     border: "1px solid rgba(255,255,255,0.15)",
   },
   userMeta: {
@@ -2810,12 +2858,12 @@ const styles = {
   userName: {
     fontSize: 13,
     fontWeight: 900,
-    color: "#0f172a",
+    color: "#0a0a0a",
   },
   userRole: {
     fontSize: 11,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#6c6a65",
   },
   collapsibleHeader: {
     display: "flex",
@@ -2833,16 +2881,16 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
-    color: "#64748b",
+    color: "#6c6a65",
   },
   collapseChevron: {
     fontSize: 10,
-    color: "#94a3b8",
+    color: "#8c8982",
     fontWeight: 900,
   },
   expandChevron: {
     fontSize: 10,
-    color: "#94a3b8",
+    color: "#8c8982",
     marginLeft: "auto",
     flexShrink: 0,
     marginRight: 6,
@@ -2874,7 +2922,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 7,
     background: "rgba(255,255,255,0.7)",
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 12,
     fontWeight: 900,
     cursor: "pointer",
@@ -2906,7 +2954,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.6)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 13,
     fontWeight: 700,
     fontFamily: "inherit",
@@ -2921,19 +2969,19 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     padding: 14,
-    background: "rgba(255,255,255,0.9)",
+    background: "#fff",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
-    border: "1px solid rgba(15,23,42,0.07)",
-    borderRadius: 16,
-    boxShadow: "0 8px 24px rgba(15,23,42,0.06)",
+    border: "1px solid #e8e4dc",
+    borderRadius: 22,
+    boxShadow: "0 4px 18px rgba(10,10,10,0.035)",
   },
   stockCategoryHeader: {
     fontSize: 11,
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
-    color: "#64748b",
+    color: "#6c6a65",
     paddingLeft: 2,
     marginTop: 4,
   },
@@ -2942,9 +2990,9 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     padding: 12,
-    border: "1px solid #c7d2fe",
+    border: "1px solid #d8d4cb",
     borderRadius: 13,
-    background: "linear-gradient(145deg, #ffffff 0%, #eef2ff 100%)",
+    background: "linear-gradient(145deg, #ffffff 0%, #f6f4ef 100%)",
     boxShadow: "0 4px 14px rgba(49,46,129,0.07)",
   },
   purchasePlannerHeader: {
@@ -2956,7 +3004,7 @@ const styles = {
   purchasePlannerTitle: {
     display: "block",
     marginTop: 3,
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 14,
     fontWeight: 900,
   },
@@ -2990,11 +3038,11 @@ const styles = {
     placeItems: "center",
     flexShrink: 0,
     borderRadius: 8,
-    background: "#eef2ff",
+    background: "#f6f4ef",
     fontSize: 14,
   },
   purchasePlannerNote: {
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 8,
     fontWeight: 700,
     lineHeight: 1.45,
@@ -3010,9 +3058,9 @@ const styles = {
     gap: 10,
     padding: "12px 14px",
     background: "#ffffff",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #d8d4cb",
     borderRadius: 12,
-    boxShadow: "0 3px 10px rgba(15,23,42,0.04)",
+    boxShadow: "0 3px 10px rgba(10,10,10,0.04)",
   },
   stockRowLow: {
     display: "flex",
@@ -3044,7 +3092,7 @@ const styles = {
   stockName: {
     fontSize: 13,
     fontWeight: 800,
-    color: "#0f172a",
+    color: "#0a0a0a",
   },
   stockMeta: {
     display: "flex",
@@ -3054,7 +3102,7 @@ const styles = {
   stockUnit: {
     fontSize: 11,
     fontWeight: 600,
-    color: "#64748b",
+    color: "#6c6a65",
   },
   stockBadge: {
     fontSize: 10,
@@ -3075,7 +3123,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.7)",
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 18,
     fontWeight: 700,
     cursor: "pointer",
@@ -3090,7 +3138,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.7)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 18,
     fontWeight: 700,
     cursor: "pointer",
@@ -3102,7 +3150,7 @@ const styles = {
   stockQty: {
     fontSize: 15,
     fontWeight: 900,
-    color: "#0f172a",
+    color: "#0a0a0a",
     minWidth: 32,
     textAlign: "center",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -3110,10 +3158,10 @@ const styles = {
   equipmentEditBtn: {
     minHeight: 34,
     padding: "0 11px",
-    border: "1px solid #bfdbfe",
+    border: "1px solid #d8d4cb",
     borderRadius: 8,
-    background: "#eff6ff",
-    color: "#1d4ed8",
+    background: "#f6f4ef",
+    color: "#0a0a0a",
     fontSize: 11,
     fontWeight: 900,
     fontFamily: "inherit",
@@ -3122,7 +3170,7 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 4,
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 10,
     fontWeight: 800,
   },
@@ -3133,7 +3181,7 @@ const styles = {
     border: "1px solid #cbd5e1",
     borderRadius: 9,
     background: "#ffffff",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 16,
     fontWeight: 800,
     fontFamily: "inherit",
@@ -3143,16 +3191,16 @@ const styles = {
     border: "1px solid #cbd5e1",
     borderRadius: 9,
     background: "#ffffff",
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 12,
     fontWeight: 900,
     fontFamily: "inherit",
   },
   equipmentSaveBtn: {
     minHeight: 40,
-    border: "1px solid #071a3d",
+    border: "1px solid #0a0a0a",
     borderRadius: 9,
-    background: "#071a3d",
+    background: "#0a0a0a",
     color: "#ffffff",
     fontSize: 12,
     fontWeight: 900,
@@ -3161,9 +3209,9 @@ const styles = {
   restockBtn: {
     height: 32,
     padding: "0 10px",
-    border: "1px solid rgba(15,23,42,0.2)",
+    border: "1px solid rgba(10,10,10,0.2)",
     borderRadius: 8,
-    background: "#0f172a",
+    background: "#0a0a0a",
     color: "#ffffff",
     fontSize: 11,
     fontWeight: 800,
@@ -3179,10 +3227,10 @@ const styles = {
   restockInput: {
     width: 56,
     height: 32,
-    border: "1.5px solid #e2e8f0",
+    border: "1.5px solid #d8d4cb",
     borderRadius: 8,
     background: "#fff",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 13,
     fontWeight: 700,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -3210,10 +3258,10 @@ const styles = {
   restockCancelBtn: {
     height: 32,
     padding: "0 10px",
-    border: "1.5px solid #e2e8f0",
+    border: "1.5px solid #d8d4cb",
     borderRadius: 8,
-    background: "#f8fafc",
-    color: "#94a3b8",
+    background: "#f6f4ef",
+    color: "#8c8982",
     fontSize: 12,
     fontWeight: 700,
     cursor: "pointer",
@@ -3258,7 +3306,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 10,
     background: "rgba(255,255,255,0.7)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 14,
     fontWeight: 700,
     fontFamily: "inherit",
@@ -3274,7 +3322,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     minHeight: "calc(100vh - 60px)",
-    background: "transparent",
+    background: "linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.8)), url(/brand/hookah-hero.webp) center / cover",
     borderRadius: 10,
     margin: -14,
     padding: "28px 22px",
@@ -3313,23 +3361,23 @@ const styles = {
     position: "relative",
     zIndex: 1,
     width: "100%",
-    background: "rgba(255,255,255,0.55)",
+    background: "#f6f4ef",
     border: "1px solid rgba(255,255,255,0.75)",
-    borderRadius: 20,
+    borderRadius: 28,
     padding: "32px 24px 28px",
     backdropFilter: "blur(20px)",
     WebkitBackdropFilter: "blur(20px)",
-    boxShadow: "0 8px 32px rgba(15,23,42,0.12), inset 0 1px 0 rgba(255,255,255,0.9)",
+    boxShadow: "0 8px 32px rgba(10,10,10,0.12), inset 0 1px 0 rgba(255,255,255,0.9)",
     display: "flex",
     flexDirection: "column",
   },
   loginLogoWrap: {
-    width: 64,
-    height: 64,
-    borderRadius: "50%",
+    width: 112,
+    height: 80,
+    borderRadius: 12,
     background: "rgba(255,255,255,0.7)",
     border: "1px solid rgba(255,255,255,0.9)",
-    boxShadow: "0 4px 16px rgba(15,23,42,0.1)",
+    boxShadow: "0 4px 16px rgba(10,10,10,0.1)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -3338,8 +3386,8 @@ const styles = {
   },
   loginHero: {},
   loginLogo: {
-    width: 48,
-    height: 36,
+    width: 96,
+    height: 64,
     objectFit: "contain",
   },
   loginHeroText: {},
@@ -3348,7 +3396,7 @@ const styles = {
     fontWeight: 900,
     letterSpacing: "0.2em",
     textTransform: "uppercase",
-    color: "#64748b",
+    color: "#6c6a65",
     marginBottom: 6,
     textAlign: "center",
   },
@@ -3357,7 +3405,7 @@ const styles = {
     fontSize: 26,
     fontWeight: 900,
     letterSpacing: "-0.03em",
-    color: "#0f172a",
+    color: "#0a0a0a",
     margin: "0 0 6px",
     lineHeight: 1.1,
     textAlign: "center",
@@ -3365,7 +3413,7 @@ const styles = {
   loginMeta: {
     fontSize: 13,
     fontWeight: 500,
-    color: "#64748b",
+    color: "#6c6a65",
     margin: "0 0 28px",
     textAlign: "center",
   },
@@ -3381,14 +3429,14 @@ const styles = {
     fontWeight: 900,
     letterSpacing: "0.12em",
     textTransform: "uppercase",
-    color: "#64748b",
+    color: "#6c6a65",
   },
   loginInput: {
     border: "none",
-    borderBottom: "1.5px solid rgba(15,23,42,0.15)",
+    borderBottom: "1.5px solid rgba(10,10,10,0.15)",
     padding: "12px 0",
     fontSize: 16,
-    color: "#0f172a",
+    color: "#0a0a0a",
     outline: "none",
     background: "transparent",
     fontFamily: "inherit",
@@ -3408,7 +3456,7 @@ const styles = {
   loginSignInBtn: {
     width: "100%",
     padding: "15px",
-    background: "#0f172a",
+    background: "#0a0a0a",
     border: "none",
     borderRadius: 10,
     color: "#ffffff",
@@ -3418,14 +3466,14 @@ const styles = {
     fontFamily: "inherit",
     letterSpacing: "0.08em",
     textTransform: "uppercase",
-    boxShadow: "0 4px 16px rgba(15,23,42,0.2)",
+    boxShadow: "0 4px 16px rgba(10,10,10,0.2)",
     marginTop: 8,
   },
   loginFooterNote: {
     textAlign: "center",
     fontSize: 11,
     fontWeight: 600,
-    color: "#94a3b8",
+    color: "#8c8982",
     marginTop: 20,
     letterSpacing: "0.04em",
   },
@@ -3463,7 +3511,7 @@ const styles = {
     width: 28,
     height: 28,
     borderRadius: "50%",
-    background: "#0f172a",
+    background: "#0a0a0a",
     color: "#ffffff",
     fontSize: 12,
     fontWeight: 900,
@@ -3481,13 +3529,13 @@ const styles = {
   activeUserName: {
     fontSize: 12,
     fontWeight: 900,
-    color: "#0f172a",
+    color: "#0a0a0a",
     lineHeight: 1.2,
   },
   activeUserRoleLabel: {
     fontSize: 10,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#6c6a65",
     lineHeight: 1.2,
   },
   userNameInput: {
@@ -3497,7 +3545,7 @@ const styles = {
     border: "1px solid #cbd5e1",
     borderRadius: 11,
     background: "#ffffff",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 16,
     fontWeight: 700,
     fontFamily: "inherit",
@@ -3509,7 +3557,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.6)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 16,
     fontWeight: 700,
     fontFamily: "inherit",
@@ -3521,7 +3569,7 @@ const styles = {
     padding: "0 18px",
     border: "none",
     borderRadius: 8,
-    background: "#0f172a",
+    background: "#0a0a0a",
     color: "#ffffff",
     fontSize: 13,
     fontWeight: 900,
@@ -3546,28 +3594,28 @@ const styles = {
     background: "#ffffff",
     backdropFilter: "blur(8px)",
     WebkitBackdropFilter: "blur(8px)",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #d8d4cb",
     borderRadius: 13,
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    boxShadow: "0 4px 14px rgba(10,10,10,0.05)",
   },
   kpiLabel: {
     fontSize: 10,
     fontWeight: 800,
-    color: "#64748b",
+    color: "#6c6a65",
     textTransform: "uppercase",
     letterSpacing: "0.1em",
   },
   kpiValue: {
     fontSize: 24,
-    fontWeight: 900,
-    color: "#0f172a",
+    fontWeight: 400,
+    color: "#0a0a0a",
     lineHeight: 1.1,
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontFamily: "Georgia, serif",
   },
   kpiSub: {
     fontSize: 10,
     fontWeight: 600,
-    color: "#94a3b8",
+    color: "#8c8982",
     marginTop: 1,
   },
   managementSectionHeading: {
@@ -3579,7 +3627,7 @@ const styles = {
   },
   managementEyebrow: {
     display: "block",
-    color: "#94a3b8",
+    color: "#8c8982",
     fontSize: 9,
     fontWeight: 900,
     letterSpacing: "0.12em",
@@ -3588,9 +3636,10 @@ const styles = {
   managementSectionTitle: {
     display: "block",
     marginTop: 2,
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 16,
-    fontWeight: 900,
+    fontWeight: 400,
+    fontFamily: "Georgia, serif",
   },
   managementPeriodBadge: {
     padding: "5px 9px",
@@ -3605,10 +3654,10 @@ const styles = {
     flexDirection: "column",
     gap: 10,
     padding: 12,
-    border: "1px solid #e2e8f0",
+    border: "1px solid #d8d4cb",
     borderRadius: 13,
     background: "#ffffff",
-    boxShadow: "0 4px 14px rgba(15,23,42,0.05)",
+    boxShadow: "0 4px 14px rgba(10,10,10,0.05)",
   },
   managementAttentionGrid: {
     display: "grid",
@@ -3632,7 +3681,7 @@ const styles = {
   settingValue: {
     fontSize: 20,
     fontWeight: 900,
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   },
   priceInput: {
@@ -3642,7 +3691,7 @@ const styles = {
     border: "1px solid rgba(203,213,225,0.6)",
     borderRadius: 8,
     background: "rgba(255,255,255,0.6)",
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 18,
     fontWeight: 900,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -3674,7 +3723,7 @@ const styles = {
     border: "1px solid rgba(255,255,255,0.8)",
     borderRadius: 7,
     background: "rgba(255,255,255,0.65)",
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 12,
     fontWeight: 900,
     cursor: "pointer",
@@ -3682,11 +3731,11 @@ const styles = {
   },
   emptyState: {
     textAlign: "center",
-    color: "#94a3b8",
+    color: "#8c8982",
     fontSize: 13,
     fontWeight: 800,
     padding: "34px 0",
-    background: "#f8fafc",
+    background: "#f6f4ef",
     border: "1px dashed #cbd5e1",
     borderRadius: 12,
   },
@@ -3696,9 +3745,9 @@ const styles = {
     gap: 8,
     padding: "12px 12px",
     background: "#ffffff",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #d8d4cb",
     borderRadius: 12,
-    boxShadow: "0 3px 10px rgba(15,23,42,0.04)",
+    boxShadow: "0 3px 10px rgba(10,10,10,0.04)",
     fontSize: 13,
   },
   deliveredRow: {
@@ -3708,9 +3757,9 @@ const styles = {
     gap: 6,
     padding: "9px 10px",
     background: "#ffffff",
-    border: "1px solid #e2e8f0",
+    border: "1px solid #d8d4cb",
     borderRadius: 12,
-    boxShadow: "0 3px 10px rgba(15,23,42,0.05)",
+    boxShadow: "0 3px 10px rgba(10,10,10,0.05)",
     fontSize: 13,
   },
   orderCardHeader: {
@@ -3719,10 +3768,10 @@ const styles = {
     alignItems: "center",
     gap: 7,
     paddingBottom: 5,
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid #ece8df",
   },
   orderCardNumber: {
-    color: "#475569",
+    color: "#6c6a65",
     fontSize: 9,
     fontWeight: 900,
     letterSpacing: "0.03em",
@@ -3737,7 +3786,7 @@ const styles = {
   },
   orderCardTime: {
     marginLeft: "auto",
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 9,
     fontWeight: 800,
   },
@@ -3756,10 +3805,12 @@ const styles = {
     flexShrink: 0,
     borderRadius: 9,
     fontSize: 17,
+    fontFamily: "Georgia, serif",
+    fontWeight: 400,
   },
   orderCardStaff: {
     marginTop: 2,
-    color: "#64748b",
+    color: "#6c6a65",
     fontSize: 8,
     fontWeight: 700,
   },
@@ -3769,14 +3820,14 @@ const styles = {
     alignItems: "flex-end",
     gap: 2,
     flexShrink: 0,
-    color: "#0f172a",
+    color: "#0a0a0a",
     fontSize: 11,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   },
   orderIndex: {
     width: 24,
     fontSize: 11,
-    color: "#94a3b8",
+    color: "#8c8982",
     fontWeight: 900,
     textAlign: "center",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -3794,7 +3845,7 @@ const styles = {
     minWidth: 0,
     flexDirection: "column",
     gap: 1,
-    color: "#111827",
+    color: "#0a0a0a",
     fontWeight: 900,
   },
   orderPrice: {
@@ -3803,7 +3854,7 @@ const styles = {
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     minWidth: 48,
     textAlign: "right",
-    color: "#111827",
+    color: "#0a0a0a",
   },
   deleteBtn: {
     minWidth: 34,
@@ -3848,17 +3899,17 @@ const styles = {
     border: "1px solid #cbd5e1",
     borderRadius: 7,
     background: "#ffffff",
-    color: "#475569",
+    color: "#6c6a65",
     fontSize: 10,
     fontWeight: 900,
     fontFamily: "inherit",
   },
   deliverBtn: {
     minHeight: 44,
-    background: "#eff6ff",
-    border: "1px solid #bfdbfe",
+    background: "#f6f4ef",
+    border: "1px solid #d8d4cb",
     borderRadius: 8,
-    color: "#1d4ed8",
+    color: "#0a0a0a",
     fontSize: 13,
     fontWeight: 900,
     cursor: "pointer",
@@ -3875,16 +3926,17 @@ const styles = {
   },
   summaryTitle: {
     fontSize: 24,
-    fontWeight: 900,
+    fontWeight: 400,
     letterSpacing: "-0.05em",
     margin: 0,
-    color: "#0f172a",
+    color: "#0a0a0a",
+    fontFamily: "Georgia, serif",
   },
   backBtn: {
     background: "#ffffff",
     border: "1px solid #cbd5e1",
     borderRadius: 8,
-    color: "#334155",
+    color: "#4a4843",
     padding: "9px 12px",
     fontSize: 13,
     fontWeight: 800,
@@ -3909,14 +3961,14 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.06em",
-    color: "#64748b",
+    color: "#6c6a65",
   },
   statValue: {
     fontSize: 20,
-    fontWeight: 900,
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontWeight: 400,
+    fontFamily: "Georgia, serif",
     letterSpacing: "-0.03em",
-    color: "#0f172a",
+    color: "#0a0a0a",
   },
   summarySection: {
     marginTop: 6,
@@ -3924,7 +3976,7 @@ const styles = {
   sectionLabel: {
     fontSize: 12,
     fontWeight: 900,
-    color: "#64748b",
+    color: "#6c6a65",
     textTransform: "uppercase",
     letterSpacing: "0.05em",
     marginBottom: 6,
@@ -3933,7 +3985,7 @@ const styles = {
     gap: 8,
   },
   countBadge: {
-    background: "#0f172a",
+    background: "#0a0a0a",
     borderRadius: 999,
     padding: "1px 8px",
     fontSize: 11,
@@ -3957,7 +4009,7 @@ const styles = {
   summaryIndex: {
     width: 24,
     fontSize: 11,
-    color: "#94a3b8",
+    color: "#8c8982",
     fontWeight: 900,
     textAlign: "center",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
@@ -3966,20 +4018,20 @@ const styles = {
     flex: 1,
     textAlign: "right",
     fontSize: 11,
-    color: "#94a3b8",
+    color: "#8c8982",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
   },
   summaryPrice: {
     fontSize: 13,
     fontWeight: 900,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    color: "#0f172a",
+    color: "#0a0a0a",
   },
   copyBtn: {
     marginTop: 4,
     width: "100%",
     padding: "12px",
-    background: "#0f172a",
+    background: "#0a0a0a",
     border: "none",
     color: "#ffffff",
     borderRadius: 9,
@@ -4012,9 +4064,10 @@ const styles = {
     alignItems: "center",
     padding: 0,
     paddingBottom: "env(safe-area-inset-bottom)",
-    background: "linear-gradient(135deg, #071a3d 0%, #0f274f 100%)",
-    borderTop: "1px solid rgba(255,255,255,0.12)",
-    boxShadow: "0 -8px 24px rgba(7,26,61,0.16)",
+    background: "#fff",
+    borderTop: "1px solid #e8e4dc",
+    boxShadow: "0 -4px 24px rgba(10,10,10,0.05)",
+    borderRadius: "24px 24px 0 0",
   },
   footerBar: {
     display: "flex",
@@ -4048,18 +4101,18 @@ const styles = {
   summaryDividerLine: {
     flex: 1,
     height: 1,
-    background: "#e2e8f0",
+    background: "#d8d4cb",
   },
   summaryDividerLabel: {
     fontSize: 10,
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.14em",
-    color: "#94a3b8",
+    color: "#8c8982",
     whiteSpace: "nowrap",
   },
   revenueHero: {
-    background: "rgba(15,23,42,0.82)",
+    background: "rgba(10,10,10,0.82)",
     backdropFilter: "blur(12px)",
     WebkitBackdropFilter: "blur(12px)",
     borderRadius: 10,
@@ -4080,20 +4133,20 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.16em",
-    color: "#475569",
+    color: "#b9b6ae",
     marginBottom: 2,
   },
   revenueHeroAmount: {
     fontSize: 28,
-    fontWeight: 900,
+    fontWeight: 400,
     letterSpacing: "-0.04em",
-    fontFamily: "'JetBrains Mono', ui-monospace, monospace",
+    fontFamily: "Georgia, serif",
     lineHeight: 1,
   },
   revenueHeroMeta: {
     fontSize: 11,
     fontWeight: 700,
-    color: "#475569",
+    color: "#6c6a65",
     paddingBottom: 2,
   },
   revenueStatRow: {
@@ -4124,13 +4177,13 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.08em",
-    color: "#475569",
+    color: "#6c6a65",
   },
   revenueStatValue: {
     fontSize: 13,
     fontWeight: 900,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    color: "#f1f5f9",
+    color: "#ece8df",
     letterSpacing: "-0.02em",
   },
   flavourBreakdown: {
@@ -4147,7 +4200,7 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
-    color: "#64748b",
+    color: "#b9b6ae",
     marginBottom: 2,
   },
   flavourBreakdownRow: {
@@ -4174,7 +4227,7 @@ const styles = {
   flavourBarTrack: {
     flex: 1,
     height: 6,
-    background: "#f1f5f9",
+    background: "#ece8df",
     borderRadius: 999,
     overflow: "hidden",
   },
@@ -4203,9 +4256,9 @@ const styles = {
     fontWeight: 900,
     textTransform: "uppercase",
     letterSpacing: "0.12em",
-    color: "#64748b",
+    color: "#6c6a65",
     padding: "10px 14px 8px",
-    borderBottom: "1px solid #f1f5f9",
+    borderBottom: "1px solid #ece8df",
   },
   orderLog: {
     maxHeight: 220,
@@ -4216,7 +4269,7 @@ const styles = {
     alignItems: "center",
     gap: 8,
     padding: "7px 14px",
-    borderBottom: "1px solid #f8fafc",
+    borderBottom: "1px solid #f6f4ef",
     fontSize: 12,
   },
   orderLogIndex: {
@@ -4231,11 +4284,11 @@ const styles = {
     flex: 1,
     fontSize: 11,
     fontWeight: 700,
-    color: "#64748b",
+    color: "#6c6a65",
   },
   orderLogTime: {
     fontSize: 11,
-    color: "#94a3b8",
+    color: "#8c8982",
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
     flexShrink: 0,
   },
@@ -4243,7 +4296,7 @@ const styles = {
     fontSize: 12,
     fontWeight: 900,
     fontFamily: "'JetBrains Mono', ui-monospace, monospace",
-    color: "#0f172a",
+    color: "#0a0a0a",
     width: 44,
     textAlign: "right",
     flexShrink: 0,
