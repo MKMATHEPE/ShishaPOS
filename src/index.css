@@ -517,7 +517,11 @@ button:disabled { opacity: .45; }
   height: 44px;
   min-height: 44px;
   box-sizing: border-box;
-  font-size: 16px !important;
+  font-size: 13px !important;
+  font-weight: 500;
+  line-height: 1.3;
+  padding: 0 10px !important;
+  text-align: left;
 }
 .finance-panel input[type="date"] {
   -webkit-appearance: none;
@@ -546,3 +550,24 @@ button:disabled { opacity: .45; }
 @media (max-width: 359px) {
   .finance-field-grid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* Compact, consistent typography across the finance action cards. */
+.finance-form-card > strong,
+.finance-form-card > div:first-child > strong { font-size: 13px !important; }
+.finance-form-card input::placeholder { font-size: 13px; font-weight: 400; }
+.finance-form-card .expense-edit-form > label {
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.4;
+  color: var(--cp-muted);
+}
+.finance-form-actions > button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 10px !important;
+  font-size: 12px !important;
+  line-height: 1.3;
+  text-align: center;
+}
+.finance-action-grid > button { font-size: 10px; }
