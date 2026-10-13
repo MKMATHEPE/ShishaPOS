@@ -1,4 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { stockLines } from "./stockTakingModel";
+import StockItemPhoto from "./StockItemPhoto.jsx";
+import ExpensesList from "./ExpensesList.jsx";
+import StockTaking from "./StockTaking.jsx";
 import { planWeekend } from "./purchasePlanner";
 import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
@@ -6,7 +10,7 @@ import {
   fetchUsers, syncUsers,
   fetchStock, syncStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
-  fetchExpenses, syncExpenses,
+  fetchExpenses, saveExpenseRecord, deleteExpenseRecord,
   fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
@@ -116,9 +120,10 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom, dateTo, canAddManualSale, onExpense, onManualSale, onPartnersChange, onTransaction, onLockChange }) {
+function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, dateFrom, dateTo, canAddManualSale, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
-  const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday() });
+  const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
+  const [expenseSaving, setExpenseSaving] = useState(false);
   const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
   const [activeAction, setActiveAction] = useState(null);
   const [message, setMessage] = useState("");
@@ -146,12 +151,6 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
   const totalDue = rows.reduce((sum, row) => sum + row.reimbursementDue + row.profitDue, 0);
   const locked = journal.lockedThrough && entry.date <= journal.lockedThrough;
 
-  const togglePartner = user => {
-    const exists = partners.some(item => item.profileId === user.id);
-    const next = exists ? partners.filter(item => item.profileId !== user.id) : [...partners, { profileId: user.id, profitShare: 0 }];
-    onPartnersChange(next);
-  };
-  const updateShare = (profileId, value) => onPartnersChange(partners.map(item => item.profileId === profileId ? { ...item, profitShare: Math.max(0, Math.min(100, Number(value) || 0)) } : item));
   const submit = async () => {
     if (!entry.profileId || Number(entry.amount) <= 0) return setMessage("Choose a person and enter an amount.");
     if (locked) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
@@ -159,12 +158,18 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     setMessage(ok ? "Payment recorded." : "Could not record the payment.");
     if (ok) setEntry(current => ({ ...current, amount: "", description: "" }));
   };
-  const submitExpense = () => {
-    if (!spend.description.trim() || Number(spend.amount) <= 0) return setMessage("Describe the expense and enter an amount.");
+  const purchaseItems = stockLines(stock);
+  const submitExpense = async () => {
+    if (expenseSaving) return;
+    if (!Number.isFinite(Number(spend.amount)) || Number(spend.amount) <= 0) return setMessage("Enter an amount greater than zero.");
     if (journal.lockedThrough && spend.date <= journal.lockedThrough) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
-    onExpense({ ...spend, amount: Number(spend.amount) });
-    setSpend(current => ({ ...current, description: "", amount: "" }));
-    setMessage(spend.paidBy ? "Personal expense saved. It now appears under Who is owed." : "Business expense saved.");
+    if (spend.stockKey && (!Number.isFinite(Number(spend.stockQuantity)) || Number(spend.stockQuantity) <= 0)) return setMessage("Enter the quantity bought.");
+    setExpenseSaving(true);
+    try { await onExpense({ ...spend, amount: Number(spend.amount), stockQuantities: spend.stockKey ? { [spend.stockKey]: Number(spend.stockQuantity) } : {} }); }
+    catch(error) { setMessage(error.message || "Could not save expense."); return; }
+    finally { setExpenseSaving(false); }
+    setSpend(current => ({ ...current, description: "", amount: "", stockKey: "", stockQuantity: "" }));
+    setMessage("Expense saved.");
     setActiveAction(null);
   };
   const submitManualSale = async () => {
@@ -173,10 +178,6 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     const ok = await onManualSale({ ...sale, amount: Number(sale.amount) });
     setMessage(ok ? "Missing sale added." : "Could not add the sale.");
     if (ok) { setSale(current => ({ ...current, amount: "", description: "", reason: "" })); setActiveAction(null); }
-  };
-  const statement = row => {
-    const text = [`${personName(row.user.id)} · Finance statement · ${periodLabel}`, `Expenses paid personally: ${formatCurrency(row.spent)}`, `Reimbursed: ${formatCurrency(row.refunded)}`, `Reimbursement due: ${formatCurrency(row.reimbursementDue)}`, `Profit share: ${formatCurrency(row.share)}`, `Profit paid: ${formatCurrency(row.paid)}`, `Total due: ${formatCurrency(row.reimbursementDue + row.profitDue)}`].join("\n");
-    navigator.clipboard?.writeText(text); setMessage("Statement copied.");
   };
   const startPayment = (kind, row = null) => {
     setEntry(current => ({ ...current, kind, profileId: row?.user.id ?? "", amount: row ? String(kind === "reimbursement" ? row.reimbursementDue : row.profitDue) : "", date: localToday() }));
@@ -235,7 +236,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
       <button onClick={() => startPayment("reimbursement")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay someone back</button>
       <button onClick={() => startPayment("partner_payout")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay partner</button>
     </div>
-    {message && !activeAction && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
+    {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
     {activeAction === "expense" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(10,10,10,0.05)" }}>
       <strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add expense</strong>
@@ -261,8 +262,12 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
             return <button key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0a0a0a" : "1px solid #d8d4cb", borderRadius: 8, background: spend.date === value ? "#0a0a0a" : "#fff", color: spend.date === value ? "#fff" : "#6c6a65", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
           })}
         </div>
-        <input placeholder="What was the money spent on?" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
-        <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>Save expense</button></div>
+        <div className="expense-edit-form">
+          <label>Stock purchased (optional)<select aria-label="Stock purchased" value={spend.stockKey} onChange={event=>setSpend(current=>({...current,stockKey:event.target.value,stockQuantity:""}))}><option value="">No stock purchase</option>{purchaseItems.map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>
+          {spend.stockKey && <label>Quantity bought ({purchaseItems.find(item=>item.key===spend.stockKey)?.unit})<input aria-label="Stock quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label>}
+        </div>
+        <input placeholder="Description (optional)" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
+        <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button disabled={expenseSaving} onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>{expenseSaving ? "Saving…" : "Save expense"}</button></div>
       </div>
     </div>}
 
@@ -278,13 +283,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
       <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    <div style={card}>
-      <span style={label}>Who is owed</span>
-      {rows.length === 0 ? <span style={{ fontSize: 12, color: "#8c8982" }}>No balances due.</span> : rows.map(row => <div key={row.user.id} style={{ borderTop: "1px solid #edf2f7", paddingTop: 9, display: "grid", gridTemplateColumns: "1fr auto", gap: 6 }}>
-        <div><strong style={{ fontSize: 12, color: "#0a0a0a" }}>{row.user.name}</strong><small style={{ display: "block", color: "#6c6a65" }}>{row.reimbursementDue > 0 ? `Expenses ${formatCurrency(row.reimbursementDue)}` : ""}{row.reimbursementDue > 0 && row.profitDue > 0 ? " · " : ""}{row.profitDue > 0 ? `Profit ${formatCurrency(row.profitDue)}` : ""}</small><button onClick={() => statement(row)} style={{ border: 0, background: "none", color: "#0a0a0a", fontSize: 9, fontWeight: 800, padding: "4px 0 0", cursor: "pointer" }}>Copy statement</button></div>
-        <div style={{ textAlign: "right" }}><strong style={{ display: "block", color: "#b45309", marginBottom: 5 }}>{formatCurrency(row.reimbursementDue + row.profitDue)}</strong>{row.reimbursementDue > 0 ? <button onClick={() => startPayment("reimbursement", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay back</button> : row.profitDue > 0 ? <button onClick={() => startPayment("partner_payout", row)} style={{ ...styles.copyBtn, minHeight: 30, padding: "0 9px", fontSize: 9 }}>Pay profit</button> : null}</div>
-      </div>)}
-    </div>
+    <ExpensesList stock={stock} expenses={expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />
 
     {(activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
@@ -298,21 +297,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}
 
-    <details style={card}>
-      <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#4a4843" }}>Finance settings</summary>
-      <div><span style={label}>Profit sharing</span><div style={{ fontSize: 11, color: sharesValid ? "#6c6a65" : "#dc2626", marginTop: 3 }}>{partners.length ? (partnerTotal === 0 ? `Equal split · ${partners.length} partner${partners.length === 1 ? "" : "s"}` : `${partnerTotal.toFixed(1)}% allocated${sharesValid ? " ✓" : " · must total 100%"}`) : "No partners selected"}</div></div>
-      {users.map(user => { const partner = partners.find(item => item.profileId === user.id); return <div key={user.id} style={{ display: "grid", gridTemplateColumns: "24px 1fr 76px", alignItems: "center", gap: 8 }}>
-        <input type="checkbox" checked={!!partner} onChange={() => togglePartner(user)} aria-label={`Make ${user.name} a partner`} />
-        <span style={{ fontSize: 12, fontWeight: 800, color: "#4a4843" }}>{user.name}</span>
-        {partner ? <input type="number" min="0" max="100" step="0.1" value={partner.profitShare || ""} placeholder="Equal" onChange={event => updateShare(user.id, event.target.value)} style={{ ...field, width: 76, fontSize: 11 }} aria-label={`${user.name} profit percentage`} /> : <span />}
-      </div>; })}
-      <div style={{ height: 1, background: "#edf2f7" }} />
-      <div><span style={label}>Period lock</span><div style={{ fontSize: 11, color: journal.lockedThrough ? "#b45309" : "#6c6a65", marginTop: 3 }}>{journal.lockedThrough ? `Locked through ${formatDateShort(journal.lockedThrough)}` : "No period locked"}</div></div>
-      <div style={{ display: "flex", gap: 8 }}>
-        <input type="date" aria-label="Lock accounting through date" value={journal.lockedThrough ?? ""} max={localToday()} onChange={event => onLockChange(event.target.value)} style={{ ...field, flex: 1 }} />
-        {journal.lockedThrough && <button onClick={() => onLockChange(null)} style={{ ...styles.copyBtn, minWidth: 74 }}>Reopen</button>}
-      </div>
-    </details>
+
   </div>;
 }
 
@@ -342,6 +327,7 @@ export default function App() {
   const [ordersView, setOrdersView] = useState("Preparing");
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategory, setStockCategory] = useState("Attention");
+  const [stockView, setStockView] = useState("overview");
   const [editingEquipmentId, setEditingEquipmentId] = useState(null);
   const [equipmentDraft, setEquipmentDraft] = useState({ name: "", quantity: "", lowThreshold: "" });
   const [teamSearch, setTeamSearch] = useState("");
@@ -375,7 +361,6 @@ export default function App() {
     return defaults;
   });
   const [usersCollapsed, setUsersCollapsed] = useState(false);
-  const [consumablesCollapsed, setConsumablesCollapsed] = useState(false);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
@@ -525,10 +510,6 @@ export default function App() {
   useEffect(() => {
     if (dbReady) syncStock(stock);
   }, [stock]); // eslint-disable-line
-
-  useEffect(() => {
-    if (dbReady) syncExpenses(expenses);
-  }, [expenses]); // eslint-disable-line
 
   // Re-fetch from Supabase whenever the user switches tabs
   useEffect(() => {
@@ -1232,6 +1213,7 @@ export default function App() {
               {managementView === "finance" ? (
                 <FinancePanel
                   users={users}
+                  stock={stock}
                   expenses={displayExpenses}
                   revenue={displayTotals.gross}
                   journal={financeJournal}
@@ -1239,14 +1221,23 @@ export default function App() {
                   dateFrom={managementDateFrom}
                   dateTo={managementDateTo}
                   canAddManualSale
-                  onExpense={expense => {
+                  onExpense={async expense => {
                     const now = new Date();
-                    const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00`);
-                    setExpenses(current => [...current, {
-                      id: Date.now(), category: expense.category, qty: null,
-                      amount: expense.amount, time: time.toISOString(), shiftId: null,
-                      description: expense.description, paidBy: expense.paidBy || null,
-                    }]);
+                    const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00+02:00`);
+                    const record = { id: createOrderId(), category: expense.category, qty: null, amount: expense.amount, time: time.toISOString(), shiftId: null, description: expense.description, paidBy: expense.paidBy || null, stockQuantities: expense.stockQuantities ?? {} };
+                    await saveExpenseRecord(record);
+                    const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
+                    setExpenses(current => [...current, record]);
+                  }}
+                  onExpenseUpdate={async (original, changes) => {
+                    await saveExpenseRecord({ ...original, ...changes }, original);
+                    const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
+                    setExpenses(current => current.map(item => item.id === original.id ? { ...item, ...changes } : item));
+                  }}
+                  onExpenseDelete={async expense => {
+                    await deleteExpenseRecord(expense);
+                    const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
+                    setExpenses(current => current.filter(item => item.id !== expense.id));
                   }}
                   onManualSale={async sale => {
                     const saved = await addManualSale(sale);
@@ -1366,7 +1357,7 @@ export default function App() {
                   <div key={item.id}>
                     <div style={{ ...rowStyle, cursor: "pointer" }} onClick={() => toggleStockExpand(item.id)}>
                       <div style={styles.stockInfo}>
-                        <span style={styles.stockName}>{item.name}</span>
+                        <span style={styles.stockName} className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span>
                         <div style={styles.stockMeta}>
                           <span style={styles.stockUnit}>{Number.isInteger(totalQty) ? totalQty : totalQty.toFixed(2)} {item.unit} total</span>
                           {anyOut && <span className="pulse-badge" style={{ ...styles.stockBadge, background: "#fef2f2", color: "#dc2626", border: "1px solid #fecaca" }}>Out of stock</span>}
@@ -1468,7 +1459,7 @@ export default function App() {
               return (
                 <div key={item.id} style={rowStyle}>
                   <div style={styles.stockInfo}>
-                    <span style={styles.stockName}>{item.name}</span>
+                    <span style={styles.stockName} className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span>
                     <div style={styles.stockMeta}>
                       <span style={styles.stockUnit}>{item.unit}</span>
                       {orderCapacity !== null && <span style={{ ...styles.stockUnit, color: orderCapacity <= 5 ? "#dc2626" : "#047857", fontWeight: 800 }}>· ≈ {orderCapacity} orders</span>}
@@ -1517,12 +1508,27 @@ export default function App() {
                   </div>
                 </div>
 
+                <div role="tablist" aria-label="Stock sections" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
+                  {[{ id: "overview", label: "Overview" }, { id: "taking", label: "Stock Taking" }].map(view => (
+                    <button role="tab" aria-selected={stockView === view.id} aria-controls={`stock-${view.id}`} id={`stock-tab-${view.id}`} key={view.id} onClick={() => setStockView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: stockView === view.id ? "#0a0a0a" : "transparent", color: stockView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                  ))}
+                </div>
+                <div role="tabpanel" id="stock-taking" aria-labelledby="stock-tab-taking" style={{ display: stockView === "taking" ? "block" : "none" }}>
+                <StockTaking stock={stock} pendingOrders={pendingOrderCount} refreshStock={async () => {
+                  const latest = await fetchStock();
+                  if (latest) setStock(latest);
+                  return latest;
+                }} />
+                </div>
+                <div role="tabpanel" id="stock-overview" aria-labelledby="stock-tab-overview" style={{ display: stockView === "overview" ? "flex" : "none", flexDirection: "column", gap: 10 }}>
                 <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
                   {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
 
                 {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}
+
+
 
                 <div style={styles.purchasePlanner}>
                   <div style={styles.purchasePlannerHeader}>
@@ -1542,7 +1548,7 @@ export default function App() {
                         const tone = urgent ? "#dc2626" : soon ? "#b45309" : "#15803d";
                         return (
                           <div key={item.id} style={styles.purchasePlanRow}>
-                            <span style={styles.purchasePlanIcon}>{FLAVOURS.some(f => f.name === item.name) ? <FlavourThumbnail flavour={item} compact /> : item.icon}</span>
+                            <span style={styles.purchasePlanIcon}>{FLAVOURS.some(f => f.name === item.name) ? <FlavourThumbnail flavour={item} compact /> : <StockItemPhoto name={item.name} fallback={item.icon} />}</span>
                             <span style={{ flex: 1, minWidth: 0 }}>
                               <strong style={{ display: "block", color: "#0a0a0a", fontSize: 11 }}>{item.name}</strong>
                               <small style={{ display: "block", marginTop: 2, color: "#6c6a65", fontSize: 9, fontWeight: 700 }}>
@@ -1563,11 +1569,7 @@ export default function App() {
 
                 {consumables.length > 0 && (
                   <>
-                    <button onClick={() => setConsumablesCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                      <span>🔥 Consumables <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 600 }}>({consumables.length})</span></span>
-                      <span style={styles.collapseChevron}>{consumablesCollapsed ? "▶" : "▼"}</span>
-                    </button>
-                    {!consumablesCollapsed && <div className="expand-down" style={styles.stockList}>{consumables.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>}
+                    <div style={styles.stockList}>{consumables.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>
                   </>
                 )}
 
@@ -1582,6 +1584,7 @@ export default function App() {
                 )}
 
 
+                </div>
               </div>
             );
           })()}
@@ -2044,11 +2047,11 @@ export default function App() {
             const active = visibleTab === t.key;
             return (
               <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "color 140ms ease, background-color 140ms ease" }}>
-                <div style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2 }}>
+                <div style={{ position: "relative", minHeight: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
                   <TabIcon name={t.icon} active={active} />
                   <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#0a0a0a" : "#6c6a65", whiteSpace: "nowrap" }}>{t.label}</span>
                   {t.badge > 0 && (
-                    <span style={{ minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0a0a0a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
+                    <span style={{ position: "absolute", top: -2, right: -8, minWidth: 16, height: 16, borderRadius: 999, background: active ? "#0a0a0a" : "rgba(255,255,255,0.15)", color: active ? "#fff" : "rgba(255,255,255,0.7)", fontSize: 9, fontWeight: 900, display: "flex", alignItems: "center", justifyContent: "center", padding: "0 4px" }}>{t.badge}</span>
                   )}
                 </div>
               </button>

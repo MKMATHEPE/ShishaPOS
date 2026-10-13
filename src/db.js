@@ -225,7 +225,7 @@ export async function fetchExpenses() {
     id: r.id, category: r.category, qty: r.qty,
     amount: Number(r.amount), time: r.time, shiftId: r.shift_id ?? null,
     description: r.description ?? '', paidBy: r.paid_by ?? null,
-    reimbursedAt: r.reimbursed_at ?? null,
+    reimbursedAt: r.reimbursed_at ?? null, stockQuantities: r.stock_quantities ?? {},
   }))
 }
 
@@ -313,4 +313,28 @@ export async function cancelOrder(id) {
   const { data, error } = await supabase.rpc('cancel_pos_order', { order_id: id })
   if (error) { console.error('cancelOrder', error); return false }
   return data === true
+}
+
+// Expense writes target one record; never synchronise or delete the entire list.
+export async function saveExpenseRecord(expense, original = null) {
+  if (!ok()) throw new Error('Connect before saving an expense.')
+  const row = { category: expense.category, amount: expense.amount, time: expense.time,
+    description: expense.description || null, paid_by: expense.paidBy || null, stock_quantities: expense.stockQuantities ?? {} }
+  let query
+  if (original) {
+    query = supabase.from('pos_expenses').update(row).eq('id', original.id).eq('time', original.time).eq('amount', original.amount).eq('stock_quantities', JSON.stringify(original.stockQuantities ?? {}))
+  } else {
+    query = supabase.from('pos_expenses').insert({ ...row, id: expense.id, qty: expense.qty ?? null, shift_id: expense.shiftId ?? null })
+  }
+  const { data, error } = await query.select('id').maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Expense changed or access was denied. Refresh and try again.')
+}
+
+export async function deleteExpenseRecord(expense) {
+  if (!ok()) throw new Error('Connect before deleting an expense.')
+  const { data, error } = await supabase.from('pos_expenses').delete()
+    .eq('id', expense.id).eq('time', expense.time).eq('amount', expense.amount).eq('stock_quantities', JSON.stringify(expense.stockQuantities ?? {})).select('id').maybeSingle()
+  if (error) throw new Error(error.message)
+  if (!data) throw new Error('Expense changed or access was denied. Refresh and try again.')
 }
