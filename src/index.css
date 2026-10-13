@@ -374,3 +374,27 @@ button:active { transform: none; opacity: 1; }
 }
 body { background: var(--cp-paper); }
 button:disabled { opacity: .45; }
+
+/* Finance action tiles share one baseline and equal dimensions. */
+.finance-action-grid { align-items: stretch; }
+.finance-action-grid > button {
+  margin-top: 0 !important;
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px !important;
+}
+.missing-sale-card input, .missing-sale-card select {
+  width: 100%;
+  min-width: 0;
+  height: 42px;
+  box-sizing: border-box;
+}
+.missing-sale-card > div:last-child { align-items: stretch; }
+.missing-sale-card > div:last-child > button {
+  margin-top: 0 !important;
+  min-width: 0;
+  min-height: 44px;
+}

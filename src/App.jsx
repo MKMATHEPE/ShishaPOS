@@ -182,11 +182,6 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
     setActiveAction(kind);
     setMessage("");
   };
-  const activity = [
-    ...manualSales.map(item => ({ id: `s-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: `Manual ${item.payment} sale`, detail: `${item.description} · ${item.reason}`, status: "Adjustment", tone: "#0a0a0a", amount: item.amount })),
-    ...expenses.map(item => { const outstanding = item.paidBy && (rows.find(row => row.user.id === item.paidBy)?.reimbursementDue ?? 0) > 0; return { id: `e-${item.id}`, date: String(item.time).slice(0, 10), time: item.time, title: item.paidBy ? `${personName(item.paidBy)} paid ${formatCurrency(item.amount)}` : `Business spent ${formatCurrency(item.amount)}`, detail: item.description || item.category, status: outstanding ? "Needs repayment" : item.paidBy ? "Repaid" : "Business paid", tone: outstanding ? "#b45309" : item.paidBy ? "#16a34a" : "#6c6a65", amount: -Number(item.amount) }; }),
-    ...transactions.map(item => ({ id: `t-${item.id}`, date: item.date, time: item.createdAt || `${item.date}T12:00:00`, title: item.kind === "reimbursement" ? `Paid back ${personName(item.profileId)}` : `Paid partner ${personName(item.profileId)}`, detail: item.description || (item.kind === "reimbursement" ? "Expense reimbursement" : "Profit payout"), status: "Paid", tone: "#16a34a", amount: -item.amount })),
-  ].sort((a, b) => String(b.time).localeCompare(String(a.time))).slice(0, 8);
   const businessPaidExpenses = expenses.filter(item => !item.paidBy).reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const refundsPaid = reimbursements.reduce((sum, item) => sum + item.amount, 0);
   const profitPaid = payouts.reduce((sum, item) => sum + item.amount, 0);
@@ -233,7 +228,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
 
     {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
 
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
+    <div className="finance-action-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
       <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")} style={{ ...styles.addUserBtn, minHeight: 48, padding: "0 8px", fontSize: 11 }}>＋ Add expense</button>
       {canAddManualSale && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>＋ Missing sale</button>}
       <button onClick={() => startPayment("reimbursement")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay someone back</button>
@@ -270,7 +265,7 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
       </div>
     </div>}
 
-    {activeAction === "manual_sale" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
+    {activeAction === "manual_sale" && <div className="expand-down missing-sale-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#0a0a0a", background: "#ece8df", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Sale date</span><input type="date" max={localToday()} value={sale.date} onChange={event => setSale(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} /></div>
@@ -301,15 +296,6 @@ function FinancePanel({ users, expenses, revenue, journal, periodLabel, dateFrom
       <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}
-
-    <div style={card}>
-      <span style={label}>Recent activity</span>
-      {activity.length === 0 ? <span style={{ fontSize: 12, color: "#8c8982" }}>No activity yet.</span> : activity.map(item => <div key={item.id} style={{ display: "grid", gridTemplateColumns: "30px 1fr auto", gap: 8, alignItems: "center", borderTop: "1px solid #edf2f7", paddingTop: 9 }}>
-        <span style={{ width: 28, height: 28, borderRadius: 9, display: "grid", placeItems: "center", background: ["Paid", "Repaid"].includes(item.status) ? "#dcfce7" : item.status === "Needs repayment" ? "#fff7ed" : "#ece8df", color: item.tone, fontWeight: 900 }}>{["Paid", "Repaid"].includes(item.status) ? "✓" : "↓"}</span>
-        <span><strong style={{ display: "block", fontSize: 11, color: "#4a4843" }}>{item.title}</strong><small style={{ color: "#8c8982" }}>{item.detail} · {item.date === localToday() ? "Today" : formatDateShort(item.date)}</small></span>
-        <span style={{ textAlign: "right" }}><strong style={{ display: "block", fontSize: 11, color: item.amount > 0 ? "#16a34a" : "#dc2626" }}>{item.amount > 0 ? "+" : ""}{formatCurrency(Math.abs(item.amount))}</strong><small style={{ color: item.tone, fontSize: 8, fontWeight: 800 }}>{item.status}</small></span>
-      </div>)}
-    </div>
 
     <details style={card}>
       <summary style={{ cursor: "pointer", fontSize: 12, fontWeight: 900, color: "#4a4843" }}>Finance settings</summary>
@@ -390,14 +376,12 @@ export default function App() {
   const [usersCollapsed, setUsersCollapsed] = useState(false);
   const [consumablesCollapsed, setConsumablesCollapsed] = useState(false);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
-  const [stockSummaryCollapsed, setStockSummaryCollapsed] = useState(true);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
   const [cancellingOrderId, setCancellingOrderId] = useState(null);
   const cancellationRunning = useRef(false);
   const [cancellationError, setCancellationError] = useState("");
   const [expandedStockIds, setExpandedStockIds] = useState(new Set());
-  const [showShareMenu, setShowShareMenu] = useState(false);
   const [expenses, setExpenses] = useState([]);
   const [stockPlanningOrders, setStockPlanningOrders] = useState([]);
   const [confirmLogout, setConfirmLogout] = useState(false);
@@ -1136,7 +1120,6 @@ export default function App() {
               return acc;
             }, { gross: 0, card: 0, cash: 0 });
             const displayDeliveredOrders = displayOrders.filter((o) => o.status === "delivered");
-            const displayCurrentOrders   = displayOrders.filter((o) => o.status !== "delivered");
             const displayExpenses = expenses.filter(e => {
               const d = new Date(e.time);
               const eDate = [d.getFullYear(), String(d.getMonth()+1).padStart(2,"0"), String(d.getDate()).padStart(2,"0")].join("-");
@@ -1170,10 +1153,6 @@ export default function App() {
             const totalOrders = displayOrders.length;
             const avgOrderValue = totalOrders > 0 ? displayTotals.gross / totalOrders : 0;
             const deliveryRate = totalOrders > 0 ? Math.round((displayDeliveredOrders.length / totalOrders) * 100) : 0;
-            const lowStockCount = stock.reduce((count, item) => {
-              if (item.subItems) return count + item.subItems.filter(subItem => subItem.quantity <= 1).length;
-              return count + (item.quantity <= item.lowThreshold ? 1 : 0);
-            }, 0);
             const mgmtDateLabel = isViewingToday ? todayLabel
               : managementDateFrom === managementDateTo ? formatSessionDate(managementDateFrom)
               : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
@@ -1311,24 +1290,6 @@ export default function App() {
                   ))}
                 </div>
 
-                <div style={styles.managementAttentionCard}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <div><span style={styles.managementEyebrow}>Live operations</span><strong style={{ ...styles.managementSectionTitle, fontSize: 14 }}>Needs attention</strong></div>
-                    <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 800 }}>Now</span>
-                  </div>
-                  <div style={styles.managementAttentionGrid}>
-                    {[
-                      { label: "Preparing", value: displayCurrentOrders.length, tone: displayCurrentOrders.length ? "#b45309" : "#16a34a", bg: displayCurrentOrders.length ? "#fffbeb" : "#f0fdf4", tab: "delivered" },
-                      { label: "Pipes out", value: pipesOut, tone: pipesOut ? "#b45309" : "#16a34a", bg: pipesOut ? "#fffbeb" : "#f0fdf4", tab: "delivered" },
-                      { label: "Low stock", value: lowStockCount, tone: lowStockCount ? "#dc2626" : "#16a34a", bg: lowStockCount ? "#fef2f2" : "#f0fdf4", tab: "stock" },
-                    ].map(item => (
-                      <button key={item.label} onClick={() => setActiveTab(item.tab)} style={{ ...styles.managementAttentionItem, color: item.tone, background: item.bg }}>
-                        <strong style={{ fontSize: 18 }}>{item.value}</strong><span>{item.label}</span>
-                      </button>
-                    ))}
-                  </div>
-                </div>
-
                 <div style={{ ...styles.kpiCard, minHeight: 150 }}>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                     <span style={styles.kpiLabel}>Sales by hour</span>
@@ -1399,32 +1360,6 @@ export default function App() {
             }).filter(item => item.dailyUse > 0).sort((a, b) => a.daysLeft - b.daysLeft);
             const buySoonCount = purchasePlan.filter(item => item.daysLeft <= 4).length;
 
-            const buildStockReport = () => {
-              const lines = [`Stock Report · ${todayLabel}`, ""];
-              stock.forEach(item => {
-                if (item.subItems) {
-                  lines.push(`${item.name}:`);
-                  item.subItems.forEach(s => {
-                    const perSale = FLAVOUR_PER_SALE[s.id];
-                    const denom = perSale ? Math.round((1 / perSale) * 10) / 10 : null;
-                    const qty = Math.round(s.quantity * 1000) / 1000;
-                    const whole = Math.floor(qty);
-                    const openSales = denom ? Math.round((qty - whole) * denom * 10) / 10 : null;
-                    const openLabel = openSales !== null && openSales > 0
-                      ? ` + ${Number.isInteger(openSales) ? openSales : openSales.toFixed(1)}/${denom} open`
-                      : "";
-                    const flag = s.quantity === 0 ? " ❌ OUT" : s.quantity <= item.lowThreshold ? " ⚠ LOW" : "";
-                    lines.push(`  ${s.icon} ${s.name}: ${whole > 0 ? `${whole} box${whole !== 1 ? "es" : ""}` : ""}${openLabel}${flag}`);
-                  });
-                } else {
-                  const pack = RESTOCK_PACK[item.name];
-                  const packInfo = pack ? ` (${Math.floor(item.quantity / pack.size)} ${pack.plural} + ${item.quantity % pack.size} pcs)` : "";
-                  const flag = item.quantity === 0 ? " ❌ OUT" : item.quantity <= item.lowThreshold ? " ⚠ LOW" : "";
-                  lines.push(`${item.name}: ${item.quantity} ${item.unit}${packInfo}${flag}`);
-                }
-              });
-              return lines.join("\n");
-            };
 
             const toggleStockExpand = (id) => setExpandedStockIds(prev => {
               const next = new Set(prev); next.has(id) ? next.delete(id) : next.add(id); return next;
@@ -1594,11 +1529,6 @@ export default function App() {
                   </div>
                 </div>
 
-                <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                  {[{ label: "Out of stock", value: outItems.length, color: "#dc2626", bg: "#fef2f2", filter: "Attention" }, { label: "Low stock", value: lowItems.length, color: "#b45309", bg: "#fffbeb", filter: "Attention" }, { label: "Fixed Assets", value: stock.filter(item => item.category === "equipment").length, color: "#0a0a0a", bg: "#f6f4ef", filter: "Fixed Assets" }].map((summary) => (
-                    <button key={summary.label} onClick={() => setStockCategory(summary.filter)} style={{ border: `1px solid ${summary.color}22`, background: summary.bg, borderRadius: 13, padding: 12, textAlign: "center", fontFamily: "inherit" }}><span style={{ display: "block", fontSize: 9, color: summary.color, fontWeight: 800 }}>{summary.label}</span><strong style={{ display: "block", marginTop: 4, color: "#0a0a0a", fontSize: 21 }}>{summary.value}</strong></button>
-                  ))}
-                </div>
                 <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
                   {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
@@ -1664,114 +1594,6 @@ export default function App() {
                 )}
 
 
-                {/* ── Stock Summary ── */}
-                <button onClick={() => setStockSummaryCollapsed(c => !c)} style={styles.collapsibleHeader}>
-                  <span>📊 Summary</span>
-                  <span style={styles.collapseChevron}>{stockSummaryCollapsed ? "▶" : "▼"}</span>
-                </button>
-
-                {!stockSummaryCollapsed && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 8, padding: "4px 2px" }}>
-
-                    {(outItems.length > 0 || lowItems.length > 0) && (
-                      <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                        <span style={{ fontSize: 10, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Needs Attention</span>
-                        {outItems.map(i => (
-                          <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.parentName ? <span className="flavour-label"><FlavourThumbnail flavour={i} compact /><span>{i.name} ({i.parentName})</span></span> : <>{i.icon ? `${i.icon} ` : ""}{i.name}</>}</span>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: "#dc2626", background: "#fef2f2", padding: "2px 8px", borderRadius: 20 }}>Out of stock</span>
-                          </div>
-                        ))}
-                        {lowItems.map(i => (
-                          <div key={i.id ?? i.name} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>{i.parentName ? <span className="flavour-label"><FlavourThumbnail flavour={i} compact /><span>{i.name} ({i.parentName})</span></span> : <>{i.icon ? `${i.icon} ` : ""}{i.name}</>}</span>
-                            <span style={{ fontSize: 11, fontWeight: 800, color: "#b45309", background: "#fffbeb", padding: "2px 8px", borderRadius: 20 }}>Low</span>
-                          </div>
-                        ))}
-                      </div>
-                    )}
-
-                    {outItems.length === 0 && lowItems.length === 0 && (
-                      <div style={{ textAlign: "center", padding: "10px 0", fontSize: 13, fontWeight: 700, color: "#16a34a" }}>
-                        ✓ All items are well stocked
-                      </div>
-                    )}
-
-                    {(() => {
-                      const stockExpenses = expenses.filter(e => !["Wages", "Transport"].includes(e.category));
-                      if (!stockExpenses.length) return null;
-                      const RESTOCK_OPT_MAP = Object.fromEntries(
-                        stock.flatMap(i => i.subItems
-                          ? i.subItems.map(s => { const fl = FLAVOURS.find(f => f.id === s.id); return [`Flavour-${s.id}`, { label: fl?.name ?? s.name, icon: fl?.icon ?? "🌿", color: fl?.color ?? "#6c6a65", bg: fl?.bg ?? "#f6f4ef" }]; })
-                          : [[i.name, { label: i.name, icon: i.category === "equipment" ? "🛠️" : "📦", color: i.category === "equipment" ? "#4a4843" : "#4a4843", bg: i.category === "equipment" ? "#ece8df" : "#f6f4ef" }]]
-                        )
-                      );
-                      return (
-                        <div style={{ background: "rgba(255,255,255,0.6)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.8)", borderRadius: 10, padding: "10px 12px", display: "flex", flexDirection: "column", gap: 6 }}>
-                          <span style={{ fontSize: 10, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Restock History</span>
-                          {[...stockExpenses].reverse().map(e => {
-                            const opt = RESTOCK_OPT_MAP[e.category] ?? { label: e.category, icon: "📦", color: "#4a4843", bg: "#ece8df" };
-                            const pack = RESTOCK_PACK[e.category];
-                            return (
-                              <div key={e.id} style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                                <span style={{ fontSize: 11, fontWeight: 800, color: opt.color, background: opt.bg, padding: "3px 9px", borderRadius: 20, whiteSpace: "nowrap" }}>
-                                  {e.category.startsWith("Flavour-") ? <span className="flavour-label"><FlavourThumbnail flavour={opt.label} compact /><span>{opt.label}</span></span> : <>{opt.icon} {opt.label}</>}
-                                </span>
-                                <span style={{ fontSize: 12, fontWeight: 700, color: "#0a0a0a" }}>
-                                  +{e.qty ?? "?"} {pack ? pack.plural : "units"}{pack && e.qty ? ` (${e.qty * pack.size} pcs)` : ""}
-                                </span>
-                                <span style={{ fontSize: 11, color: "#8c8982", fontWeight: 600, marginLeft: "auto", whiteSpace: "nowrap" }}>
-                                  {new Date(e.time).toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false })}
-                                </span>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      );
-                    })()}
-
-                    <div style={{ position: "relative" }}>
-                      <button
-                        onClick={async () => {
-                          const text = buildStockReport();
-                          if (navigator.share) {
-                            try { await navigator.share({ title: "Stock Report", text }); return; } catch { navigator.clipboard?.writeText(text); }
-                          }
-                          setShowShareMenu(s => !s);
-                        }}
-                        style={styles.copyBtn}
-                      >
-                        Share Stock Report
-                      </button>
-                      {showShareMenu && (
-                        <div style={{ position: "absolute", bottom: "calc(100% + 8px)", left: 0, right: 0, background: "rgba(255,255,255,0.95)", backdropFilter: "blur(12px)", WebkitBackdropFilter: "blur(12px)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, boxShadow: "0 8px 24px rgba(10,10,10,0.12)", overflow: "hidden", zIndex: 10 }}>
-                          <a
-                            href={`https://wa.me/?text=${encodeURIComponent(buildStockReport())}`}
-                            target="_blank"
-                            rel="noopener noreferrer"
-                            onClick={() => setShowShareMenu(false)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0a0a0a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
-                          >
-                            <span style={{ fontSize: 20 }}>💬</span> WhatsApp
-                          </a>
-                          <a
-                            href={`mailto:?subject=Stock Report · ${todayLabel}&body=${encodeURIComponent(buildStockReport())}`}
-                            onClick={() => setShowShareMenu(false)}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", textDecoration: "none", color: "#0a0a0a", fontWeight: 700, fontSize: 14, borderBottom: "1px solid rgba(0,0,0,0.06)" }}
-                          >
-                            <span style={{ fontSize: 20 }}>✉️</span> Email
-                          </a>
-                          <button
-                            onClick={() => { navigator.clipboard?.writeText(buildStockReport()); setShowShareMenu(false); }}
-                            style={{ display: "flex", alignItems: "center", gap: 10, padding: "13px 16px", width: "100%", background: "none", border: "none", cursor: "pointer", fontWeight: 700, fontSize: 14, color: "#0a0a0a", fontFamily: "inherit" }}
-                          >
-                            <span style={{ fontSize: 20 }}>📋</span> Copy to clipboard
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                )}
               </div>
             );
           })()}
