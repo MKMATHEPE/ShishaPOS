@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchOrdersByDateRange } from './db';
-import { periodDays, previousPeriod, periodRecords, performance, changeLabel, zaDay } from './overviewModel';
+import { periodDays, previousPeriod, periodRecords, performance, changeLabel, chartTotals } from './overviewModel';
 
 const money=value=>`R${Number(value).toLocaleString('en-ZA',{maximumFractionDigits:0})}`;
 const photo={lk:'lady-killer.webp',mc:'cream-mint.webp',bn:'berlin-nights.jpg',gm:'gum-mint.webp',jk:'joker.jpg',hh:'honey-hunter.jpg'};
@@ -19,14 +19,14 @@ export default function ManagementOverview({orders,expenses,from,to,timeFrom,tim
   const spent=periodRecords(expenses,from,to,timeFrom,timeTo).reduce((s,e)=>s+Number(e.amount),0);
   const priorSpent=periodRecords(expenses,previous.from,previous.to,timeFrom,timeTo).reduce((s,e)=>s+Number(e.amount),0);
   const days=periodDays(from,to), priorDays=periodDays(previous.from,previous.to);
-  const totals=rows=>days.map((day,i)=>(rows??[]).filter(o=>zaDay(o.time)===(rows===current?day:priorDays[i])).reduce((s,o)=>s+Number(o.price),0));
-  const values=totals(current),oldValues=totals(prior), max=Math.max(1,...values,...oldValues);
+  const {values,hours}=chartTotals(current,days);
+  const oldValues=chartTotals(prior??[],priorDays).values;
+  const max=Math.max(1,...values,...oldValues);
   const points=series=>series.map((value,i)=>`${30+i*300/Math.max(1,series.length-1)},${112-value/max*90}`).join(' ');
   const flavours=Object.values(current.reduce((all,o)=>{
     const id=o.flavour?.id??o.flavour,name=o.flavour?.name??String(o.flavour??'Unknown');
     all[id]??={id,name,count:0,revenue:0};all[id].count++;all[id].revenue+=Number(o.price);return all;
   },{})).sort((a,b)=>b.count-a.count);
-  const hours=Array.from({length:12},(_,i)=>({hour:i*2,count:current.filter(o=>Math.floor(Number(new Intl.DateTimeFormat('en-GB',{timeZone:'Africa/Johannesburg',hour:'2-digit',hourCycle:'h23'}).format(new Date(o.time)))/2)===i).length}));
   const hourMax=Math.max(1,...hours.map(h=>h.count));
   const percent=value=>metrics.orders?Math.round(value/metrics.orders*100):0;
   return <div className="management-overview" aria-busy={loading}>
