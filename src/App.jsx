@@ -2174,6 +2174,8 @@ const styles = {
     boxShadow: "none",
   },
   mainContent: {
+    minWidth: 0,
+    overflowX: "hidden",
     flex: 1,
     minHeight: 0,
     display: "flex",

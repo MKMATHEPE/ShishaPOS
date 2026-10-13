@@ -571,3 +571,18 @@ button:disabled { opacity: .45; }
   text-align: center;
 }
 .finance-action-grid > button { font-size: 10px; }
+
+/* Keep mobile scrolling within the viewport and prevent Safari field zoom. */
+html, body, #root {
+  max-width: 100%;
+  overflow-x: clip;
+}
+@media (max-width: 600px) {
+  input, select, textarea {
+    font-size: 16px !important;
+  }
+  .finance-form-card input, .finance-form-card select,
+  .expense-edit-form input, .expense-edit-form select {
+    font-size: 16px !important;
+  }
+}
