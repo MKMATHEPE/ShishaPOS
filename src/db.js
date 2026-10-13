@@ -161,15 +161,20 @@ export async function deleteOrder(id) {
 }
 
 // ── Orders by date range (for management date filter) ─
-export async function fetchOrdersByDateRange(from, to) {
+export async function fetchOrdersByDateRange(from, to, allPages = true) {
   if (!ok()) return null
-  const { data, error } = await supabase
-    .from('pos_orders')
-    .select('*')
-    .gte('time', from)
-    .lte('time', to)
-    .order('time', { ascending: true })
-  if (error) { console.error('fetchOrdersByDateRange', error); return null }
+  const data = []
+  let offset = 0
+  do {
+    const { data: page, error } = await supabase
+      .from('pos_orders').select('*').gte('time', from).lte('time', to)
+      .order('time', { ascending: true }).order('id', { ascending: true })
+      .range(offset, offset + 499)
+    if (error) { console.error('fetchOrdersByDateRange', error); return null }
+    data.push(...page)
+    if (!allPages || page.length < 500) break
+    offset += page.length
+  } while (allPages)
   return data.map(r => ({
     id: r.id, flavour: r.flavour, type: r.type,
     payment: r.payment, price: r.price, status: r.status,

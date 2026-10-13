@@ -1,4 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from "react";
+import { planWeekend } from "./purchasePlanner";
 import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
@@ -600,7 +601,7 @@ export default function App() {
   useEffect(() => {
     if (activeTab !== "stock" || !supabase) return;
     const fromDate = new Date();
-    fromDate.setDate(fromDate.getDate() - 13);
+    fromDate.setDate(fromDate.getDate() - 56);
     fromDate.setHours(0, 0, 0, 0);
     fetchOrdersByDateRange(fromDate.toISOString(), new Date().toISOString()).then(recentOrders => {
       if (recentOrders) setStockPlanningOrders(recentOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
@@ -1343,22 +1344,9 @@ export default function App() {
             const outItems = allFlatItems.filter(i => i.quantity === 0);
             const lowItems = allFlatItems.filter(i => i.quantity > 0 && i.quantity <= i.lowThreshold);
             const lowCount = outItems.length + lowItems.length;
-            const sellingDays = Math.max(1, new Set(stockPlanningOrders.map(order => dateInputValue(new Date(order.time)))).size);
-            const targetDays = 7;
-            const purchasePlan = stock.flatMap(item => {
-              if (item.subItems) return item.subItems.map(subItem => {
-                const flavourOrders = stockPlanningOrders.filter(order => order.flavour.id === subItem.id).length;
-                const dailyUse = (flavourOrders / sellingDays) * (FLAVOUR_PER_SALE[subItem.id] ?? 0);
-                const daysLeft = dailyUse > 0 ? subItem.quantity / dailyUse : Infinity;
-                return { id: `flavour-${subItem.id}`, name: subItem.name, icon: subItem.icon, unit: "boxes", quantity: subItem.quantity, dailyUse, daysLeft, buy: Math.max(0, Math.ceil(dailyUse * targetDays - subItem.quantity)) };
-              });
-              const perSale = item.name === "Coal" ? COAL_PER_SALE : item.name === "Mouth Pieces" ? MOUTHPIECES_PER_SALE : 0;
-              if (!perSale) return [];
-              const dailyUse = (stockPlanningOrders.length / sellingDays) * perSale;
-              const daysLeft = dailyUse > 0 ? item.quantity / dailyUse : Infinity;
-              return [{ id: item.id, name: item.name, icon: "📦", unit: item.unit, quantity: item.quantity, dailyUse, daysLeft, buy: Math.max(0, Math.ceil(dailyUse * targetDays - item.quantity)) }];
-            }).filter(item => item.dailyUse > 0).sort((a, b) => a.daysLeft - b.daysLeft);
-            const buySoonCount = purchasePlan.filter(item => item.daysLeft <= 4).length;
+            const weekendPlan = planWeekend(stock, stockPlanningOrders, { Coal: COAL_PER_SALE, "Mouth Pieces": MOUTHPIECES_PER_SALE, flavours: FLAVOUR_PER_SALE }, RESTOCK_PACK);
+            const purchasePlan = weekendPlan.items;
+            const buySoonCount = purchasePlan.filter(item => item.buy > 0).length;
 
 
             const toggleStockExpand = (id) => setExpandedStockIds(prev => {
@@ -1540,17 +1528,17 @@ export default function App() {
                   <div style={styles.purchasePlannerHeader}>
                     <div>
                       <span style={styles.stockCategoryHeader}>Purchase planner</span>
-                      <strong style={styles.purchasePlannerTitle}>{buySoonCount ? `${buySoonCount} item${buySoonCount === 1 ? "" : "s"} to buy soon` : "Stock coverage looks healthy"}</strong>
+                      <strong style={styles.purchasePlannerTitle}>{!weekendPlan.first ? "Sales history needed" : buySoonCount ? `${buySoonCount} item${buySoonCount === 1 ? "" : "s"} to buy for Fri–Tue` : "Stock covers Fri–Tue"}</strong>
                     </div>
-                    <span style={styles.purchasePlannerTarget}>7-day target</span>
+                    <span style={styles.purchasePlannerTarget}>Fri–Tue</span>
                   </div>
-                  {stockPlanningOrders.length === 0 ? (
-                    <div style={{ color: "#6c6a65", fontSize: 11, fontWeight: 700 }}>Recommendations will appear after sales history is available.</div>
+                  {!weekendPlan.first ? (
+                    <div style={{ color: "#6c6a65", fontSize: 11, fontWeight: 700 }}>Recommendations will appear after a completed day of sales is available.</div>
                   ) : (
                     <div style={styles.purchasePlanList}>
                       {purchasePlan.map(item => {
-                        const urgent = item.daysLeft <= 2;
-                        const soon = item.daysLeft <= 4;
+                        const urgent = item.buy > 0 && item.quantity <= 0;
+                        const soon = item.buy > 0;
                         const tone = urgent ? "#dc2626" : soon ? "#b45309" : "#15803d";
                         return (
                           <div key={item.id} style={styles.purchasePlanRow}>
@@ -1558,19 +1546,19 @@ export default function App() {
                             <span style={{ flex: 1, minWidth: 0 }}>
                               <strong style={{ display: "block", color: "#0a0a0a", fontSize: 11 }}>{item.name}</strong>
                               <small style={{ display: "block", marginTop: 2, color: "#6c6a65", fontSize: 9, fontWeight: 700 }}>
-                                {Number.isFinite(item.daysLeft) ? `${item.daysLeft.toFixed(1)} selling days left` : "No recent usage"}
+                                {`Need ${item.needed.toFixed(1)} ${item.unit} · Have ${Number(item.quantity).toFixed(1)}`}
                               </small>
                             </span>
                             <span style={{ textAlign: "right" }}>
                               <strong style={{ display: "block", color: tone, fontSize: 11 }}>{item.buy > 0 ? `Buy ${item.buy}` : "No purchase"}</strong>
-                              <small style={{ color: "#8c8982", fontSize: 8, fontWeight: 800 }}>{item.buy > 0 ? item.unit : `${item.quantity.toFixed?.(1) ?? item.quantity} available`}</small>
+                              <small style={{ color: "#8c8982", fontSize: 8, fontWeight: 800 }}>{item.buy > 0 ? `${item.buy === 1 ? ({ boxes: "box", packs: "pack", pieces: "piece" }[item.purchaseUnit] ?? item.purchaseUnit) : item.purchaseUnit}${item.packSize > 1 ? ` · ${item.purchaseQuantity} ${item.unit}` : ""}` : "Stock sufficient"}</small>
                             </span>
                           </div>
                         );
                       })}
                     </div>
                   )}
-                  <span style={styles.purchasePlannerNote}>Based on sales across {sellingDays} active day{sellingDays === 1 ? "" : "s"}. Buy quantities refill stock to approximately seven selling days.</span>
+                  <span style={styles.purchasePlannerNote}>{formatDateShort(weekendPlan.from)}–{formatDateShort(weekendPlan.to)} · About {Math.ceil(weekendPlan.forecast)} orders. Based on {weekendPlan.totalDays} completed calendar days; same-weekday averages include days with no recorded sales. {weekendPlan.limited ? "Limited history: estimates use the overall daily average for weekdays not yet observed." : ""}</span>
                 </div>
 
                 {consumables.length > 0 && (
