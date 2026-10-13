@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef, useEffect } from "react";
 import { stockLines } from "./stockTakingModel";
 import StockItemPhoto from "./StockItemPhoto.jsx";
+import PullToRefresh from "./PullToRefresh.jsx";
 import ExpensesList from "./ExpensesList.jsx";
 import StockTaking from "./StockTaking.jsx";
 import { planWeekend } from "./purchasePlanner";
@@ -203,7 +204,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
     <section class="section"><h2>Business summary</h2><div class="summary"><div><span>Income received</span><b>${money(totalRevenue)}</b></div><div><span>Less: expenses</span><b>${money(expenseTotal)}</b></div><div><span>Profit after deductions</span><b>${money(profit)}</b></div><div><span>Profit paid to partners</span><b>${money(profitPaid)}</b></div><div><span>Profit remaining to pay</span><b>${money(profitDue)}</b></div><div><span>Refunds paid</span><b>${money(refundsPaid)}</b></div><div><span>Refunds still owed</span><b>${money(refundsDue)}</b></div><div><span>Business cash</span><b>${money(businessAvailable)}</b></div>${manualRevenue ? `<div><span>Manual sale adjustments</span><b>${money(manualRevenue)}</b></div>` : ''}</div></section>
     <section class="section"><h2>Each person</h2><div class="sc"><table><thead><tr><th>Person</th><th class="n">Spent</th><th class="n">Refunded</th><th class="n">Profit share</th><th class="n">Profit paid</th><th class="n">Total paid</th><th class="n">Still owed</th></tr></thead><tbody>${personRows || '<tr><td colspan="7" class="muted">No balances for this period.</td></tr>'}</tbody></table></div></section>
     <section class="section"><h2>Payments made</h2><div class="sc"><table><thead><tr><th>Date</th><th>Person</th><th>Type</th><th class="n">Amount</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="4" class="muted">No payments for this period.</td></tr>'}<tr class="total"><td colspan="3">Total paid out</td><td class="n">${money(refundsPaid + profitPaid)}</td></tr></tbody></table></div></section>
-    ${manualSaleRows ? `<section class="section"><h2>Manual sale adjustments</h2><div class="sc"><table><thead><tr><th>Date</th><th>Payment</th><th>Description</th><th>Reason</th><th class="n">Amount</th></tr></thead><tbody>${manualSaleRows}</tbody></table></div></section>` : ''}</main></body></html>`;
+    ${manualSaleRows ? `<section class="section"><h2>Manual sale adjustments</h2><div class="sc"><table><thead><tr><th>Date</th><th>Payment</th><th>Description</th><th>Reason</th><th class="n">Amount</th></tr></thead><tbody>${manualSaleRows}</tbody></table></div></section>` : ''}</PullToRefresh></body></html>`;
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -904,7 +905,7 @@ export default function App() {
           )}
         </div>
 
-        <main style={styles.mainContent}>
+        <PullToRefresh style={styles.mainContent}>
           {cancellationError && <div role="alert" style={{ padding: 12, background: "#fef2f2", color: "#991b1b", borderRadius: 12 }}>{cancellationError}</div>}
           {(!isOnline || pendingOrderCount > 0 || syncMessage) && (
             <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#f6f4ef" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#d8d4cb" : "#a7f3d0" }}>
@@ -2014,7 +2015,7 @@ export default function App() {
               </>}
             </div>
           )}
-        </main>
+        </PullToRefresh>
 
         {visibleTab === "delivered" && ordersView === "Delivered" && totalDeliveredPages > 1 && (
           <div style={styles.pagination}>

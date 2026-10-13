@@ -486,3 +486,15 @@ button:disabled { opacity: .45; }
 .stock-item-photo { width: 32px; height: 38px; flex-shrink: 0; object-fit: cover; border: 1px solid rgba(10,10,10,.12); border-radius: 9px; background: #111; vertical-align: middle; }
 .stock-item-name { display: inline-flex; align-items: center; gap: 8px; min-width: 0; }
 .stock-count-row .stock-item-photo { width: 24px; height: 28px; border-radius: 6px; }
+
+.pull-refresh-status {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  color: var(--cp-muted);
+  font-size: 12px;
+  font-weight: 700;
+}
+.pull-refresh-status:empty { display: none; }
