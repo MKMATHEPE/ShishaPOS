@@ -498,3 +498,51 @@ button:disabled { opacity: .45; }
   font-weight: 700;
 }
 .pull-refresh-status:empty { display: none; }
+
+/* Safari date controls must shrink inside grid cells just like other fields. */
+.finance-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  align-items: end;
+  gap: 8px;
+}
+.finance-field-grid > *, .expense-edit-form > * { min-width: 0; }
+.finance-field-label { display: flex; flex-direction: column; gap: 4px; }
+.finance-form-card input, .finance-form-card select,
+.expense-edit-form input, .expense-edit-form select {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  height: 44px;
+  min-height: 44px;
+  box-sizing: border-box;
+  font-size: 16px !important;
+}
+.finance-panel input[type="date"] {
+  -webkit-appearance: none;
+  appearance: none;
+  min-width: 0;
+  text-align: left;
+}
+.finance-panel input[type="date"]::-webkit-date-and-time-value {
+  min-width: 0;
+  text-align: left;
+}
+.finance-form-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 2fr);
+  align-items: stretch;
+  gap: 8px;
+}
+.finance-form-actions > button {
+  width: 100%;
+  min-width: 0;
+  min-height: 44px;
+  margin: 0 !important;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+@media (max-width: 359px) {
+  .finance-field-grid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -239,10 +239,10 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
     </div>
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
-    {activeAction === "expense" && <div className="expand-down" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(10,10,10,0.05)" }}>
+    {activeAction === "expense" && <div className="expand-down finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(10,10,10,0.05)" }}>
       <strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add expense</strong>
       <div style={{ display: "flex", flexDirection: "column", gap: 9, paddingTop: 4 }}>
-        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+        <div className="finance-field-grid">
           <select value={spend.paidBy} onChange={event => setSpend(current => ({ ...current, paidBy: event.target.value }))} style={selectField} aria-label="Who paid for this expense">
             <option value="">Paid by business</option>
             {users.map(user => <option key={user.id} value={user.id}>Paid by {user.name}</option>)}
@@ -254,7 +254,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
             <span style={{ fontSize: 9, fontWeight: 900, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Expense date</span>
             <input type="date" value={spend.date} max={localToday()} onChange={event => setSpend(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} aria-label="Expense date" />
           </div>
-          <input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={spend.amount} onChange={event => setSpend(current => ({ ...current, amount: event.target.value }))} style={field} aria-label="Expense amount" />
+          <label className="finance-field-label"><span style={label}>Amount (R)</span><input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={spend.amount} onChange={event => setSpend(current => ({ ...current, amount: event.target.value }))} style={field} aria-label="Expense amount" /></label>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
           <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 700 }}>Date:</span>
@@ -264,37 +264,37 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
           })}
         </div>
         <div className="expense-edit-form">
-          <label>Stock purchased (optional)<select aria-label="Stock purchased" value={spend.stockKey} onChange={event=>setSpend(current=>({...current,stockKey:event.target.value,stockQuantity:""}))}><option value="">No stock purchase</option>{purchaseItems.map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>
+          <label className={spend.stockKey ? undefined : "expense-wide"}>Stock purchased (optional)<select aria-label="Stock purchased" value={spend.stockKey} onChange={event=>setSpend(current=>({...current,stockKey:event.target.value,stockQuantity:""}))}><option value="">No stock purchase</option>{purchaseItems.map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>
           {spend.stockKey && <label>Quantity bought ({purchaseItems.find(item=>item.key===spend.stockKey)?.unit})<input aria-label="Stock quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label>}
         </div>
         <input placeholder="Description (optional)" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
-        <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button disabled={expenseSaving} onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>{expenseSaving ? "Saving…" : "Save expense"}</button></div>
+        <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button disabled={expenseSaving} onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>{expenseSaving ? "Saving…" : "Save expense"}</button></div>
       </div>
     </div>}
 
-    {activeAction === "manual_sale" && <div className="expand-down missing-sale-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
+    {activeAction === "manual_sale" && <div className="expand-down missing-sale-card finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}><strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add missing sale</strong><span style={{ fontSize: 8, fontWeight: 900, color: "#0a0a0a", background: "#ece8df", borderRadius: 99, padding: "3px 7px" }}>MANAGEMENT</span></div>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <div className="finance-field-grid">
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Sale date</span><input type="date" max={localToday()} value={sale.date} onChange={event => setSale(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} /></div>
         <div style={{ display: "flex", flexDirection: "column", gap: 4 }}><span style={label}>Payment</span><select value={sale.payment} onChange={event => setSale(current => ({ ...current, payment: event.target.value }))} style={selectField}><option value="cash">Cash</option><option value="card">Card</option></select></div>
       </div>
       <input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={sale.amount} onChange={event => setSale(current => ({ ...current, amount: event.target.value }))} style={{ ...field, fontSize: 18 }} />
       <input placeholder="Sale description" value={sale.description} onChange={event => setSale(current => ({ ...current, description: event.target.value }))} style={field} />
       <input placeholder="Why was it not recorded?" value={sale.reason} onChange={event => setSale(current => ({ ...current, reason: event.target.value }))} style={field} />
-      <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
+      <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
     <ExpensesList stock={stock} expenses={expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />
 
-    {(activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down" style={card}>
+    {(activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+      <div className="finance-field-grid">
         <select value={entry.profileId} onChange={event => setEntry(current => ({ ...current, profileId: event.target.value }))} style={selectField}><option value="">Choose person</option>{users.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
         <input type="date" value={entry.date} onChange={event => setEntry(current => ({ ...current, date: event.target.value }))} style={field} />
       </div>
       <input type="number" min="0" placeholder="Amount (R)" value={entry.amount} onChange={event => setEntry(current => ({ ...current, amount: event.target.value }))} style={{ ...field, fontSize: 18 }} />
       <input placeholder="Note (optional)" value={entry.description} onChange={event => setEntry(current => ({ ...current, description: event.target.value }))} style={field} />
-      <div style={{ display: "flex", gap: 8 }}><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
+      <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}
 
@@ -1325,7 +1325,6 @@ export default function App() {
                 : stockCategory === "Fixed Assets" ? item.category === "equipment"
                   : stockCategory === "Flavours" ? item.name === "Flavour"
                     : item.category === "consumable" && item.name !== "Flavour");
-            const consumables = stock.filter(i => i.category === "consumable" && matchesStockSearch(i) && categoryMatches(i));
             const equipment   = stock.filter(i => i.category === "equipment" && matchesStockSearch(i) && categoryMatches(i));
 
             // Flatten all trackable items (including flavour sub-items) for summary
@@ -1567,12 +1566,6 @@ export default function App() {
                   )}
                   <span style={styles.purchasePlannerNote}>{formatDateShort(weekendPlan.from)}–{formatDateShort(weekendPlan.to)} · About {Math.ceil(weekendPlan.forecast)} orders. Based on {weekendPlan.totalDays} completed calendar days; same-weekday averages include days with no recorded sales. {weekendPlan.limited ? "Limited history: estimates use the overall daily average for weekdays not yet observed." : ""}</span>
                 </div>
-
-                {consumables.length > 0 && (
-                  <>
-                    <div style={styles.stockList}>{consumables.map((item, i) => <div key={item.id} className={`card-enter d-${Math.min(i, 6)}`}>{renderItem(item)}</div>)}</div>
-                  </>
-                )}
 
                 {equipment.length > 0 && (
                   <>
