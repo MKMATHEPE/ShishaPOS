@@ -1,5 +1,5 @@
-const CACHE = 'chill-pipe-pos-v1'
-const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg']
+const CACHE = 'chill-pipe-pos-v2'
+const APP_SHELL = ['/', '/manifest.webmanifest', '/favicon.svg', '/app-icons/icon-192.png', '/app-icons/icon-512.png', '/app-icons/apple-touch-icon.png']
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(APP_SHELL)))
