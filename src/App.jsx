@@ -304,6 +304,15 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
 }
 
 export default function App() {
+  const [darkMode, setDarkMode] = useState(() => {
+    try { return localStorage.getItem('chill-pipe-theme') === 'dark'; }
+    catch { return false; }
+  });
+  useEffect(() => {
+    document.documentElement.dataset.theme = darkMode ? 'dark' : 'light';
+    try { localStorage.setItem('chill-pipe-theme', darkMode ? 'dark' : 'light'); }
+    catch { /* Theme still works when device storage is unavailable. */ }
+  }, [darkMode]);
   const [orders, setOrders] = useState([]);
   const [managerCurrentOrders, setManagerCurrentOrders] = useState([]);
   const [unreturnedPipes, setUnreturnedPipes] = useState([]);
@@ -883,6 +892,10 @@ export default function App() {
             <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.headerLogo} />
           </div>
           <h1 style={styles.screenTitle}>{screenTitle}</h1>
+          <div className="header-actions">
+          {!confirmLogout && <button className="theme-toggle" onClick={() => setDarkMode(value => !value)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} aria-pressed={darkMode}>
+            {darkMode ? "☀" : "☾"}
+          </button>}
           {confirmLogout ? (
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>Switch user?</span>
@@ -904,6 +917,7 @@ export default function App() {
               {visibleTab === "management" ? "⚙" : visibleTab === "settings" ? "←" : activeUser.name.charAt(0).toUpperCase()}
             </button>
           )}
+          </div>
         </div>
 
         <PullToRefresh style={styles.mainContent}>
