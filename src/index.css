@@ -677,3 +677,8 @@ html[data-theme="dark"] [style*="color: rgb(154, 52, 18)"] { color: #d7b778 !imp
 html[data-theme="dark"] [style*="color: rgb(22, 163, 74)"],
 html[data-theme="dark"] [style*="color: rgb(21, 128, 61)"],
 html[data-theme="dark"] [style*="color: rgb(4, 120, 87)"] { color: #86b99a !important; }
+
+/* Existing rental photography gives dark mode a subtle smoky backdrop. */
+html[data-theme="dark"] .app-shell {
+  background: linear-gradient(rgba(10,10,10,.65), rgba(10,10,10,.82)), url('/brand/hookah-hero.webp') center / cover no-repeat !important;
+}

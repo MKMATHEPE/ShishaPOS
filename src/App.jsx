@@ -835,7 +835,7 @@ export default function App() {
 
   return (
     <div style={styles.container}>
-      <div style={styles.appChrome}>
+      <div className="app-shell" style={styles.appChrome}>
         {authLoading ? (
           <div style={styles.loginScreen}><div style={styles.loginCard}>Checking secure session…</div></div>
         ) : !activeUser ? (
