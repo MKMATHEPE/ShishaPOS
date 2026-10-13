@@ -376,16 +376,6 @@ body { background: var(--cp-paper); }
 button:disabled { opacity: .45; }
 
 /* Finance action tiles share one baseline and equal dimensions. */
-.finance-action-grid { align-items: stretch; }
-.finance-action-grid > button {
-  margin-top: 0 !important;
-  width: 100%;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px !important;
-}
 .missing-sale-card input, .missing-sale-card select {
   width: 100%;
   min-width: 0;
@@ -454,23 +444,33 @@ button:disabled { opacity: .45; }
 .expenses-list .expense-error { color: #b91c1c; }
 .expense-actions > span { font-size: 10px; color: #6c6a65; }
 
-/* Equal Finance action tiles, including narrow mobile screens. */
+/* Finance actions have independent sizing, not inherited copy-button styles. */
 .finance-action-grid {
-  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
-  grid-auto-rows: minmax(56px, auto);
-  gap: 8px !important;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: 56px;
+  gap: 8px;
+  flex-shrink: 0;
+  width: 100%;
+  min-width: 0;
 }
 .finance-action-grid > button {
-  height: 100%;
-  min-height: 56px !important;
-  margin: 0 !important;
-  padding: 8px 10px !important;
-  font-size: 11px !important;
-  font-weight: 700 !important;
-  line-height: 1.3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-width: 0;
+  height: 56px;
+  margin: 0;
+  padding: 8px;
+  border: 0;
+  border-radius: 9px;
+  background: #0a0a0a;
+  color: #fff;
+  font: 700 11px/1.3 Arial, sans-serif;
   text-align: center;
   white-space: normal;
-  overflow-wrap: break-word;
+  overflow-wrap: anywhere;
   box-sizing: border-box;
 }
 .stock-item-photo { width: 32px; height: 38px; flex-shrink: 0; object-fit: cover; border: 1px solid rgba(10,10,10,.12); border-radius: 9px; background: #111; vertical-align: middle; }

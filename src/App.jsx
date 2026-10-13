@@ -230,11 +230,11 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
 
     {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
 
-    <div className="finance-action-grid" style={{ display: "grid", gridTemplateColumns: "repeat(2, 1fr)", gap: 6 }}>
-      <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")} style={{ ...styles.addUserBtn, minHeight: 48, padding: "0 8px", fontSize: 11 }}>＋ Add expense</button>
-      {canAddManualSale && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>＋ Missing sale</button>}
-      <button onClick={() => startPayment("reimbursement")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay someone back</button>
-      <button onClick={() => startPayment("partner_payout")} style={{ ...styles.copyBtn, minHeight: 48, padding: "0 6px", fontSize: 10 }}>Pay partner</button>
+    <div className="finance-action-grid">
+      <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")}>＋ Add expense</button>
+      {canAddManualSale && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
+      <button onClick={() => startPayment("reimbursement")}>Pay someone back</button>
+      <button onClick={() => startPayment("partner_payout")}>Pay partner</button>
     </div>
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
