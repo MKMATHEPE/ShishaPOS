@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "./unsavedChanges";
 import { useEffect, useState } from 'react';
 import StockItemPhoto from './StockItemPhoto.jsx';
 import { supabase } from './supabase';
@@ -14,6 +15,7 @@ export default function StockTaking({ stock, refreshStock, pendingOrders }) {
   const [busy, setBusy] = useState(false);
   const [historyId, setHistoryId] = useState(null);
   const [editingKey, setEditingKey] = useState(null);
+  useUnsavedChanges(mode !== null);
   const lines = stockLines(stock);
   const load = async () => {
     const { data, error } = await supabase.from('pos_stocktakes').select('*').order('opened_at', { ascending: false }).limit(20);

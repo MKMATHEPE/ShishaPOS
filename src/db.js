@@ -52,11 +52,11 @@ export async function syncStock(stock) {
 
 export async function updateStockItem(item) {
   if (!ok()) return false
-  const { error } = await supabase.from('pos_stock').update({
+  const { data, error } = await supabase.from('pos_stock').update({
     name: item.name, quantity: item.quantity, low_threshold: item.lowThreshold,
-  }).eq('id', item.id)
+  }).eq('id', item.id).select('id').maybeSingle()
   if (error) { console.error('updateStockItem', error); return false }
-  return true
+  return !!data
 }
 
 // ── Orders ────────────────────────────────────────────

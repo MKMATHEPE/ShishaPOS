@@ -2,6 +2,9 @@ import { useState, useCallback, useRef, useEffect } from "react";
 import { stockLines } from "./stockTakingModel";
 import StockItemPhoto from "./StockItemPhoto.jsx";
 import PullToRefresh from "./PullToRefresh.jsx";
+import { saveEquipmentChange } from "./equipmentSave.js";
+import { useUnsavedChanges, confirmDiscard } from "./unsavedChanges";
+import { recordDiagnostic, setDiagnosticScreen, downloadDiagnostics } from "./monitoring";
 import ManagementOverview from "./ManagementOverview.jsx";
 import ExpensesList from "./ExpensesList.jsx";
 import StockTaking from "./StockTaking.jsx";
@@ -128,6 +131,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
   const [activeAction, setActiveAction] = useState(null);
+  useUnsavedChanges(activeAction !== null);
   const [message, setMessage] = useState("");
   const partners = journal.partners ?? [];
   const transactions = (journal.transactions ?? []).filter(item => item.date >= dateFrom && item.date <= dateTo);
@@ -261,7 +265,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
           <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 700 }}>Date:</span>
           {[{ label: "Today", days: 0 }, { label: "Yesterday", days: -1 }].map(option => {
             const date = new Date(); date.setDate(date.getDate() + option.days); const value = dateInputValue(date);
-            return <button key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0a0a0a" : "1px solid #d8d4cb", borderRadius: 8, background: spend.date === value ? "#0a0a0a" : "#fff", color: spend.date === value ? "#fff" : "#6c6a65", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
+            return <button className="date-preset" key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0a0a0a" : "1px solid #d8d4cb", borderRadius: 8, background: spend.date === value ? "#0a0a0a" : "#fff", color: spend.date === value ? "#fff" : "#6c6a65", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
           })}
         </div>
         <div className="expense-edit-form">
@@ -340,6 +344,10 @@ export default function App() {
   const [stockCategory, setStockCategory] = useState("Attention");
   const [stockView, setStockView] = useState("overview");
   const [editingEquipmentId, setEditingEquipmentId] = useState(null);
+  const [equipmentSaving, setEquipmentSaving] = useState(false);
+  const [equipmentSaveError, setEquipmentSaveError] = useState("");
+  const equipmentSaveRunning = useRef(false);
+  useUnsavedChanges(editingEquipmentId !== null);
   const [equipmentDraft, setEquipmentDraft] = useState({ name: "", quantity: "", lowThreshold: "" });
   const [teamSearch, setTeamSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
@@ -356,7 +364,23 @@ export default function App() {
   const [selectedFlavour, setSelectedFlavour] = useState(null);
   const [flash, setFlash] = useState(null);
   const [undoTarget, setUndoTarget] = useState(null);
-  const [activeTab, setActiveTab] = useState("pos");
+  const [activeTab, updateActiveTab] = useState("pos");
+  const tabStarted = useRef(null);
+  const setActiveTab = useCallback(tab => {
+    if (!confirmDiscard()) return;
+    tabStarted.current = performance.now();
+    updateActiveTab(tab);
+  }, []);
+  useEffect(() => {
+    setDiagnosticScreen(activeTab);
+    const frame = requestAnimationFrame(() => {
+      if (tabStarted.current === null) return;
+      const duration = performance.now() - tabStarted.current;
+      if (duration > 200) recordDiagnostic('slow_screen', 'slow_screen', duration);
+      tabStarted.current = null;
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [activeTab]);
   const [deliveredPage, setDeliveredPage] = useState(0);
   const [stock, setStock] = useState(() => {
     const defaults = [
@@ -676,7 +700,7 @@ export default function App() {
     setTimeout(() => setFlash(null), 300);
     setSelectedFlavour(null);
     setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role]);
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role, setActiveTab]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -891,7 +915,7 @@ export default function App() {
           <div style={styles.headerLogoWrap}>
             <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.headerLogo} />
           </div>
-          <h1 style={styles.screenTitle}>{screenTitle}</h1>
+          <h1 className="screen-title" style={styles.screenTitle}>{screenTitle}</h1>
           <div className="header-actions">
           {!confirmLogout && <button className="theme-toggle" onClick={() => setDarkMode(value => !value)} aria-label={darkMode ? "Switch to light mode" : "Switch to dark mode"} title={darkMode ? "Switch to light mode" : "Switch to dark mode"} aria-pressed={darkMode}>
             {darkMode ? "☀" : "☾"}
@@ -912,7 +936,7 @@ export default function App() {
             <button
               aria-label={visibleTab === "management" ? "Open settings" : "Switch user"}
               onClick={() => visibleTab === "management" ? setActiveTab("settings") : visibleTab === "settings" ? setActiveTab("management") : setConfirmLogout(true)}
-              style={styles.headerIconBtn}
+              className="header-account-button" style={styles.headerIconBtn}
             >
               {visibleTab === "management" ? "⚙" : visibleTab === "settings" ? "←" : activeUser.name.charAt(0).toUpperCase()}
             </button>
@@ -1186,7 +1210,7 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
                 {["Today", "Yesterday", "7 Days", "Month"].map((preset) => (
-                  <button key={preset} onClick={() => {
+                  <button className="date-preset" key={preset} onClick={() => {
                     const end = new Date();
                     const start = new Date();
                     if (preset === "Yesterday") { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
@@ -1352,39 +1376,46 @@ export default function App() {
               const orderCapacity = perOrder ? Math.floor(item.quantity / perOrder) : null;
 
               if (item.category === "equipment" && editingEquipmentId === item.id) {
-                const saveEquipment = () => {
+                const saveEquipment = async () => {
+                  if (equipmentSaveRunning.current) return;
                   const name = equipmentDraft.name.trim();
                   const quantity = Math.max(0, Number(equipmentDraft.quantity));
                   const lowThreshold = Math.max(0, Number(equipmentDraft.lowThreshold));
                   if (!name || !Number.isFinite(quantity) || !Number.isFinite(lowThreshold)) return;
                   const updatedItem = { ...item, name, quantity, lowThreshold };
-                  setStock(prev => prev.map(stockItem => stockItem.id === item.id
-                    ? updatedItem
-                    : stockItem
-                  ));
-                  updateStockItem(updatedItem);
-                  setEditingEquipmentId(null);
+                  equipmentSaveRunning.current = true;
+                  setEquipmentSaving(true); setEquipmentSaveError("");
+                  try {
+                    await saveEquipmentChange(updatedItem, updateStockItem, saved => {
+                      setStock(prev => prev.map(stockItem => stockItem.id === item.id ? saved : stockItem));
+                      setEditingEquipmentId(null);
+                    });
+                  } catch {
+                    recordDiagnostic('save_failed','equipment_save_failed');
+                    setEquipmentSaveError("Could not save. Your changes are still here. Check your connection and try again.");
+                  } finally { equipmentSaveRunning.current = false; setEquipmentSaving(false); }
                 };
 
                 return (
                   <div key={item.id} style={{ ...rowStyle, alignItems: "stretch", flexDirection: "column" }}>
                     <label style={styles.equipmentEditField}>
                       <span>Name</span>
-                      <input value={equipmentDraft.name} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, name: event.target.value }))} style={styles.equipmentEditInput} />
+                      <input disabled={equipmentSaving} value={equipmentDraft.name} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, name: event.target.value }))} style={styles.equipmentEditInput} />
                     </label>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
                       <label style={styles.equipmentEditField}>
                         <span>Quantity</span>
-                        <input type="number" min="0" value={equipmentDraft.quantity} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, quantity: event.target.value }))} style={styles.equipmentEditInput} />
+                        <input disabled={equipmentSaving} type="number" min="0" value={equipmentDraft.quantity} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, quantity: event.target.value }))} style={styles.equipmentEditInput} />
                       </label>
                       <label style={styles.equipmentEditField}>
                         <span>Low-stock alert</span>
-                        <input type="number" min="0" value={equipmentDraft.lowThreshold} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, lowThreshold: event.target.value }))} style={styles.equipmentEditInput} />
+                        <input disabled={equipmentSaving} type="number" min="0" value={equipmentDraft.lowThreshold} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, lowThreshold: event.target.value }))} style={styles.equipmentEditInput} />
                       </label>
                     </div>
                     <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
-                      <button onClick={() => setEditingEquipmentId(null)} style={styles.equipmentCancelBtn}>Cancel</button>
-                      <button onClick={saveEquipment} style={styles.equipmentSaveBtn}>Save changes</button>
+                      {equipmentSaveError && <p role="alert" style={{gridColumn:"1 / -1",color:"#b91c1c",fontSize:12}}>{equipmentSaveError}</p>}
+                      <button disabled={equipmentSaving} onClick={() => { setEditingEquipmentId(null); setEquipmentSaveError(""); }} style={styles.equipmentCancelBtn}>Cancel</button>
+                      <button disabled={equipmentSaving} onClick={saveEquipment} style={styles.equipmentSaveBtn}>{equipmentSaving ? "Saving…" : "Save changes"}</button>
                     </div>
                   </div>
                 );
@@ -1526,6 +1557,7 @@ export default function App() {
                 </div>
               </div>
 
+              {isAdmin && <button onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostic report</button>}
               {/* ── Staff view: only their own profile ── */}
               {!isAdmin && (
                 <>

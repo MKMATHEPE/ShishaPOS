@@ -732,3 +732,36 @@ html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="false"] {
   color: #aaa79f !important;
   box-shadow: none;
 }
+
+/* Mobile audit: readable supporting text and comfortable touch targets. */
+.theme-toggle { width: 44px; height: 44px; }
+@media (max-width: 600px) {
+  .overview-comparison, .overview-card small, .overview-card p,
+  .overview-card table, .overview-kpi > span, .overview-detail-row,
+  .overview-chart-labels, .overview-hours b { font-size: 12px; }
+  .stock-edit-line button, .stock-count-row button,
+  .stock-taking summary { min-height: 44px; }
+  .finance-field-grid > *, .expense-edit-form > * { min-width: 0; }
+  .finance-form-card input, .expense-edit-form input, .stock-taking input {
+    scroll-margin-block: 100px;
+  }
+}
+.app-error { max-width: 430px; margin: 15vh auto; padding: 24px; background: #171716; color: #f6f4ef; border-radius: 16px; }
+.app-error h1 { font-size: 24px; }
+.app-error button { min-height: 44px; margin: 8px 8px 0 0; }
+
+@media (max-width: 600px) {
+  .screen-title { max-width: calc(100% - 200px); overflow: hidden; text-overflow: ellipsis; }
+}
+
+/* Mobile step 1: keep tab and date controls comfortable without changing flow. */
+@media (max-width: 600px) {
+  .app-shell button[role="tab"], .app-shell .date-preset {
+    min-height: 44px !important;
+    min-width: 44px;
+    font-size: 12px !important;
+    line-height: 1.3;
+  }
+  .header-account-button { width: 44px !important; height: 44px !important; }
+  .finance-form-actions, .stock-taking-actions { scroll-margin-bottom: 100px; }
+}

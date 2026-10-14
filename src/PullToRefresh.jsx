@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
+import { confirmDiscard } from "./unsavedChanges";
+
 const THRESHOLD = 72;
 
 export default function PullToRefresh({ children, style }) {
@@ -41,6 +43,7 @@ export default function PullToRefresh({ children, style }) {
     };
     const onEnd = () => {
       if (start && pull >= THRESHOLD) {
+        if (!confirmDiscard()) return reset();
         reloading = true;
         start = null;
         setRefreshing(true);

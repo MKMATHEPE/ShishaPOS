@@ -1,3 +1,4 @@
+import { useUnsavedChanges } from "./unsavedChanges";
 import { useState } from 'react';
 import { stockLines } from './stockTakingModel';
 import { expenseDate, expenseChanges } from './expenseEditor';
@@ -9,6 +10,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+  useUnsavedChanges(editId !== null);
   const stockItems = stockLines(stock);
   const money = amount => `R${Number(amount).toLocaleString('en-ZA', {minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const edit = expense => {
