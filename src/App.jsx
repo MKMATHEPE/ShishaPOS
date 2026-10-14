@@ -13,12 +13,13 @@ import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
   fetchUsers, syncUsers,
-  fetchStock, syncStock, updateStockItem,
+  fetchStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
   fetchExpenses, saveExpenseRecord, deleteExpenseRecord,
   fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
+import { persistSale, syncPendingSales } from "./salePersistence.js";
 import { getOfflineOrders, queueOfflineOrder, removeOfflineOrder } from "./offlineOrders";
 
 const FLAVOURS = [
@@ -439,6 +440,8 @@ export default function App() {
   const [sessionDates, setSessionDates] = useState([]);
   const undoTimer = useRef(null);
   const orderSyncRunning = useRef(false);
+  const saleRunning = useRef(false);
+  const [saleSaving, setSaleSaving] = useState(false);
 
   const syncOfflineOrders = useCallback(async () => {
     if (!navigator.onLine || !activeUser || orderSyncRunning.current) return;
@@ -446,18 +449,15 @@ export default function App() {
     setSyncingOrders(true);
     setSyncMessage("");
     try {
-      const pending = await getOfflineOrders();
-      let synced = 0;
-      for (const order of pending) {
-        const saved = await insertOrder(order);
-        if (!saved) break;
-        await removeOfflineOrder(order.id);
-        synced += 1;
+      const synced = await syncPendingSales({list:getOfflineOrders,send:insertOrder,remove:removeOfflineOrder,onSynced:order => {
         setOrders(prev => prev.map(item => item.id === order.id ? { ...item, pendingSync: false } : item));
-      }
+      }});
+      if (synced) { const latest = await fetchStock(); if (latest) setStock(latest); }
       const remaining = await getOfflineOrders();
       setPendingOrderCount(remaining.length);
       if (synced > 0) setSyncMessage(`${synced} offline order${synced === 1 ? "" : "s"} synced`);
+    } catch {
+      setSyncMessage("Could not finish syncing. Unsynced orders remain on this device.");
     } finally {
       orderSyncRunning.current = false;
       setSyncingOrders(false);
@@ -549,10 +549,6 @@ export default function App() {
   useEffect(() => {
     if (dbReady) syncUsers(users);
   }, [users]); // eslint-disable-line
-
-  useEffect(() => {
-    if (dbReady) syncStock(stock);
-  }, [stock]); // eslint-disable-line
 
   // Re-fetch from Supabase whenever the user switches tabs
   useEffect(() => {
@@ -670,45 +666,37 @@ export default function App() {
       pipeReturned: false,
     };
 
-    const savedOnline = navigator.onLine ? await insertOrder(order) : false;
-    const orderForDisplay = { ...order, pendingSync: !savedOnline };
-    setOrders((prev) => [...prev, orderForDisplay]);
-    if (["Admin", "Manager"].includes(activeUser?.role)) setManagerCurrentOrders((prev) => [...prev, orderForDisplay]);
+    if (saleRunning.current) return;
+    saleRunning.current = true; setSaleSaving(true);
+    try {
+      const result = await persistSale(order,{queue:queueOfflineOrder,send:insertOrder,remove:removeOfflineOrder,online:navigator.onLine});
+      const orderForDisplay = { ...order, pendingSync: result.pendingSync };
+      setOrders((prev) => [...prev, orderForDisplay]);
+      if (["Admin", "Manager"].includes(activeUser?.role)) setManagerCurrentOrders((prev) => [...prev, orderForDisplay]);
+      setSelectedFlavour(null);
 
-    if (!savedOnline) {
-      await queueOfflineOrder(order);
-      const pending = await getOfflineOrders();
-      setPendingOrderCount(pending.length);
-      setIsOnline(navigator.onLine);
-      setSyncMessage("Order saved on this device");
-    }
+      if (result.pendingSync) {
+        const pending = await getOfflineOrders();
+        setPendingOrderCount(pending.length);
+        setIsOnline(navigator.onLine);
+        setSyncMessage("Order saved on this device");
+      }
 
-    if (savedOnline) {
-      // Online sales keep the existing stock behaviour. Offline sales never adjust stock.
-      const flavourId = selectedFlavour.id;
-      setStock(prev => prev.map(item => {
-        if (item.name === "Coal")
-          return { ...item, quantity: Math.max(0, item.quantity - COAL_PER_SALE) };
-        if (item.name === "Mouth Pieces")
-          return { ...item, quantity: Math.max(0, item.quantity - MOUTHPIECES_PER_SALE) };
-        if (item.name === "Flavour" && item.subItems)
-          return { ...item, subItems: item.subItems.map(s =>
-            s.id === flavourId
-              ? { ...s, quantity: Math.max(0, parseFloat((s.quantity - (FLAVOUR_PER_SALE[s.id] ?? 0)).toFixed(3))) }
-              : s
-          )};
-        return item;
-      }));
-    }
+      if (result.saved) {
+        const latest = await fetchStock();
+        if (latest) setStock(latest);
+      }
 
-    setFlash(selectedFlavour.id);
-    setUndoTarget(order.id);
-    clearTimeout(undoTimer.current);
-    undoTimer.current = setTimeout(() => setUndoTarget(null), 4000);
-    setTimeout(() => setFlash(null), 300);
-    setSelectedFlavour(null);
-    setActiveTab("pos");
-  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser?.name, activeUser?.role, setActiveTab]);
+      setFlash(selectedFlavour.id);
+      setUndoTarget(order.id);
+      clearTimeout(undoTimer.current);
+      undoTimer.current = setTimeout(() => setUndoTarget(null), 4000);
+      setTimeout(() => setFlash(null), 300);
+      setActiveTab("pos");
+    } catch {
+      setSyncMessage("Could not save this sale on the device. Please try again.");
+    } finally { saleRunning.current = false; setSaleSaving(false); }
+  }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser, setActiveTab]);
 
   const updatePrice = useCallback((type, value) => {
     const nextPrice = Number(value);
@@ -1039,11 +1027,11 @@ export default function App() {
             return (
               <button
                 onClick={confirmOrder}
-                disabled={blocked}
+                disabled={blocked || saleSaving}
                 className={!blocked ? "glow-active" : ""}
                 style={{ ...styles.confirmBtn, ...(blocked ? { opacity: 0.4, cursor: "not-allowed" } : {}) }}
               >
-                <span>{blocked
+                <span>{saleSaving ? "Saving…" : blocked
                   ? `No ${blockedItem} available · ${selectedFlavour.name}`
                   : `Confirm order · ${selectedFlavour.name}`
                 }</span>

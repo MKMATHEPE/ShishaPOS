@@ -111,3 +111,37 @@ Browser checks passed with an unsaved expense amount of 123:
 
 All 40 tests, lint and production build passed. Physical touch pull-to-refresh and
 actual iPhone reload/close behaviour still require device testing.
+
+## Sequential improvement 3: atomic sale and stock recording
+
+Approved database SQL in `supabase/atomic-sale-stock.sql` was activated on 14 October 2026.
+New order inserts deduct Coal, Mouth Pieces and flavour inside the same transaction.
+The record_pos_sale RPC serializes matching order IDs, confirms identical retries,
+and rejects conflicting payloads. An insert trigger also covers older clients.
+Equipment remains deducted at delivery by the existing function. Stock still clamps
+at zero, matching the previous app; this does not introduce a stock availability block.
+Historical sales are not re-deducted.
+
+Automatic consumable upserts were removed and direct consumable writes are denied
+by RLS. Stock counts and expense-linked purchases retain their existing functions.
+The app refreshes stock after confirmed saves and offline synchronization.
+New sales are queued locally before sending; IndexedDB writes now wait for transaction
+completion, so failed or aborted local writes cannot falsely report a durable sale.
+A lost server response retains the same ID for a safe retry. Repeated confirmation
+clicks are blocked while a sale is saving.
+
+Validation:
+- 49 JavaScript tests passed, including offline/no-network, storage aborts, lost response,
+  same-ID retry, and queue cleanup failures.
+- `npm run test:stock-db` runs a disposable official PostgreSQL 17 Docker container
+  with network disabled and test fixtures only. Thirty parallel requests (20 distinct
+  plus 10 requests sharing one ID) produced 21 unique sales and exactly 21 deductions.
+  Failed-sale rollback, ID collision denial, stale write denial and legacy insert
+  compatibility also passed. The container is removed even after failures.
+- `supabase/tests/atomic-sale-stock.sql` passed rollback-only against the real schema,
+  first as Admin and then as a non-admin. No test business records were retained.
+- Existing security advisor warnings are documented above. The new privileged RPC
+  intentionally accepts authenticated callers, checks active profiles and has a fixed
+  search_path. It is not executable anonymously.
+
+Physical iPhone reconnection testing remains pending. Refresh older app tabs after deployment.

@@ -1,3 +1,4 @@
+import { salePayload } from './salePersistence.js'
 import { supabase } from './supabase'
 
 const ok = () => !!supabase
@@ -34,20 +35,6 @@ export async function fetchStock() {
     quantity: r.quantity, unit: r.unit, lowThreshold: r.low_threshold,
     ...(r.sub_items ? { subItems: r.sub_items } : {}),
   }))
-}
-
-export async function syncStock(stock) {
-  if (!ok()) return
-  const consumables = stock.filter(i => i.category !== 'equipment')
-  if (consumables.length) {
-    const rows = consumables.map(i => ({
-      id: i.id, name: i.name, category: i.category,
-      quantity: i.quantity, unit: i.unit, low_threshold: i.lowThreshold,
-      sub_items: i.subItems ?? null,
-    }))
-    const { error } = await supabase.from('pos_stock').upsert(rows, { onConflict: 'id' })
-    if (error) { console.error('syncStock', error); return }
-  }
 }
 
 export async function updateStockItem(item) {
@@ -126,17 +113,11 @@ export async function fetchUnreturnedPipes() {
 
 export async function insertOrder(order) {
   if (!ok()) return false
-  const orderTime = order.time instanceof Date ? order.time : new Date(order.time)
-  const sessionDate = order.sessionDate ?? [orderTime.getFullYear(), String(orderTime.getMonth()+1).padStart(2,"0"), String(orderTime.getDate()).padStart(2,"0")].join("-")
-  const { error } = await supabase.from('pos_orders').insert({
-    id: order.id, flavour: typeof order.flavour === 'object' ? order.flavour?.name : order.flavour, type: order.type,
-    payment: order.payment, price: order.price, status: order.status,
-    time: orderTime.toISOString(), session_date: sessionDate,
-    sold_by: order.soldBy ?? null,
-    shift_id: order.shiftId ?? null,
-  })
-  if (error && error.code !== '23505') { console.error('insertOrder', error); return false }
-  return true
+  try {
+    const { data, error } = await supabase.rpc('record_pos_sale', {order_payload:salePayload(order)})
+    if (error) { console.error('insertOrder', error); return false }
+    return data === true
+  } catch { return false }
 }
 
 export async function markOrderDelivered(id) {

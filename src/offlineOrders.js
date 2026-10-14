@@ -22,10 +22,12 @@ async function withStore(mode, action) {
     const transaction = database.transaction(STORE_NAME, mode)
     const store = transaction.objectStore(STORE_NAME)
     const request = action(store)
-    request.onsuccess = () => resolve(request.result)
+    let result
+    request.onsuccess = () => { result = request.result }
     request.onerror = () => reject(request.error)
-    transaction.oncomplete = () => database.close()
-    transaction.onerror = () => reject(transaction.error)
+    transaction.oncomplete = () => { database.close(); resolve(result) }
+    transaction.onerror = () => { database.close(); reject(transaction.error) }
+    transaction.onabort = () => { database.close(); reject(transaction.error ?? new Error("Local sale storage was interrupted.")) }
   })
 }
 
