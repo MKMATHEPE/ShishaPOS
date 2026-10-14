@@ -627,10 +627,10 @@ html[data-theme="dark"] body { background: #0a0a0a; color: #f6f4ef; }
 html[data-theme="dark"] :is(.overview-card,.expenses-list,.stock-taking,.stock-row-editor) { background: #171716; color: #f6f4ef; border-color: #353530; }
 html[data-theme="dark"] :is(input,select,textarea) { background: #232321 !important; color: #f6f4ef !important; border-color: #353530 !important; }
 html[data-theme="dark"] input::placeholder, html[data-theme="dark"] textarea::placeholder { color: #aaa79f; }
-html[data-theme="dark"] [style*="background: rgb(255, 255, 255)"],
-html[data-theme="dark"] [style*="background: rgb(246, 244, 239)"],
-html[data-theme="dark"] [style*="background: rgba(255, 255, 255"],
-html[data-theme="dark"] [style*="background: rgb(236, 232, 223)"] { background: #171716 !important; }
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(255, 255, 255)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(246, 244, 239)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgba(255, 255, 255"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(236, 232, 223)"] { background: #171716 !important; }
 html[data-theme="dark"] [style*="color: rgb(10, 10, 10)"],
 html[data-theme="dark"] [style*="color: rgb(74, 72, 67)"],
 html[data-theme="dark"] .flavour-label { color: #f6f4ef !important; }
@@ -638,7 +638,7 @@ html[data-theme="dark"] [style*="color: rgb(108, 106, 101)"],
 html[data-theme="dark"] [style*="color: rgb(140, 137, 130)"],
 html[data-theme="dark"] :is(.expenses-list p,.stock-taking p,.stock-taking small,.expense-edit-form label,.expense-actions > span) { color: #aaa79f !important; }
 html[data-theme="dark"] [style*="border:"] { border-color: #353530 !important; }
-html[data-theme="dark"] button[style*="background: rgb(10, 10, 10)"],
+html[data-theme="dark"] button:not(.flavour-pop)[style*="background: rgb(10, 10, 10)"],
 html[data-theme="dark"] .finance-action-grid > button,
 html[data-theme="dark"] .stock-taking-actions > button:last-child,
 html[data-theme="dark"] .expense-actions button:last-child:not(.expense-danger) { background: #f6f4ef !important; color: #0a0a0a !important; border-color: #f6f4ef !important; }
@@ -654,17 +654,17 @@ html[data-theme="dark"] .overview-card svg text { fill: #aaa79f; }
 html[data-theme="dark"] .flavour-pop { color: #fff !important; }
 html[data-theme="dark"] .flavour-pop[aria-pressed="true"] { outline: 1px solid #f6f4ef; }
 
-html[data-theme="dark"] [style*="background: rgb(254, 242, 242)"],
-html[data-theme="dark"] [style*="background: rgb(255, 241, 242)"] { background: #301d1f !important; }
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(254, 242, 242)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(255, 241, 242)"] { background: #301d1f !important; }
 
-html[data-theme="dark"] [style*="background: rgb(255, 251, 235)"],
-html[data-theme="dark"] [style*="background: rgb(255, 247, 237)"],
-html[data-theme="dark"] [style*="background: rgb(254, 243, 199)"] { background: #30291c !important; }
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(255, 251, 235)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(255, 247, 237)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(254, 243, 199)"] { background: #30291c !important; }
 
-html[data-theme="dark"] [style*="background: rgb(240, 253, 244)"],
-html[data-theme="dark"] [style*="background: rgb(236, 253, 245)"],
-html[data-theme="dark"] [style*="background: rgb(220, 252, 231)"],
-html[data-theme="dark"] [style*="background: rgb(240, 253, 250)"] { background: #1b2b23 !important; }
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(240, 253, 244)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(236, 253, 245)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(220, 252, 231)"],
+html[data-theme="dark"] :not(.flavour-pop)[style*="background: rgb(240, 253, 250)"] { background: #1b2b23 !important; }
 
 html[data-theme="dark"] [style*="color: rgb(220, 38, 38)"],
 html[data-theme="dark"] [style*="color: rgb(153, 27, 27)"],
@@ -678,7 +678,18 @@ html[data-theme="dark"] [style*="color: rgb(22, 163, 74)"],
 html[data-theme="dark"] [style*="color: rgb(21, 128, 61)"],
 html[data-theme="dark"] [style*="color: rgb(4, 120, 87)"] { color: #86b99a !important; }
 
-/* Existing rental photography gives dark mode a subtle smoky backdrop. */
-html[data-theme="dark"] .app-shell {
-  background: linear-gradient(rgba(10,10,10,.65), rgba(10,10,10,.82)), url('/brand/hookah-hero.webp') center / cover no-repeat !important;
+/* Repeat the exact POS header logo without redrawing the brand artwork. */
+html[data-theme="dark"] .app-shell.app-shell {
+  background: #0a0a0a url('/brand/chill-pipe-monogram.png') center top / 480px 840px repeat !important;
+}
+
+html[data-theme="dark"] .purchase-planner {
+  background: linear-gradient(145deg, #171716, #232321) !important;
+  border-color: #353530 !important;
+  box-shadow: 0 4px 14px rgba(0,0,0,.18) !important;
+}
+
+/* Page panels expose the monogram; individual cards retain solid surfaces. */
+html[data-theme="dark"] .app-shell .theme-page-surface {
+  background: transparent !important;
 }

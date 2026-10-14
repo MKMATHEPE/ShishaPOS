@@ -938,7 +938,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0a0a0a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
           <div style={{ height: 5, borderRadius: 99, background: "#d8d4cb", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
         </div>
-        <div style={styles.salePanel}>
+        <div className="theme-page-surface" style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
             <div style={styles.toggleGroup}>
@@ -1032,7 +1032,7 @@ export default function App() {
           )}
 
           {visibleTab === "delivered" && (
-            <div key="delivered" className="tab-enter" style={styles.deliveredPanel}>
+            <div key="delivered" className="tab-enter theme-page-surface" style={styles.deliveredPanel}>
               <div style={{ ...styles.deliveredBar, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Orders Delivered</span>
@@ -1127,7 +1127,7 @@ export default function App() {
               : `${formatSessionDate(managementDateFrom)} – ${formatSessionDate(managementDateTo)}`;
 
             return (
-            <div key="management" className="tab-enter" style={styles.settingsPanel}>
+            <div key="management" className="tab-enter theme-page-surface" style={styles.settingsPanel}>
               <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Management</span>
@@ -1432,7 +1432,7 @@ export default function App() {
             };
 
             return (
-              <div key="stock" className="tab-enter" style={styles.stockPanel}>
+              <div key="stock" className="tab-enter theme-page-surface" style={styles.stockPanel}>
                 <div style={styles.settingsBar}>
                   <div style={styles.totalLeft}>
                     <span style={styles.totalLabel}>Stock</span>
@@ -1464,7 +1464,7 @@ export default function App() {
 
 
 
-                <div style={styles.purchasePlanner}>
+                <div className="purchase-planner" style={styles.purchasePlanner}>
                   <div style={styles.purchasePlannerHeader}>
                     <div>
                       <span style={styles.stockCategoryHeader}>Purchase planner</span>
@@ -1518,7 +1518,7 @@ export default function App() {
           })()}
 
           {visibleTab === "settings" && (
-            <div key="settings" className="tab-enter" style={styles.settingsPanel}>
+            <div key="settings" className="tab-enter theme-page-surface" style={styles.settingsPanel}>
               <div style={styles.settingsBar}>
                 <div style={styles.totalLeft}>
                   <span style={styles.totalLabel}>Settings</span>
