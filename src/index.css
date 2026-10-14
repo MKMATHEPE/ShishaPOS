@@ -693,3 +693,42 @@ html[data-theme="dark"] .purchase-planner {
 html[data-theme="dark"] .app-shell .theme-page-surface {
   background: transparent !important;
 }
+
+/* Clear selected states for bottom navigation and inner tabs in dark mode. */
+html[data-theme="dark"] .app-shell .bottom-nav-tab { color: #aaa79f !important; }
+html[data-theme="dark"] .bottom-nav-tab svg { stroke: #aaa79f; }
+html[data-theme="dark"] .app-shell .bottom-nav-tab[aria-current="page"] {
+  background: #232321 !important;
+  box-shadow: inset 0 -2px 0 #f6f4ef;
+}
+html[data-theme="dark"] .app-shell .bottom-nav-tab[aria-current="page"] span { color: #f6f4ef !important; }
+html[data-theme="dark"] .bottom-nav-tab[aria-current="page"] svg { stroke: #f6f4ef; }
+html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="true"],
+html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="true"] span {
+  background-color: #f6f4ef !important;
+  color: #0a0a0a !important;
+}
+
+/* Restrained depth and warm highlights for dark-mode navigation. */
+html[data-theme="dark"] .app-shell .bottom-nav-tab {
+  border: 1px solid transparent;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
+}
+html[data-theme="dark"] .app-shell .bottom-nav-tab[aria-current="page"] {
+  background: linear-gradient(180deg, #2b2b27, #1b1b19) !important;
+  border: 1px solid #45453d !important;
+  box-shadow: inset 0 1px 0 rgba(246,244,239,.08), 0 2px 6px rgba(0,0,0,.2);
+}
+html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="true"] {
+  background: linear-gradient(180deg, #f6f4ef, #ddd9cf) !important;
+  border: 1px solid #d4d0c6 !important;
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.6), 0 2px 5px rgba(0,0,0,.22);
+}
+html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="true"] span {
+  background: transparent !important;
+  color: #0a0a0a !important;
+}
+html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="false"] {
+  color: #aaa79f !important;
+  box-shadow: none;
+}

@@ -1045,7 +1045,7 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
                 {[{ label: "Preparing", count: canViewAllOrders ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
-                  <button key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0a0a0a" : "transparent", color: ordersView === tab.label ? "#fff" : "#6c6a65", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
+                  <button role="tab" aria-selected={ordersView === tab.label} key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0a0a0a" : "transparent", color: ordersView === tab.label ? "#fff" : "#6c6a65", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
                 ))}
@@ -1180,7 +1180,7 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
                 {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
-                  <button key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                  <button role="tab" aria-selected={managementView === view.id} key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
                 ))}
               </div>
 
@@ -1974,7 +1974,7 @@ export default function App() {
           ].filter(t => t.access).map(t => {
             const active = visibleTab === t.key;
             return (
-              <button key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "color 140ms ease, background-color 140ms ease" }}>
+              <button className="bottom-nav-tab" aria-current={active ? "page" : undefined} key={t.key} onClick={() => setActiveTab(t.key)} style={{ ...styles.footerTab, background: "transparent", borderRadius: 14, padding: "6px 3px", flex: 1, transition: "color 140ms ease, background-color 140ms ease" }}>
                 <div style={{ position: "relative", minHeight: 44, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", gap: 4 }}>
                   <TabIcon name={t.icon} active={active} />
                   <span style={{ fontSize: 9, fontWeight: 800, color: active ? "#0a0a0a" : "#6c6a65", whiteSpace: "nowrap" }}>{t.label}</span>
