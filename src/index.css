@@ -765,3 +765,14 @@ html[data-theme="dark"] .app-shell button[role="tab"][aria-selected="false"] {
   .header-account-button { width: 44px !important; height: 44px !important; }
   .finance-form-actions, .stock-taking-actions { scroll-margin-bottom: 100px; }
 }
+
+.draft-dialog-backdrop { position: fixed; inset: 0; z-index: 10000; background: rgba(0,0,0,.65); display: grid; place-items: center; padding: 20px; }
+.draft-dialog { width: 100%; max-width: 350px; padding: 22px; border-radius: 18px; background: #f6f4ef; color: #0a0a0a; border: 1px solid #d8d4cb; box-shadow: 0 16px 48px rgba(0,0,0,.3); }
+.draft-dialog h2 { margin: 0 0 10px; font: 400 24px Georgia,serif; }
+.draft-dialog p { font-size: 14px; line-height: 1.5; margin: 0 0 18px; }
+.draft-dialog > div { display: flex; gap: 8px; }
+.draft-dialog button { flex: 1; min-width: 0; min-height: 44px; padding: 8px; border: 1px solid #d8d4cb; border-radius: 9px; font-size: 12px; background: #ece8df; color: #0a0a0a; }
+.draft-dialog button:last-child { background: #0a0a0a; color: #f6f4ef; }
+html[data-theme="dark"] .draft-dialog { background: #171716; color: #f6f4ef; border-color: #353530; }
+html[data-theme="dark"] .draft-dialog button { background: #232321; color: #f6f4ef; border-color: #353530; }
+html[data-theme="dark"] .draft-dialog button:last-child { background: #f6f4ef; color: #0a0a0a; }

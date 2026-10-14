@@ -342,7 +342,11 @@ export default function App() {
   const [ordersView, setOrdersView] = useState("Preparing");
   const [stockSearch, setStockSearch] = useState("");
   const [stockCategory, setStockCategory] = useState("Attention");
-  const [stockView, setStockView] = useState("overview");
+  const [stockView, updateStockView] = useState("overview");
+  const setStockView = async view => {
+    if (view === stockView || !await confirmDiscard()) return;
+    updateStockView(view);
+  };
   const [editingEquipmentId, setEditingEquipmentId] = useState(null);
   const [equipmentSaving, setEquipmentSaving] = useState(false);
   const [equipmentSaveError, setEquipmentSaveError] = useState("");
@@ -366,8 +370,8 @@ export default function App() {
   const [undoTarget, setUndoTarget] = useState(null);
   const [activeTab, updateActiveTab] = useState("pos");
   const tabStarted = useRef(null);
-  const setActiveTab = useCallback(tab => {
-    if (!confirmDiscard()) return;
+  const setActiveTab = useCallback(async tab => {
+    if (!await confirmDiscard()) return;
     tabStarted.current = performance.now();
     updateActiveTab(tab);
   }, []);
@@ -422,7 +426,11 @@ export default function App() {
   const [managementTimeTo, setManagementTimeTo] = useState("23:59");
   const [managementOrders, setManagementOrders] = useState([]);
   const [managementLoading, setManagementLoading] = useState(false);
-  const [managementView, setManagementView] = useState("overview");
+  const [managementView, updateManagementView] = useState("overview");
+  const setManagementView = async view => {
+    if (view === managementView || !await confirmDiscard()) return;
+    updateManagementView(view);
+  };
   const [financeJournal, setFinanceJournal] = useState({ partners: [], transactions: [], manualSales: [], lockedThrough: null });
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [pendingOrderCount, setPendingOrderCount] = useState(0);

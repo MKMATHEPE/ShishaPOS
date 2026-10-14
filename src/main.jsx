@@ -2,6 +2,7 @@ import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import './index.css'
 import App from './App.jsx'
+import DraftDiscardDialog from './DraftDiscardDialog.jsx'
 import AppErrorBoundary from './AppErrorBoundary.jsx'
 import { installMonitoring } from './monitoring'
 import { installDraftProtection } from './unsavedChanges'
@@ -11,7 +12,7 @@ installDraftProtection()
 
 createRoot(document.getElementById('root')).render(
   <StrictMode>
-    <AppErrorBoundary><App /></AppErrorBoundary>
+    <AppErrorBoundary><DraftDiscardDialog><App /></DraftDiscardDialog></AppErrorBoundary>
   </StrictMode>,
 )
 

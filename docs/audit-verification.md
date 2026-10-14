@@ -93,3 +93,21 @@ The header account button is 44px to match the theme toggle. At a 320px browser
 viewport, Orders tabs measured 49.2px high, header buttons 44x44px, and the document
 width remained 320px. The browser viewport was successfully reset afterward.
 Actual iPhone keyboard and accessibility text-size checks remain pending.
+
+## Sequential improvement 2: draft protection verified
+
+Replaced blocking window.confirm navigation prompts with an accessible in-app
+Keep editing / Discard changes dialog. Reload and close retain beforeunload guards.
+The dialog focuses Keep editing, traps Tab between actions and handles Escape.
+Overview/Finance and Stock Overview/Stock Taking now guard unmounting draft forms.
+
+Browser checks passed with an unsaved expense amount of 123:
+- Main-tab navigation opened the warning.
+- Keep editing retained the amount and the Finance form.
+- Discard changes navigated to Stock.
+- Switching Finance to Overview also opened the warning.
+- Keep editing again retained the amount.
+- Cancel closed the disposable form; no expense was saved.
+
+All 40 tests, lint and production build passed. Physical touch pull-to-refresh and
+actual iPhone reload/close behaviour still require device testing.

@@ -19,3 +19,11 @@ test('reload is blocked only while a draft exists and recovers after save',()=>{
  guard.set('count',true);guard.beforeUnload(event);assert.equal(blocked,1);assert.equal(event.returnValue,'');
  guard.set('count',false);guard.beforeUnload(event);assert.equal(blocked,1);
 });
+
+test('asynchronous in-app confirmation can cancel or approve without clearing drafts prematurely',async()=>{
+ const guard=createDraftGuard();guard.set('finance',true);
+ let resolve;const pending=guard.confirm(()=>new Promise(done=>{resolve=done;}));
+ assert.equal(guard.hasChanges(),true);resolve(false);assert.equal(await pending,false);
+ assert.equal(guard.hasChanges(),true);assert.equal(await guard.confirm(async()=>true),true);
+ guard.set('finance',false);assert.equal(guard.hasChanges(),false);
+});

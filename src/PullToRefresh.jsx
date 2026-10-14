@@ -41,9 +41,9 @@ export default function PullToRefresh({ children, style }) {
       pull = Math.min(100, dy * 0.5);
       setDistance(pull);
     };
-    const onEnd = () => {
+    const onEnd = async () => {
       if (start && pull >= THRESHOLD) {
-        if (!confirmDiscard()) return reset();
+        if (!await confirmDiscard()) return reset();
         reloading = true;
         start = null;
         setRefreshing(true);

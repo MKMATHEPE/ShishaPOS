@@ -14,6 +14,13 @@ export function installDraftProtection() {
   window.addEventListener('beforeunload', handler);
   return () => window.removeEventListener('beforeunload', handler);
 }
-export function confirmDiscard() {
-  return guard.confirm(message => window.confirm(message));
+let discardPrompt = null;
+export function registerDiscardPrompt(prompt) {
+  discardPrompt = prompt;
+  return () => { if (discardPrompt === prompt) discardPrompt = null; };
+}
+export async function confirmDiscard() {
+  if (!hasUnsavedChanges()) return true;
+  // Fail closed if the dialog has not mounted yet.
+  return discardPrompt ? discardPrompt() : false;
 }
