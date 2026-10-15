@@ -40,7 +40,7 @@ export async function getCurrentProfile() {
   if (!supabase) return null
   try {
     const { data: { user }, error: authError } = await supabase.auth.getUser()
-    if (authError) throw authError
+    if (authError && authError.name !== 'AuthSessionMissingError') throw authError
     if (!user) {
       if (!navigator.onLine) {
         const cached = localStorage.getItem(CACHED_PROFILE_KEY)

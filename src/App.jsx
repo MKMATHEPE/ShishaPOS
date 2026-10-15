@@ -876,8 +876,10 @@ export default function App() {
               <p style={styles.loginMeta}>Sign in to start taking orders.</p>
 
               <div style={styles.loginField}>
-                <label style={styles.loginLabel}>Username or email</label>
+                <label htmlFor="login-username" style={styles.loginLabel}>Username or email</label>
                 <input
+                  id="login-username"
+                  className="login-input"
                   value={loginUsername}
                   onChange={(e) => { setLoginUsername(e.target.value); setLoginError(""); }}
                   onKeyDown={(e) => e.key === "Enter" && handleLogin()}
@@ -888,8 +890,10 @@ export default function App() {
               </div>
 
               <div style={styles.loginField}>
-                <label style={styles.loginLabel}>Password</label>
+                <label htmlFor="login-password" style={styles.loginLabel}>Password</label>
                 <input
+                  id="login-password"
+                  className="login-input"
                   type="password"
                   autoComplete="current-password"
                   value={loginPassword}
@@ -3051,7 +3055,7 @@ const styles = {
     alignItems: "center",
     justifyContent: "center",
     minHeight: "calc(100vh - 60px)",
-    background: "linear-gradient(rgba(0,0,0,.55),rgba(0,0,0,.8)), url(/brand/hookah-hero.webp) center / cover",
+    background: "#0a0a0a url(/brand/chill-pipe-monogram.png) center top / 480px 840px repeat",
     borderRadius: 10,
     margin: -14,
     padding: "28px 22px",
@@ -3161,9 +3165,9 @@ const styles = {
     color: "#6c6a65",
   },
   loginInput: {
-    border: "none",
-    borderBottom: "1.5px solid rgba(10,10,10,0.15)",
-    padding: "12px 0",
+    border: "1px solid rgba(10,10,10,0.15)",
+    borderRadius: 12,
+    padding: "12px 14px",
     fontSize: 16,
     color: "#0a0a0a",
     outline: "none",

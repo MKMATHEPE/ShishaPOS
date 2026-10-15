@@ -797,3 +797,10 @@ html[data-theme="dark"] .app-shell .date-preset[aria-pressed="true"] {
   color: #0a0a0a !important;
   border-color: #d4d0c6 !important;
 }
+
+/* Keep login focus visible without the global rectangular outline. */
+input.login-input:focus-visible {
+  outline: none !important;
+  border-color: #8c8982 !important;
+  box-shadow: 0 0 0 2px rgba(140, 137, 130, 0.22);
+}
