@@ -5,6 +5,7 @@ import { expenseDate, expenseChanges } from './expenseEditor';
 
 export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus }) {
   const [filter, setFilter] = useState('all');
+  const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [draft, setDraft] = useState({});
@@ -45,18 +46,21 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   };
   const labels = {pending:'Pending approval', approved:'Approved', paid:'Paid'};
   const visible = expenses.filter(expense => filter === 'all' || expense.status === filter);
+  const totalPages = Math.max(1, Math.ceil(visible.length / 10));
+  const currentPage = Math.min(page, totalPages);
+  const pageExpenses = [...visible].sort((a,b)=>Number(a.status === 'paid')-Number(b.status === 'paid') || new Date(b.time)-new Date(a.time) || b.id-a.id).slice((currentPage-1)*10, currentPage*10);
   const person = id => users.find(user => user.id === id)?.name ?? 'Removed user';
   return <section className="expenses-list">
     <h3>{isAdmin ? 'All expenses' : 'Expenses'}</h3>
-    <label className="expense-status-filter">Status<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+    <label className="expense-status-filter">Status<select disabled={busy || editId !== null || deleteId !== null} value={filter} onChange={event=>{setFilter(event.target.value);setPage(1);}}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {!visible.length && <p>No matching expenses.</p>}
-    {[...visible].sort((a,b)=>new Date(b.time)-new Date(a.time)).map(expense=> {
+    {pageExpenses.map(expense=> {
       const locked = lockedThrough && expenseDate(expense.time) <= lockedThrough;
       if (expense.status === 'paid') return <div className="expense-item expense-item-paid" key={expense.id}>
         <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
-        <div className="expense-paid-summary"><span>{expenseDate(expense.time)} · <strong className="expense-paid-status">Paid ✓</strong></span>
+        <div className="expense-paid-summary"><span>{expenseDate(expense.time)} · {expense.paidBy ? person(expense.paidBy) : 'Business'} · <strong className="expense-paid-status">Paid ✓</strong></span>
           <details className="expense-paid-details">
             <summary>View details</summary>
             <div>
@@ -91,5 +95,10 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
         </div> : deleteId === expense.id ? <div className="expense-delete-confirm"><p>Delete this expense of {money(expense.amount)}? This cannot be undone. {Object.keys(expense.stockQuantities ?? {}).length > 0 && 'The linked stock quantity will also be reversed.'}</p><div className="expense-actions"><button disabled={busy} onClick={()=>setDeleteId(null)}>Keep expense</button><button className="expense-danger" disabled={busy} onClick={()=>remove(expense)}>{busy ? 'Deleting…' : 'Delete expense'}</button></div></div> : <div className="expense-actions"><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>edit(expense)} aria-label={`Edit expense ${expense.description || expense.category}`}>Edit</button><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>{setDeleteId(expense.id);setEditId(null);setError('');setMessage('');}} aria-label={`Delete expense ${expense.description || expense.category}`}>Delete</button>{locked && <span>Locked period</span>}</div>}
       </div>;
     })}
+    {totalPages > 1 && <nav className="expense-pagination" aria-label="Expense pages">
+      <button disabled={currentPage === 1 || busy || editId !== null || deleteId !== null} onClick={()=>setPage(currentPage-1)}>Previous</button>
+      <span aria-live="polite">Page {currentPage} of {totalPages}</span>
+      <button disabled={currentPage === totalPages || busy || editId !== null || deleteId !== null} onClick={()=>setPage(currentPage+1)}>Next</button>
+    </nav>}
   </section>;
 }

@@ -831,3 +831,8 @@ html[data-theme="dark"] .expense-paid-summary > span { color: #aaa79f; }
 
 .expense-paid-status { color: #15803d; }
 html[data-theme="dark"] .expense-paid-status { color: #86b99a; }
+
+.expense-pagination { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: 10px; font-size: 11px; }
+.expense-pagination button { min-height: 44px; padding: 7px 12px; border: 1px solid #d8d4cb; border-radius: 9px; background: #ece8df; color: #0a0a0a; font: inherit; cursor: pointer; }
+.expense-pagination button:disabled { opacity: .45; cursor: default; }
+html[data-theme="dark"] .expense-pagination button { background: #232321; color: #f6f4ef; border-color: #353530; }
