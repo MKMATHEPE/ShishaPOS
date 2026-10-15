@@ -3,7 +3,7 @@ import { useState } from 'react';
 import { stockLines } from './stockTakingModel';
 import { expenseDate, expenseChanges } from './expenseEditor';
 
-export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus }) {
+export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title }) {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
@@ -51,7 +51,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const pageExpenses = [...visible].sort((a,b)=>Number(a.status === 'paid')-Number(b.status === 'paid') || new Date(b.time)-new Date(a.time) || b.id-a.id).slice((currentPage-1)*10, currentPage*10);
   const person = id => users.find(user => user.id === id)?.name ?? 'Removed user';
   return <section className="expenses-list">
-    <h3>{isAdmin ? 'All expenses' : 'Expenses'}</h3>
+    <h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3>
     <label className="expense-status-filter">Status<select disabled={busy || editId !== null || deleteId !== null} value={filter} onChange={event=>{setFilter(event.target.value);setPage(1);}}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
