@@ -16,7 +16,7 @@ import {
   fetchUsers, syncUsers,
   fetchStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
-  fetchExpenses, saveExpenseRecord, deleteExpenseRecord,
+  fetchExpenses, saveExpenseRecord, deleteExpenseRecord, transitionExpense,
   fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
@@ -127,7 +127,7 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
+function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -148,7 +148,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
   const sharesValid = partnerTotal === 0 || Math.abs(partnerTotal - 100) < 0.01;
   const personName = id => users.find(user => user.id === id)?.name ?? "Removed user";
   const rows = users.map(user => {
-    const spent = expenses.filter(item => item.paidBy === user.id).reduce((sum, item) => sum + Number(item.amount || 0), 0);
+    const spent = expenses.filter(item => item.paidBy === user.id && !(item.status === 'paid' && !item.paidAt)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const refunded = reimbursements.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
     const partner = partners.find(item => item.profileId === user.id);
     const effectiveShare = partner ? (partnerTotal === 0 ? 100 / partners.length : sharesValid ? Number(partner.profitShare || 0) : 0) : 0;
@@ -291,7 +291,7 @@ function FinancePanel({ users, stock, expenses, revenue, journal, periodLabel, d
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    <ExpensesList stock={stock} expenses={expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />
+    <ExpensesList isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />
 
     {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
@@ -1222,6 +1222,13 @@ export default function App() {
                   users={users}
                   stock={stock}
                   expenses={displayExpenses}
+                  allExpenses={expenses}
+                  onExpenseStatus={async (expense, status) => {
+                    await transitionExpense(expense, status);
+                    const [latest, journal] = await Promise.all([fetchExpenses(), fetchFinanceJournal()]);
+                    if (!latest || !journal) throw new Error('Saved. Refresh to load the updated records.');
+                    setExpenses(latest); setFinanceJournal(journal);
+                  }}
                   revenue={displayTotals.gross}
                   journal={financeJournal}
                   periodLabel={mgmtDateLabel}
@@ -1234,12 +1241,12 @@ export default function App() {
                     const record = { id: createOrderId(), category: expense.category, qty: null, amount: expense.amount, time: time.toISOString(), shiftId: null, description: expense.description, paidBy: expense.paidBy || null, stockQuantities: expense.stockQuantities ?? {} };
                     await saveExpenseRecord(record);
                     const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
-                    setExpenses(current => [...current, record]);
+                    const latestExpenses = await fetchExpenses(); if (latestExpenses) setExpenses(latestExpenses);
                   }}
                   onExpenseUpdate={async (original, changes) => {
                     await saveExpenseRecord({ ...original, ...changes }, original);
                     const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
-                    setExpenses(current => current.map(item => item.id === original.id ? { ...item, ...changes } : item));
+                    const latestExpenses = await fetchExpenses(); if (latestExpenses) setExpenses(latestExpenses);
                   }}
                   onExpenseDelete={async expense => {
                     await deleteExpenseRecord(expense);

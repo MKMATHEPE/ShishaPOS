@@ -200,12 +200,19 @@ export async function fetchHistoricalRevenue() {
 // ── Expenses ──────────────────────────────────────────
 export async function fetchExpenses() {
   if (!ok()) return null
-  const { data, error } = await supabase.from('pos_expenses').select('*').order('time', { ascending: true })
-  if (error) { console.error('fetchExpenses', error); return null }
+  const data = []
+  for (let offset = 0; ; offset += 500) {
+    const { data: page, error } = await supabase.from('pos_expenses').select('*')
+      .order('time', { ascending: true }).order('id', { ascending: true }).range(offset, offset + 499)
+    if (error) { console.error('fetchExpenses', error); return null }
+    data.push(...page)
+    if (page.length < 500) break
+  }
   return data.map(r => ({
     id: r.id, category: r.category, qty: r.qty,
     amount: Number(r.amount), time: r.time, shiftId: r.shift_id ?? null,
     description: r.description ?? '', paidBy: r.paid_by ?? null,
+    status: r.approval_status, submittedBy: r.submitted_by, approvedAt: r.approved_at, approvedBy: r.approved_by, paidAt: r.payment_at, paymentBy: r.payment_by,
     reimbursedAt: r.reimbursed_at ?? null, stockQuantities: r.stock_quantities ?? {},
   }))
 }
@@ -318,4 +325,17 @@ export async function deleteExpenseRecord(expense) {
     .eq('id', expense.id).eq('time', expense.time).eq('amount', expense.amount).eq('stock_quantities', JSON.stringify(expense.stockQuantities ?? {})).select('id').maybeSingle()
   if (error) throw new Error(error.message)
   if (!data) throw new Error('Expense changed or access was denied. Refresh and try again.')
+}
+
+export async function transitionExpense(expense, status) {
+  if (!ok()) throw new Error('Connect before updating an expense.');
+  let query = supabase.from('pos_expenses').update({approval_status: status})
+    .eq('id', expense.id).eq('approval_status', expense.status).eq('amount', expense.amount)
+    .eq('time', expense.time).eq('category', expense.category)
+    .eq('stock_quantities', JSON.stringify(expense.stockQuantities ?? {}));
+  query = expense.paidBy ? query.eq('paid_by', expense.paidBy) : query.is('paid_by', null);
+  query = expense.description ? query.eq('description', expense.description) : query.or('description.is.null,description.eq.');
+  const { data, error } = await query.select('id').maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Expense changed. Refresh and try again.');
 }

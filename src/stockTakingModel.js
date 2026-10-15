@@ -20,3 +20,7 @@ export function reconcileStock(lines, counted) {
 export function stockAfterAddition(available, added) {
   return Math.round((Number(available) + Number(added || 0)) * 1000) / 1000;
 }
+
+export function initialCountDraft(lines) {
+  return Object.fromEntries(lines.map(item => [item.key, String(item.quantity)]));
+}

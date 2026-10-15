@@ -1,8 +1,8 @@
 import { useUnsavedChanges } from "./unsavedChanges";
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import StockItemPhoto from './StockItemPhoto.jsx';
 import { supabase } from './supabase';
-import { stockLines, countPayload } from './stockTakingModel';
+import { stockLines, countPayload, initialCountDraft } from './stockTakingModel';
 
 export default function StockTaking({ stock, refreshStock, pendingOrders }) {
   const [sessions, setSessions] = useState([]);
@@ -13,6 +13,7 @@ export default function StockTaking({ stock, refreshStock, pendingOrders }) {
   const [baseline, setBaseline] = useState([]);
   const [message, setMessage] = useState('');
   const [busy, setBusy] = useState(false);
+  const saveRunning = useRef(false);
   const [historyId, setHistoryId] = useState(null);
   const [editingKey, setEditingKey] = useState(null);
   useUnsavedChanges(mode !== null);
@@ -39,29 +40,31 @@ export default function StockTaking({ stock, refreshStock, pendingOrders }) {
       const latest = await refreshStock();
       if (!latest) throw new Error('Connect to refresh stock before counting.');
       const snapshot = stockLines(latest);
-      setEditingKey(null); setBaseline(snapshot); setDraft(Object.fromEntries(snapshot.filter(item => item.category === 'equipment').map(item => [item.key, String(item.quantity)]))); setMode(action);
+      setEditingKey(null); setBaseline(snapshot); setDraft(initialCountDraft(snapshot)); setMode(action);
     } catch (error) { setMessage(error.message); }
     finally { setBusy(false); }
   };
   const save = async () => {
-    if (!ready || busy || pendingOrders) return;
+    if (!ready || busy || pendingOrders || saveRunning.current) return;
+    saveRunning.current = true;
     setBusy(true); setMessage('');
     try {
       const counts = countPayload(baseline, draft);
       const expected = Object.fromEntries(baseline.map(item => [item.key, item.quantity]));
-      const { error } = await supabase.rpc('record_pos_stocktake', { action: mode, counts, expected_counts: expected, closing_note: '' });
+      const { data, error } = await supabase.rpc('record_pos_stocktake', { action: mode, counts, expected_counts: expected, closing_note: '' });
       if (error) throw error;
+      if (!data) throw new Error("Stock count was not confirmed. Please try again.");
       setMode(null); setEditingKey(null);
       await refreshStock(); await load(); setMessage('Stock record saved.');
     } catch(error) { setMessage(error.message || 'Could not save. Refresh stock and try again.'); }
-    finally { setBusy(false); }
+    finally { saveRunning.current = false; setBusy(false); }
   };
   function renderCountRow(item) {
     const editing = editingKey === item.key;
     return <div className="stock-taking-row stock-count-row" key={item.key}>
       <label htmlFor={`count-${item.key}`}><span className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span><small>{item.unit}</small></label>
       <span>{item.quantity.toFixed(2)}</span>
-      {editing ? <input autoFocus id={`count-${item.key}`} aria-label={`${item.name} counted ${item.unit}`} type="number" inputMode="decimal" min="0" step="0.001" placeholder="Count" value={draft[item.key] ?? ''} onChange={event=>setDraft(prev=>({...prev,[item.key]:event.target.value}))} /> : <strong>{draft[item.key] ?? '—'}</strong>}
+      {editing ? <input disabled={busy} autoFocus id={`count-${item.key}`} aria-label={`${item.name} counted ${item.unit}`} type="number" inputMode="decimal" min="0" step="0.001" placeholder="Count" value={draft[item.key] ?? ''} onChange={event=>setDraft(prev=>({...prev,[item.key]:event.target.value}))} /> : <strong>{draft[item.key] ?? '—'}</strong>}
       <button disabled={busy} onClick={()=>setEditingKey(editing ? null : item.key)}>{editing ? 'Done' : 'Edit'}</button>
     </div>;
   }
@@ -75,7 +78,7 @@ export default function StockTaking({ stock, refreshStock, pendingOrders }) {
     {!mode && <><div className="stock-taking-available"><h3>Available stock</h3>{lines.filter(item=>item.category!=='equipment').map(item=><div className="stock-taking-available-row" key={item.key}><span className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span><strong>{item.quantity.toFixed(2)} {item.unit}</strong></div>)}<details><summary>Equipment inventory</summary>{lines.filter(item=>item.category==='equipment').map(item=><p key={item.key}>{item.name}: {item.quantity} {item.unit}</p>)}</details></div><div className="stock-taking-actions"><button disabled={loading || busy} onClick={()=>start('count')}>Record remaining stock</button></div></>}
     {mode && <>
       <h3>Count remaining stock</h3>
-      <p>Use Edit beside each item, then Done. Save remaining count when all quantities are entered. Equipment keeps its current count unless changed.</p>
+      <p>Use Edit beside each item, then Done. Save remaining count when finished. Unedited rows keep their available quantities.</p>
       <div className="stock-taking-table">
         <div className="stock-taking-row stock-taking-labels"><span>Item</span><span>Available</span><span>Remaining</span><span /></div>
         {baseline.filter(item=>item.category !== 'equipment').map(renderCountRow)}
