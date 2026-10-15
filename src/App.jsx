@@ -72,8 +72,8 @@ const RESTOCK_PACK = {
 };
 
 const LOGO_SRC = "/chill-pipe-logo.webp";
-// Enable only after the cancellation database update is approved and applied.
-const CANCELLATION_ENABLED = false;
+// Cancellation is enforced by the database, including delivery and retry checks.
+const CANCELLATION_ENABLED = true;
 
 function formatTime(date) {
   return date.toLocaleTimeString("en-ZA", { hour: "2-digit", minute: "2-digit", hour12: false });
