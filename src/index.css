@@ -804,3 +804,12 @@ input.login-input:focus-visible {
   border-color: #8c8982 !important;
   box-shadow: 0 0 0 2px rgba(140, 137, 130, 0.22);
 }
+
+.login-welcome-card {
+  background: rgba(246, 244, 239, 0.66) !important;
+  backdrop-filter: blur(6px) !important;
+  -webkit-backdrop-filter: blur(6px) !important;
+}
+html[data-theme="dark"] .app-shell .login-welcome-card {
+  background: rgba(23, 23, 22, 0.55) !important;
+}

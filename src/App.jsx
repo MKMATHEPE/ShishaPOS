@@ -866,7 +866,7 @@ export default function App() {
             <div className="float-2" style={styles.loginOrb2} />
             <div className="float-3" style={styles.loginOrb3} />
 
-            <div className="pop-enter" style={styles.loginCard}>
+            <div className="pop-enter login-welcome-card" style={styles.loginCard}>
               <div style={styles.loginLogoWrap}>
                 <img src={LOGO_SRC} alt="The Chill Pipe logo" style={styles.loginLogo} />
               </div>
@@ -3105,12 +3105,12 @@ const styles = {
     flexDirection: "column",
   },
   loginLogoWrap: {
-    width: 112,
-    height: 80,
+    width: 136,
+    height: 96,
     borderRadius: 12,
-    background: "rgba(255,255,255,0.7)",
-    border: "1px solid rgba(255,255,255,0.9)",
-    boxShadow: "0 4px 16px rgba(10,10,10,0.1)",
+    background: "transparent",
+    border: "none",
+    boxShadow: "none",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
@@ -3119,9 +3119,10 @@ const styles = {
   },
   loginHero: {},
   loginLogo: {
-    width: 96,
-    height: 64,
+    width: 116,
+    height: 78,
     objectFit: "contain",
+    filter: "brightness(0) invert(1) drop-shadow(0 2px 4px rgba(0,0,0,0.45))",
   },
   loginHeroText: {},
   loginBrandTag: {
