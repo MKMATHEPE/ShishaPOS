@@ -1,3 +1,4 @@
+import { presetRange, presetIsActive } from "./managementPresets.js";
 import { useState, useCallback, useRef, useEffect } from "react";
 import { stockLines } from "./stockTakingModel";
 import StockItemPhoto from "./StockItemPhoto.jsx";
@@ -421,6 +422,7 @@ export default function App() {
     }, 60000);
     return () => clearInterval(id);
   }, []);
+  const [managementPreset, setManagementPreset] = useState("Today");
   const [managementDateFrom, setManagementDateFrom] = useState(localToday);
   const [managementDateTo, setManagementDateTo] = useState(localToday);
   const [managementTimeFrom, setManagementTimeFrom] = useState("00:00");
@@ -1205,16 +1207,14 @@ export default function App() {
               </div>
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
-                {["Today", "Yesterday", "7 Days", "Month"].map((preset) => (
-                  <button className="date-preset" key={preset} onClick={() => {
-                    const end = new Date();
-                    const start = new Date();
-                    if (preset === "Yesterday") { start.setDate(start.getDate() - 1); end.setDate(end.getDate() - 1); }
-                    if (preset === "7 Days") start.setDate(start.getDate() - 6);
-                    if (preset === "Month") start.setDate(1);
-                    setManagementDateFrom(dateInputValue(start)); setManagementDateTo(dateInputValue(end)); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59");
-                  }} style={{ border: "1px solid rgba(10,10,10,0.08)", background: (preset === "Today" && isViewingToday) ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: (preset === "Today" && isViewingToday) ? "#fff" : "#6c6a65", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>
-                ))}
+                {["Today", "Yesterday", "7 Days", "Month"].map(preset => {
+                  const active = presetIsActive(preset, managementPreset, managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo);
+                  return <button className="date-preset" aria-pressed={active} key={preset} onClick={() => {
+                    const range = presetRange(preset);
+                    setManagementPreset(preset);
+                    setManagementDateFrom(range.from); setManagementDateTo(range.to); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59");
+                  }} style={{ border: "1px solid rgba(10,10,10,0.08)", background: active ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: active ? "#fff" : "#6c6a65", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>;
+                })}
               </div>
 
               {managementView === "finance" ? (
