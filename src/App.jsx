@@ -351,7 +351,6 @@ export default function App() {
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [settingsSection, setSettingsSection] = useState("overview");
   const [ordersView, setOrdersView] = useState("Preparing");
-  const [stockSearch, setStockSearch] = useState("");
   const [stockCategory, setStockCategory] = useState("Attention");
   const [stockView, updateStockView] = useState("overview");
   const setStockView = async view => {
@@ -1290,7 +1289,6 @@ export default function App() {
 
           })()}
           {visibleTab === "stock" && (() => {
-            const matchesStockSearch = (item) => !stockSearch.trim() || item.name.toLowerCase().includes(stockSearch.toLowerCase()) || item.subItems?.some((sub) => sub.name.toLowerCase().includes(stockSearch.toLowerCase()));
             const needsAttention = (item) => item.subItems
               ? item.subItems.some(subItem => subItem.quantity <= item.lowThreshold)
               : item.quantity <= item.lowThreshold;
@@ -1299,7 +1297,7 @@ export default function App() {
                 : stockCategory === "Fixed Assets" ? item.category === "equipment"
                   : stockCategory === "Flavours" ? item.name === "Flavour"
                     : item.category === "consumable" && item.name !== "Flavour");
-            const equipment   = stock.filter(i => i.category === "equipment" && matchesStockSearch(i) && categoryMatches(i));
+            const equipment   = isAdmin ? stock.filter(i => i.category === "equipment" && categoryMatches(i)) : [];
 
             // Flatten all trackable items (including flavour sub-items) for summary
             const allFlatItems = stock.flatMap(i => {
@@ -1495,16 +1493,15 @@ export default function App() {
                   ))}
                 </div>
                 <div role="tabpanel" id="stock-taking" aria-labelledby="stock-tab-taking" style={{ display: stockView === "taking" ? "block" : "none" }}>
-                <StockTaking stock={stock} pendingOrders={pendingOrderCount} refreshStock={async () => {
+                <StockTaking isAdmin={isAdmin} stock={stock} pendingOrders={pendingOrderCount} refreshStock={async () => {
                   const latest = await fetchStock();
                   if (latest) setStock(latest);
                   return latest;
                 }} />
                 </div>
                 <div role="tabpanel" id="stock-overview" aria-labelledby="stock-tab-overview" style={{ display: stockView === "overview" ? "flex" : "none", flexDirection: "column", gap: 10 }}>
-                <input type="search" value={stockSearch} onChange={(e) => setStockSearch(e.target.value)} placeholder="Search stock items" style={{ ...styles.userNameInput, width: "100%" }} />
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
-                  {["Attention", "All", "Flavours", "Consumables", "Fixed Assets"].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
+                  {["Attention", "All", "Flavours", "Consumables", ...(isAdmin ? ["Fixed Assets"] : [])].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
 
                 {stockCategory === "Attention" && lowCount === 0 && <div style={{ ...styles.emptyState, color: "#15803d", background: "#f0fdf4", borderColor: "#bbf7d0" }}>✓ Nothing needs attention. Stock levels are healthy.</div>}

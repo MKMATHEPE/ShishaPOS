@@ -4,7 +4,7 @@ import StockItemPhoto from './StockItemPhoto.jsx';
 import { supabase } from './supabase';
 import { stockLines, countPayload, initialCountDraft } from './stockTakingModel';
 
-export default function StockTaking({ stock, refreshStock, pendingOrders }) {
+export default function StockTaking({ stock, refreshStock, pendingOrders, isAdmin }) {
   const [sessions, setSessions] = useState([]);
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -75,18 +75,18 @@ export default function StockTaking({ stock, refreshStock, pendingOrders }) {
     <p>Record what is physically remaining. Add stock purchases as expenses in Management → Finance.</p>
     {pendingOrders > 0 && <p role="status">Sync offline orders before confirming a count.</p>}
     {message && <p role="status">{message}</p>}
-    {!mode && <><div className="stock-taking-available"><h3>Available stock</h3>{lines.filter(item=>item.category!=='equipment').map(item=><div className="stock-taking-available-row" key={item.key}><span className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span><strong>{item.quantity.toFixed(2)} {item.unit}</strong></div>)}<details><summary>Equipment inventory</summary>{lines.filter(item=>item.category==='equipment').map(item=><p key={item.key}>{item.name}: {item.quantity} {item.unit}</p>)}</details></div><div className="stock-taking-actions"><button disabled={loading || busy} onClick={()=>start('count')}>Record remaining stock</button></div></>}
+    {!mode && <><div className="stock-taking-available"><h3>Available stock</h3>{lines.filter(item=>item.category!=='equipment').map(item=><div className="stock-taking-available-row" key={item.key}><span className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span><strong>{item.quantity.toFixed(2)} {item.unit}</strong></div>)}{isAdmin && <details><summary>Equipment inventory</summary>{lines.filter(item=>item.category==='equipment').map(item=><p key={item.key}>{item.name}: {item.quantity} {item.unit}</p>)}</details>}</div><div className="stock-taking-actions"><button disabled={loading || busy} onClick={()=>start('count')}>Record remaining stock</button></div></>}
     {mode && <>
       <h3>Count remaining stock</h3>
       <p>Use Edit beside each item, then Done. Save remaining count when finished. Unedited rows keep their available quantities.</p>
       <div className="stock-taking-table">
         <div className="stock-taking-row stock-taking-labels"><span>Item</span><span>Available</span><span>Remaining</span><span /></div>
         {baseline.filter(item=>item.category !== 'equipment').map(renderCountRow)}
-        <details><summary>Equipment inventory (rarely changed)</summary>{baseline.filter(item=>item.category === 'equipment').map(renderCountRow)}</details>
+        {isAdmin && <details><summary>Equipment inventory (rarely changed)</summary>{baseline.filter(item=>item.category === 'equipment').map(renderCountRow)}</details>}
       </div>
       <div className="stock-taking-actions"><button disabled={busy} onClick={() => {setMode(null);setEditingKey(null);}}>Cancel</button><button disabled={!ready || busy || pendingOrders > 0} onClick={save}>{busy ? 'Saving…' : 'Save remaining count'}</button></div>
       {!ready && <p>Saving will be enabled after the database update is approved.</p>}
     </>}
-    {sessions.filter(row=>row.status==='closed').length > 0 && <details><summary>Previous remaining counts</summary>{sessions.filter(row=>row.status==='closed').map(row=><button className="stock-taking-history" key={row.id} onClick={()=>setHistoryId(row.id===historyId?null:row.id)}>{formatTime(row.closed_at)}</button>)}{history && <div>{Object.entries(history.closing).map(([key,count])=><p key={key}>{lines.find(item=>item.key===key)?.name ?? key}: {count} · difference {(count-(history.expected[key]??0)).toFixed(3)}</p>)}{history.note && <p>{history.note}</p>}</div>}</details>}
+    {sessions.filter(row=>row.status==='closed').length > 0 && <details><summary>Previous remaining counts</summary>{sessions.filter(row=>row.status==='closed').map(row=><button className="stock-taking-history" key={row.id} onClick={()=>setHistoryId(row.id===historyId?null:row.id)}>{formatTime(row.closed_at)}</button>)}{history && <div>{Object.entries(history.closing).filter(([key])=>isAdmin || lines.find(item=>item.key===key)?.category !== 'equipment').map(([key,count])=><p key={key}>{lines.find(item=>item.key===key)?.name ?? key}: {count} · difference {(count-(history.expected[key]??0)).toFixed(3)}</p>)}{history.note && <p>{history.note}</p>}</div>}</details>}
   </section>;
 }
