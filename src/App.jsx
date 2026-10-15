@@ -301,13 +301,15 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
       <div className="finance-field-grid">
         <select aria-label={entry.kind === "partner_payout" ? "Partner" : "Person to reimburse"} value={entry.profileId} onChange={event => {setEntry(current => ({ ...current, profileId: event.target.value, amount: "" }));setMessage("");}} style={selectField}><option value="">{entry.kind === "partner_payout" ? "Choose partner" : "Choose person"}</option>{paymentPeople.map(user => <option key={user.id} value={user.id}>{user.name}</option>)}</select>
-        <input type="date" value={entry.date} onChange={event => setEntry(current => ({ ...current, date: event.target.value }))} style={field} />
+        {activeAction === "partner_payout" && <input type="date" value={entry.date} onChange={event => setEntry(current => ({ ...current, date: event.target.value }))} style={field} />}
       </div>
       {activeAction === "partner_payout" && entry.profileId && <p style={{fontSize:12}}>Still owed: <strong>{paymentMoney(paymentRow?.profitDue)}</strong> · {periodLabel}</p>}
+      {activeAction === "partner_payout" && <>
       <label style={label}>{activeAction === "partner_payout" ? "Amount to pay partner (R)" : "Amount to pay back (R)"}</label>
       <input aria-label={activeAction === "partner_payout" ? "Amount to pay partner" : "Amount to pay back"} type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="Amount (R)" value={entry.amount} onChange={event => setEntry(current => ({ ...current, amount: event.target.value }))} style={{ ...field, fontSize: 18 }} />
       <input placeholder="Note (optional)" value={entry.description} onChange={event => setEntry(current => ({ ...current, description: event.target.value }))} style={field} />
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
+      </>}
       {activeAction === "reimbursement" && entry.profileId && <ExpensesList key={entry.profileId} title={`${personName(entry.profileId)} — unpaid expenses`} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={unpaidExpenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}

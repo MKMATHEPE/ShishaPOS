@@ -3,6 +3,21 @@ import { useState } from 'react';
 import { stockLines } from './stockTakingModel';
 import { expenseDate, expenseChanges } from './expenseEditor';
 
+
+function ExpenseAudit({ expense, person }) {
+  return <>
+    {expense.approvedAt && <p>Approved by {person(expense.approvedBy)} · {new Date(expense.approvedAt).toLocaleString('en-ZA')}</p>}
+    {expense.paidAt ? <p>{expense.paidBy ? 'Reimbursed' : 'Paid'} · {new Date(expense.paidAt).toLocaleString('en-ZA')} · {person(expense.paymentBy)}</p> : expense.status === 'paid' && <p>Previously settled</p>}
+  </>;
+}
+
+function ExpensePurchases({ expense, stockItems }) {
+  return Object.entries(expense.stockQuantities ?? {}).map(([key,quantity]) => {
+    const item = stockItems.find(item => item.key === key);
+    return <p key={key}>Bought {quantity} {item?.unit} · {item?.name ?? key}</p>;
+  });
+}
+
 export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title }) {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -66,9 +81,8 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
             <div>
               <p>{expense.category} · {expense.paidBy ? person(expense.paidBy) : 'Paid by business'}</p>
               {expense.submittedBy && <p>Submitted by {person(expense.submittedBy)}</p>}
-              {expense.approvedAt && <p>Approved by {person(expense.approvedBy)} · {new Date(expense.approvedAt).toLocaleString('en-ZA')}</p>}
-              {expense.paidAt ? <p>{expense.paidBy ? 'Reimbursed' : 'Paid'} · {new Date(expense.paidAt).toLocaleString('en-ZA')} · {person(expense.paymentBy)}</p> : <p>Previously settled</p>}
-              {Object.entries(expense.stockQuantities ?? {}).map(([key,quantity])=><p key={key}>Bought {quantity} {stockItems.find(item=>item.key===key)?.unit} · {stockItems.find(item=>item.key===key)?.name ?? key}</p>)}
+              <ExpenseAudit expense={expense} person={person} />
+              <ExpensePurchases expense={expense} stockItems={stockItems} />
               {locked && <p>Locked period</p>}
             </div>
           </details>
@@ -78,11 +92,9 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
         <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
         <p>{expenseDate(expense.time)} · {expense.category} · {expense.paidBy ? users.find(user=>user.id===expense.paidBy)?.name ?? 'Removed user' : 'Paid by business'}</p>
         <p><strong>{labels[expense.status] ?? 'Pending approval'}</strong>{expense.submittedBy && ` · Submitted by ${person(expense.submittedBy)}`}</p>
-        {expense.approvedAt && <p>Approved by {person(expense.approvedBy)} · {new Date(expense.approvedAt).toLocaleString('en-ZA')}</p>}
-        {expense.paidAt && <p>{expense.paidBy ? 'Reimbursed' : 'Paid'} · {new Date(expense.paidAt).toLocaleString('en-ZA')} · {person(expense.paymentBy)}</p>}
-        {expense.status === 'paid' && !expense.paidAt && <p>Previously settled</p>}
+        <ExpenseAudit expense={expense} person={person} />
         {isAdmin && expense.status !== 'paid' && <div className="expense-actions"><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>changeStatus(expense, expense.status === 'approved' ? 'paid' : 'approved')}>{expense.status === 'approved' ? (expense.paidBy ? 'Mark reimbursed' : 'Mark paid') : 'Approve'}</button></div>}
-        {Object.entries(expense.stockQuantities ?? {}).map(([key,quantity])=><p key={key}>Bought {quantity} {stockItems.find(item=>item.key===key)?.unit} · {stockItems.find(item=>item.key===key)?.name ?? key}</p>)}
+        <ExpensePurchases expense={expense} stockItems={stockItems} />
         {editId === expense.id ? <div className="expense-edit-form">
           <label>Date<input type="date" value={draft.date} max={today} onChange={event=>setDraft(prev=>({...prev,date:event.target.value}))} /></label>
           <label>Amount (R)<input type="number" inputMode="decimal" min="0.01" step="0.01" value={draft.amount} onChange={event=>setDraft(prev=>({...prev,amount:event.target.value}))} /></label>
