@@ -48,12 +48,28 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const person = id => users.find(user => user.id === id)?.name ?? 'Removed user';
   return <section className="expenses-list">
     <h3>{isAdmin ? 'All expenses' : 'Expenses'}</h3>
-    <label>Status<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
+    <label className="expense-status-filter">Status<select value={filter} onChange={event=>setFilter(event.target.value)}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {!visible.length && <p>No matching expenses.</p>}
     {[...visible].sort((a,b)=>new Date(b.time)-new Date(a.time)).map(expense=> {
       const locked = lockedThrough && expenseDate(expense.time) <= lockedThrough;
+      if (expense.status === 'paid') return <div className="expense-item expense-item-paid" key={expense.id}>
+        <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
+        <div className="expense-paid-summary"><span>{expenseDate(expense.time)} · <strong className="expense-paid-status">Paid ✓</strong></span>
+          <details className="expense-paid-details">
+            <summary>View details</summary>
+            <div>
+              <p>{expense.category} · {expense.paidBy ? person(expense.paidBy) : 'Paid by business'}</p>
+              {expense.submittedBy && <p>Submitted by {person(expense.submittedBy)}</p>}
+              {expense.approvedAt && <p>Approved by {person(expense.approvedBy)} · {new Date(expense.approvedAt).toLocaleString('en-ZA')}</p>}
+              {expense.paidAt ? <p>{expense.paidBy ? 'Reimbursed' : 'Paid'} · {new Date(expense.paidAt).toLocaleString('en-ZA')} · {person(expense.paymentBy)}</p> : <p>Previously settled</p>}
+              {Object.entries(expense.stockQuantities ?? {}).map(([key,quantity])=><p key={key}>Bought {quantity} {stockItems.find(item=>item.key===key)?.unit} · {stockItems.find(item=>item.key===key)?.name ?? key}</p>)}
+              {locked && <p>Locked period</p>}
+            </div>
+          </details>
+        </div>
+      </div>;
       return <div className="expense-item" key={expense.id}>
         <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
         <p>{expenseDate(expense.time)} · {expense.category} · {expense.paidBy ? users.find(user=>user.id===expense.paidBy)?.name ?? 'Removed user' : 'Paid by business'}</p>
