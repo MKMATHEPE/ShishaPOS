@@ -32,12 +32,12 @@ export default function ManagementOverview({orders,expenses,from,to,timeFrom,tim
   const percent=value=>metrics.orders?Math.round(value/metrics.orders*100):0;
   return <div className="management-overview" aria-busy={loading}>
     <p className="overview-comparison">Compared with {previous.from} – {previous.to} · same weekdays and hours{loading?' · Updating…':''}</p>
-    <div className="overview-kpis">{[
+    <section className="overview-card overview-performance-summary"><h2>Performance summary</h2><div className="overview-kpis">{[
       ['Revenue',money(metrics.revenue),before?changeLabel(metrics.revenue,before.revenue):'Loading comparison…'],
       ['Orders',metrics.orders,before?changeLabel(metrics.orders,before.orders):'Loading comparison…'],
       ['Average sale',metrics.orders?money(metrics.average):'—',before?changeLabel(metrics.average,before.average):'Loading comparison…'],
       ['Expenses',money(spent),changeLabel(spent,priorSpent)],
-    ].map(([label,value,change])=><div className="overview-card overview-kpi" key={label}><span>{label}</span><strong>{value}</strong><small>{comparison.key===key&&comparison.orders===null&&label!=='Expenses'?'Comparison unavailable':change}</small></div>)}</div>
+    ].map(([label,value,change])=><div className="overview-kpi" key={label}><span>{label}</span><strong>{value}</strong><small>{comparison.key===key&&comparison.orders===null&&label!=='Expenses'?'Comparison unavailable':change}</small></div>)}</div></section>
     <section className="overview-card"><h2>Sales performance</h2><small>Revenue (R) · {from} – {to}</small>
       {current.length?<><svg viewBox="0 0 360 140" role="img" aria-label={`Sales revenue by day, maximum ${money(max)}`}><text x="0" y="15">{Math.ceil(max)}</text><line x1="30" x2="330" y1="112" y2="112" stroke="#d8d4cb"/>{prior&&<polyline points={points(oldValues)} fill="none" stroke="#999" strokeWidth="2" strokeDasharray="5 4"/>}<polyline points={points(values)} fill="none" stroke="#0a0a0a" strokeWidth="2.5"/>{values.map((v,i)=><circle key={i} cx={30+i*300/Math.max(1,values.length-1)} cy={112-v/max*90} r="3" fill="#0a0a0a"><title>{days[i]}: {money(v)}</title></circle>)}</svg><div className="overview-chart-labels"><span>{from.slice(5)}</span><span>{to.slice(5)}</span></div><p className="overview-legend">━ Current period · ┄ Previous period</p><details><summary>Daily totals</summary>{days.map((day,i)=><div className="overview-detail-row" key={day}><span>{day}</span><strong>{money(values[i])}</strong><span>Prior {prior?money(oldValues[i]):'—'}</span></div>)}</details></>:<p>No sales in this period.</p>}
     </section>
