@@ -1,8 +1,9 @@
+import Pagination from './Pagination.jsx';
 import ReceiptLink from './ReceiptLink.jsx';
 import { formHasChanges } from './formDirty.js';
 import { canManageExpense } from './expensePermissions.js';
 import { useUnsavedChanges } from "./unsavedChanges";
-import { useState } from 'react';
+import { useRef, useState } from 'react';
 import { stockLines } from './stockTakingModel';
 import { expenseDate, expenseChanges } from './expenseEditor';
 
@@ -22,6 +23,7 @@ function ExpensePurchases({ expense, stockItems }) {
 }
 
 export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd, canViewReceipts = false }) {
+  const listRef = useRef(null);
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
@@ -74,7 +76,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const pageExpenses = [...visible].sort((a,b)=>Number(a.status === 'paid')-Number(b.status === 'paid') || new Date(b.time)-new Date(a.time) || b.id-a.id).slice((currentPage-1)*10, currentPage*10);
   const expenseNames = new Map(expenses.flatMap(expense => ['paidBy','submittedBy','approvedBy','paymentBy'].filter(field=>expense[field] && expense[`${field}Name`]).map(field=>[expense[field],expense[`${field}Name`]])));
   const person = id => users.find(user => user.id === id)?.name ?? expenseNames.get(id) ?? 'Name unavailable';
-  return <section className="expenses-list">
+  return <section ref={listRef} className="expenses-list pagination-list-target">
     <div className="expenses-list-heading"><h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3>{onAdd && <button className="expense-add-button" onClick={onAdd} aria-label="Add expense">＋ Add</button>}</div>
     <label className="expense-status-filter">Status<select disabled={busy || editId !== null || deleteId !== null} value={filter} onChange={event=>{setFilter(event.target.value);setPage(1);}}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
@@ -118,10 +120,6 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
         </div> : deleteId === expense.id ? <div className="expense-delete-confirm"><p>Delete this expense of {money(expense.amount)}? This cannot be undone. {Object.keys(expense.stockQuantities ?? {}).length > 0 && 'The linked stock quantity will also be reversed.'}</p><div className="expense-actions"><button disabled={busy} onClick={()=>setDeleteId(null)}>Keep expense</button><button className="expense-danger" disabled={busy} onClick={()=>remove(expense)}>{busy ? 'Deleting…' : 'Delete expense'}</button></div></div> : <div className="expense-actions"><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>edit(expense)} aria-label={`Edit expense ${expense.description || expense.category}`}>Edit</button><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>{setDeleteId(expense.id);setEditId(null);setError('');setMessage('');}} aria-label={`Delete expense ${expense.description || expense.category}`}>Delete</button>{locked && <span>Locked period</span>}</div>)}
       </div>;
     })}
-    {totalPages > 1 && <nav className="expense-pagination" aria-label="Expense pages">
-      <button disabled={currentPage === 1 || busy || editId !== null || deleteId !== null} onClick={()=>setPage(currentPage-1)}>Previous</button>
-      <span aria-live="polite">Page {currentPage} of {totalPages}</span>
-      <button disabled={currentPage === totalPages || busy || editId !== null || deleteId !== null} onClick={()=>setPage(currentPage+1)}>Next</button>
-    </nav>}
+    <Pagination page={currentPage} totalPages={totalPages} onChange={setPage} disabled={busy || editId !== null || deleteId !== null} listRef={listRef} label="Expense pages" />
   </section>;
 }

@@ -1,3 +1,4 @@
+import Pagination from './Pagination.jsx';
 import { orderPage } from './orderPagination.js';
 import ReceiptPicker from './ReceiptPicker.jsx';
 import { uploadReceipt } from './expenseReceipts.js';
@@ -404,6 +405,7 @@ export default function App() {
     return () => cancelAnimationFrame(frame);
   }, [activeTab]);
   const [deliveredPage, setDeliveredPage] = useState(0);
+  const ordersListRef = useRef(null);
   const [stock, setStock] = useState(() => {
     const defaults = [
       { id: 1,  name: "Coal",         category: "consumable", quantity: 72, unit: "pieces",  lowThreshold: 10 },
@@ -1102,7 +1104,7 @@ export default function App() {
                 ))}
               </div>
 
-              <div style={styles.deliveredList}>
+              <div ref={ordersListRef} className="pagination-list-target" style={styles.deliveredList}>
                 {queueOrders.length === 0 && <div style={styles.emptyState}>Nothing in {ordersView.toLowerCase()}</div>}
                 {queueOrders.map((o, i) => {
                   const orderedAt = o.time instanceof Date ? o.time : new Date(o.time);
@@ -2010,25 +2012,7 @@ export default function App() {
           )}
         </PullToRefresh>
 
-        {visibleTab === "delivered" && totalDeliveredPages > 1 && (
-          <div style={styles.pagination}>
-            <button
-              onClick={() => setDeliveredPage((p) => Math.max(0, p - 1))}
-              disabled={safePage === 0}
-              style={{ ...styles.pageBtn, ...(safePage === 0 ? styles.pageBtnDisabled : {}) }}
-            >
-              ← Prev
-            </button>
-            <span style={styles.pageInfo}>Page {safePage + 1} of {totalDeliveredPages}</span>
-            <button
-              onClick={() => setDeliveredPage((p) => Math.min(totalDeliveredPages - 1, p + 1))}
-              disabled={safePage === totalDeliveredPages - 1}
-              style={{ ...styles.pageBtn, ...(safePage === totalDeliveredPages - 1 ? styles.pageBtnDisabled : {}) }}
-            >
-              Next →
-            </button>
-          </div>
-        )}
+        {visibleTab === "delivered" && <Pagination page={safePage+1} totalPages={totalDeliveredPages} onChange={page=>setDeliveredPage(page-1)} listRef={ordersListRef} label="Order pages" />}
 
         <footer className="app-footer" style={styles.footer}>
           <div style={styles.footerBar}>
@@ -2489,35 +2473,6 @@ const styles = {
     display: "flex",
     flexDirection: "column",
     gap: 5,
-  },
-  pagination: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-    paddingTop: 4,
-  },
-  pageBtn: {
-    padding: "8px 16px",
-    border: "1px solid #d8d4cb",
-    borderRadius: 8,
-    background: "#ece8df",
-    backdropFilter: "blur(8px)",
-    WebkitBackdropFilter: "blur(8px)",
-    color: "#0a0a0a",
-    fontSize: 13,
-    fontWeight: 900,
-    cursor: "pointer",
-    fontFamily: "inherit",
-  },
-  pageBtnDisabled: {
-    opacity: 0.35,
-    cursor: "not-allowed",
-  },
-  pageInfo: {
-    fontSize: 12,
-    fontWeight: 700,
-    color: "#6c6a65",
   },
   settingsGrid: {
     display: "grid",
