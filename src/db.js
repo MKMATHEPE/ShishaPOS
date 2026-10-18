@@ -26,6 +26,13 @@ export async function syncUsers(users) {
   if (failed) console.error('syncUsers', failed.error)
 }
 
+export async function updateStaffAccess(id, changes) {
+  if (!ok()) throw new Error('Connect before updating access.');
+  const {data,error} = await supabase.from('pos_profiles').update(changes).eq('id',id).select('id').maybeSingle();
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error('Access was not saved. Refresh and try again.');
+}
+
 // ── Stock ─────────────────────────────────────────────
 export async function fetchStock() {
   if (!ok()) return null

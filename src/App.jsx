@@ -21,7 +21,7 @@ import { planWeekend } from "./purchasePlanner";
 import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
-  fetchUsers, syncUsers,
+  fetchUsers, updateStaffAccess,
   fetchStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
   fetchExpenses, saveExpenseRecord, deleteExpenseRecord, transitionExpense,
@@ -110,6 +110,11 @@ function formatDateShort(dateStr) {
 
 function formatCurrency(n) {
   return `R${n.toLocaleString()}`;
+}
+
+function SettingsIcon({name}) {
+  const paths={team:<><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3zM16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/></>,pricing:<><path d="M3 12 12 3h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></>,security:<path d="m12 2 8 3v6c0 5-4 9-8 11-4-2-8-6-8-11V5z"/>,business:<><path d="M3 9h18l-2-6H5zM4 9v12h16V9M9 21v-7h6v7"/><path d="M3 9c0 4 4 4 4 0 0 4 5 4 5 0 0 4 5 4 5 0 0 4 4 4 4 0"/></>};
+  return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
 function TabIcon({ name, active }) {
@@ -357,7 +362,7 @@ export default function App() {
   const [staffMessageType, setStaffMessageType] = useState("error");
   const [addingUser, setAddingUser] = useState(false);
   const [showNewUserPassword, setShowNewUserPassword] = useState(false);
-  const [settingsSection, setSettingsSection] = useState("overview");
+  const [settingsSection, setSettingsSection] = useState("team");
   const [ordersView, setOrdersView] = useState("Preparing");
   const [stockCategory, setStockCategory] = useState("Attention");
   const [stockView, updateStockView] = useState("overview");
@@ -380,8 +385,29 @@ export default function App() {
   const [securityBusy, setSecurityBusy] = useState(false);
   const [resetPinId, setResetPinId] = useState(null);
   const [resetPinValue, setResetPinValue] = useState("");
+  const [staffSave,setStaffSave] = useState({id:null,status:'',message:''});
+  const [staffMoreId,setStaffMoreId] = useState(null);
+  const [passwordBusy,setPasswordBusy] = useState(false);
+  const [passwordError,setPasswordError] = useState('');
+  const saveStaffAccess = async (user,changes) => {
+    if (staffSave.status==='saving') return;
+    setStaffSave({id:user.id,status:'saving',message:'Saving…'});
+    try {
+      await updateStaffAccess(user.id,changes);
+      setUsers(prev=>prev.map(item=>item.id===user.id ? {...item,...changes} : item));
+      setStaffSave({id:user.id,status:'saved',message:'✓ Changes saved'});
+    } catch(error) { setStaffSave({id:user.id,status:'error',message:error.message || 'Could not save. Try again.'}); }
+  };
+  const saveStaffPassword = async user => {
+    if (passwordBusy) return;
+    if (resetPinValue.length<10) {setPasswordError('Use at least 10 characters.');return;}
+    setPasswordBusy(true);setPasswordError('');
+    try {await manageStaff('password',{userId:user.id,password:resetPinValue});setResetPinId(null);setResetPinValue('');setStaffSave({id:user.id,status:'saved',message:'✓ Password updated'});}
+    catch(error) {setPasswordError(error.message || 'Could not update password.');}
+    finally {setPasswordBusy(false);}
+  };
   const [expandedUsers, setExpandedUsers] = useState(new Set());
-  const toggleUserExpanded = (id) => setExpandedUsers(prev => { const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s; });
+  const toggleUserExpanded = (id) => setExpandedUsers(prev => { return prev.has(id) ? new Set() : new Set([id]); });
   const [orderType, setOrderType] = useState("full");
   const [payMethod, setPayMethod] = useState("card");
   const [selectedFlavour, setSelectedFlavour] = useState(null);
@@ -419,7 +445,7 @@ export default function App() {
           ];
     return readSellingCache()?.stock ?? defaults;
   });
-  const [usersCollapsed, setUsersCollapsed] = useState(false);
+  const [showAddStaff,setShowAddStaff] = useState(false);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
   const [deleteConfirmId, setDeleteConfirmId] = useState(null);
   const [orderDeleteConfirmId, setOrderDeleteConfirmId] = useState(null);
@@ -582,11 +608,6 @@ export default function App() {
     load();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser?.id]);
-
-  // ── Sync authenticated changes to Supabase ──
-  useEffect(() => {
-    if (dbReady) syncUsers(users);
-  }, [users]); // eslint-disable-line
 
   // Re-fetch from Supabase whenever the user switches tabs
   useEffect(() => {
@@ -1585,15 +1606,7 @@ export default function App() {
           })()}
 
           {visibleTab === "settings" && (
-            <div key="settings" className="tab-enter theme-page-surface" style={styles.settingsPanel}>
-              <div style={styles.settingsBar}>
-                <div style={styles.totalLeft}>
-                  <span style={styles.totalLabel}>Settings</span>
-                  <span style={styles.totalSub}>{currentTime} · {todayLabel}</span>
-                </div>
-              </div>
-
-              {isAdmin && <button onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostic report</button>}
+            <div key="settings" className={`tab-enter theme-page-surface ${isAdmin ? "admin-settings" : ""}`} style={styles.settingsPanel}>
               {/* ── Staff view: only their own profile ── */}
               {!isAdmin && (
                 <>
@@ -1634,26 +1647,9 @@ export default function App() {
               {/* ── Admin view: full settings ── */}
               {isAdmin && <>
 
-              {settingsSection === "overview" ? (
-                <>
-                  <div style={styles.settingsSectionLabel}>Choose a section</div>
-                  <div style={{ display: "grid", gridTemplateColumns: "repeat(2, minmax(0, 1fr))", gap: 10 }}>
-                    {[
-                      { key: "pricing", icon: "R", title: "Pricing", text: "Pipe and refill prices", tone: "#0a0a0a", bg: "#f6f4ef" },
-                      { key: "team", icon: "👥", title: "Team & access", text: `${users.length} users and permissions`, tone: "#7c3aed", bg: "#f5f3ff" },
-                      { key: "security", icon: "🔐", title: "Security", text: "Passwords and sessions", tone: "#dc2626", bg: "#fef2f2" },
-                      { key: "business", icon: "⚙", title: "Business", text: "Payments and stock rules", tone: "#047857", bg: "#ecfdf5" },
-                    ].map((section) => (
-                      <button key={section.key} onClick={() => setSettingsSection(section.key)} style={{ border: "1px solid rgba(10,10,10,0.07)", background: section.bg, borderRadius: 16, padding: 16, minHeight: 132, textAlign: "left", cursor: "pointer", display: "flex", flexDirection: "column", justifyContent: "space-between", fontFamily: "inherit" }}>
-                        <span style={{ width: 36, height: 36, borderRadius: 11, display: "grid", placeItems: "center", background: "#fff", color: section.tone, fontSize: section.icon === "R" ? 16 : 18, fontWeight: 900, boxShadow: "0 4px 12px rgba(10,10,10,0.06)" }}>{section.icon}</span>
-                        <span><strong style={{ display: "block", color: "#0a0a0a", fontSize: 14 }}>{section.title}</strong><span style={{ display: "block", color: "#6c6a65", fontSize: 10, marginTop: 3, lineHeight: 1.4 }}>{section.text}</span></span>
-                      </button>
-                    ))}
-                  </div>
-                </>
-              ) : (
-                <button onClick={() => setSettingsSection("overview")} style={{ alignSelf: "flex-start", border: 0, background: "rgba(255,255,255,0.65)", borderRadius: 10, padding: "8px 12px", color: "#4a4843", fontWeight: 800, fontSize: 11, cursor: "pointer", fontFamily: "inherit" }}>← All settings</button>
-              )}
+              <nav className="admin-settings-tabs" aria-label="Settings sections">
+                {[['team','Staff'],['pricing','Pricing'],['security','Security'],['business','Business']].map(([key,label])=><button type="button" key={key} aria-current={settingsSection===key ? 'page' : undefined} onClick={()=>setSettingsSection(key)}><SettingsIcon name={key} /><span>{label}</span></button>)}
+              </nav>
 
               {settingsSection === "pricing" && <>
               <div style={styles.settingsSectionLabel}>Pricing</div>
@@ -1698,47 +1694,79 @@ export default function App() {
 
               {/* Users section — collapsible */}
               {settingsSection === "team" && <>
-              <div style={styles.settingsSectionLabel}>Team & access</div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 8 }}>
-                {["Staff", "Manager", "Admin"].map((role) => (
-                  <div key={role} style={{ background: "rgba(255,255,255,0.65)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 12, padding: 11 }}>
-                    <strong style={{ display: "block", fontSize: 20, color: "#0a0a0a" }}>{users.filter((u) => u.role === role && !u.paused).length}</strong>
-                    <span style={{ fontSize: 9, fontWeight: 800, color: "#6c6a65", textTransform: "uppercase" }}>{role}</span>
-                  </div>
-                ))}
-              </div>
+              <div className="admin-section-heading"><h2>Staff</h2><button type="button" aria-expanded={showAddStaff} onClick={()=>setShowAddStaff(value=>!value)}>{showAddStaff ? 'Close form' : '＋ Add staff'}</button></div>
               <div style={{ display: "flex", gap: 8 }}>
                 <input type="search" value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search name or username" style={{ ...styles.userNameInput, flex: 1 }} />
                 <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ ...styles.userRoleSelect, width: 124 }}>
                   {['All', 'Staff', 'Manager', 'Admin', 'Suspended'].map((filter) => <option key={filter}>{filter}</option>)}
                 </select>
               </div>
-              <button
-                onClick={() => setUsersCollapsed((c) => !c)}
-                style={styles.collapsibleHeader}
-              >
-                <span>Users</span>
-                <span style={styles.collapseChevron}>{usersCollapsed ? "▶" : "▼"}</span>
-              </button>
-
-              {!usersCollapsed && (
+              {(
                 <div className="expand-down" style={styles.userList}>
                   {visibleUsers.map((u, ui) => {
                     const isExpanded = expandedUsers.has(u.id);
                     return (
-                    <div key={u.id} className={`card-enter frosted-card d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
-                      <div style={{ ...styles.userRow, cursor: "pointer" }} onClick={() => toggleUserExpanded(u.id)}>
+                    <div key={u.id} className={`card-enter frosted-card admin-staff-card d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
+                      <button type="button" className="admin-staff-row" aria-expanded={isExpanded} onClick={() => toggleUserExpanded(u.id)}>
                         <div style={{ ...styles.userAvatar, background: u.paused ? "#8c8982" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}
                         </div>
                         <div style={styles.userMeta}>
                           <strong style={styles.userName}>{u.name}</strong>
-                          <span style={styles.userRole}>{u.username ? `@${u.username} · ` : ""}{u.role}{u.paused ? " · Suspended" : ""}</span>
+                          <span style={styles.userRole}>{u.username ? `@${u.username} · ` : ""}{u.role}</span>
                         </div>
+                        <span className={`admin-staff-status ${u.paused ? 'is-paused' : ''}`}><i />{u.paused ? 'Paused' : 'Active'}</span>
+                        <span className="admin-staff-chevron" aria-hidden="true">{isExpanded ? '⌃' : '›'}</span>
+                      </button>
+                      {isExpanded && (
+                        <div className="expand-down admin-staff-expanded">
+                          <div className="admin-access-heading"><span className="admin-access-label">Access</span>{staffSave.id===u.id && <span className={`admin-save-feedback ${staffSave.status}`} role={staffSave.status==='error' ? 'alert' : 'status'}>{staffSave.message}</span>}</div>
+                          <div className="admin-access-grid" style={styles.userPermissions}>
+                            <span style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
+                              POS<span className="admin-permission-locked">Always on</span>
+                            </span>
+                            {u.role !== "Admin" && [
+                              { key: "delivered", label: "Orders" },
+                              { key: "stock",     label: "Stock" },
+                              { key: "management",label: "Management" },
+                              { key: "settings",  label: "Settings" },
+                            ].map(({ key, label }) => {
+                              const allowed = u.permissions?.[key] ?? false;
+                              return isAdmin ? (
+                                <button
+                                  key={key}
+                                  role="switch" aria-checked={allowed} aria-label={label}
+                                  disabled={staffSave.status==='saving'}
+                                  onClick={()=>saveStaffAccess(u,{permissions:{...u.permissions,[key]:!allowed}})}
+                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}) }}
+                                >
+                                  {label}<span className={`admin-permission-switch ${allowed ? "is-on" : ""}`} aria-hidden="true" />
+                                </button>
+                              ) : (
+                                <span
+                                  key={key}
+                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}), cursor: "default" }}
+                                >
+                                  {label}<span className={`admin-permission-switch ${allowed ? "is-on" : ""}`} aria-hidden="true" />
+                                </span>
+                              );
+                            })}
+                            {u.role === "Admin" && [
+                              { key: "delivered", label: "Orders" },
+                              { key: "stock",     label: "Stock" },
+                              { key: "management",label: "Management" },
+                              { key: "settings",  label: "Settings" },
+                            ].map(({ key, label }) => (
+                              <span key={key} style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
+                                {label}<span className="admin-permission-locked">Always on</span>
+                              </span>
+                            ))}
+                          </div>
+                          <div className="admin-staff-actions">
                         {isAdmin && (
                           deleteConfirmId === u.id ? (
                             <div style={styles.deleteConfirmRow}>
-                              <span style={styles.deleteConfirmLabel}>Delete?</span>
+                              <span style={styles.deleteConfirmLabel}>Delete {u.name}’s account?</span>
                               <button
                                 onClick={async (e) => {
                                   e.stopPropagation();
@@ -1754,105 +1782,40 @@ export default function App() {
                               >No</button>
                             </div>
                           ) : (
-                            <div style={{ display: "flex", gap: 6 }}>
+                            <div className="admin-account-buttons">
                               <button
-                                onClick={() => { setResetPinId(resetPinId === u.id ? null : u.id); setResetPinValue(""); }}
+                                onClick={() => { setResetPinId(resetPinId === u.id ? null : u.id); setResetPinValue(""); setPasswordError(''); }}
+                                disabled={passwordBusy}
                                 style={{ ...styles.userDeleteBtn, fontSize: 14, padding: "2px 9px", borderRadius: 8 }}
-                                title="Change password"
-                              >🔑</button>
+                                className="admin-account-password" title="Change password"
+                              >Change password</button>
                               {u.id !== activeUser?.id && (
                                 <button
-                                  onClick={() => setUsers((prev) => prev.map((x) => x.id === u.id ? { ...x, paused: !x.paused } : x))}
+                                  disabled={staffSave.status==='saving'} onClick={()=>saveStaffAccess(u,{paused:!u.paused})}
                                   style={{ ...styles.userDeleteBtn, background: u.paused ? "rgba(22,163,74,0.1)" : "rgba(234,179,8,0.12)", color: u.paused ? "#16a34a" : "#b45309", borderColor: u.paused ? "rgba(22,163,74,0.25)" : "rgba(234,179,8,0.3)", fontSize: 15, padding: "2px 9px", borderRadius: 8 }}
-                                  title={u.paused ? "Unpause" : "Pause"}
+                                  className="admin-account-pause" title={u.paused ? "Unpause" : "Pause"}
                                 >
-                                  {u.paused ? "▶" : "⏸"}
+                                  {u.paused ? "Resume access" : "Pause access"}
                                 </button>
                               )}
-                              <button
-                                onClick={() => setDeleteConfirmId(u.id)}
+                              <div className="admin-account-more"><span>Account actions</span><button type="button" aria-label={`More actions for ${u.name}`} aria-expanded={staffMoreId===u.id} onClick={()=>setStaffMoreId(staffMoreId===u.id ? null : u.id)}>•••</button></div>
+                              {staffMoreId===u.id && <button
+                                className="admin-account-delete" onClick={() => setDeleteConfirmId(u.id)}
                                 style={styles.userDeleteBtn}
                               >
-                                ×
-                              </button>
+                                Delete account
+                              </button>}
                             </div>
                           )
                         )}
-                      </div>
-                      {isExpanded && (
-                        <div className="expand-down">
-                          <div style={styles.userPermissions}>
-                            <span style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
-                              ✓ POS
-                            </span>
-                            {u.role !== "Admin" && [
-                              { key: "delivered", label: "Orders Delivered" },
-                              { key: "stock",     label: "Stock" },
-                              { key: "management",label: "Management" },
-                              { key: "settings",  label: "Settings" },
-                            ].map(({ key, label }) => {
-                              const allowed = u.permissions?.[key] ?? false;
-                              return isAdmin ? (
-                                <button
-                                  key={key}
-                                  onClick={() => setUsers((prev) => prev.map((x) =>
-                                    x.id === u.id ? { ...x, permissions: { ...x.permissions, [key]: !allowed } } : x
-                                  ))}
-                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}) }}
-                                >
-                                  {allowed ? "✓" : "✕"} {label}
-                                </button>
-                              ) : (
-                                <span
-                                  key={key}
-                                  style={{ ...styles.permissionPill, ...(allowed ? styles.permissionPillOn : {}), cursor: "default" }}
-                                >
-                                  {allowed ? "✓" : "✕"} {label}
-                                </span>
-                              );
-                            })}
-                            {u.role === "Admin" && [
-                              { key: "delivered", label: "Orders Delivered" },
-                              { key: "stock",     label: "Stock" },
-                              { key: "management",label: "Management" },
-                              { key: "settings",  label: "Settings" },
-                            ].map(({ key, label }) => (
-                              <span key={key} style={{ ...styles.permissionPill, ...styles.permissionPillAlwaysOn }}>
-                                ✓ {label}
-                              </span>
-                            ))}
+
                           </div>
-                          {resetPinId === u.id && (
-                            <div style={{ display: "flex", alignItems: "center", gap: 8, marginTop: 10, paddingTop: 10, borderTop: "1px solid rgba(10,10,10,0.07)" }}>
-                              <span style={{ fontSize: 11, fontWeight: 700, color: "#6c6a65", whiteSpace: "nowrap" }}>New password</span>
-                              <input
-                                type="password"
-                                autoFocus
-                                placeholder="Enter new password"
-                                value={resetPinValue}
-                                onChange={e => setResetPinValue(e.target.value)}
-                                onKeyDown={async e => {
-                                  if (e.key === "Enter" && resetPinValue) {
-                                    await manageStaff("password", { userId: u.id, password: resetPinValue });
-                                    setStaffMessageType("success"); setStaffMessage("Password updated.");
-                                    setResetPinId(null); setResetPinValue("");
-                                  }
-                                  if (e.key === "Escape") { setResetPinId(null); setResetPinValue(""); }
-                                }}
-                                style={{ ...styles.restockInput, flex: 1 }}
-                              />
-                              <button
-                                onClick={async () => {
-                                  if (!resetPinValue) return;
-                                  try { await manageStaff("password", { userId: u.id, password: resetPinValue }); setStaffMessageType("success"); setStaffMessage("Password updated."); }
-                                  catch (error) { setStaffMessageType("error"); setStaffMessage(error.message); }
-                                  setResetPinId(null); setResetPinValue("");
-                                }}
-                                style={styles.restockConfirmBtn}
-                              >✓</button>
-                              <button onClick={() => { setResetPinId(null); setResetPinValue(""); }} style={styles.restockCancelBtn}>✕</button>
-                            </div>
-                          )}
+                          {resetPinId === u.id && <div className="admin-password-form">
+                            <label htmlFor={`staff-password-${u.id}`}>New password</label>
+                            <input id={`staff-password-${u.id}`} type="password" autoComplete="new-password" autoFocus placeholder="At least 10 characters" disabled={passwordBusy} value={resetPinValue} onChange={event=>{setResetPinValue(event.target.value);setPasswordError('');}} onKeyDown={event=>{if(event.key==='Enter')saveStaffPassword(u);if(event.key==='Escape'&&!passwordBusy){setResetPinId(null);setResetPinValue('');}}} />
+                            {passwordError && <p role="alert">{passwordError}</p>}
+                            <div><button disabled={passwordBusy} onClick={()=>{setResetPinId(null);setResetPinValue('');}}>Cancel</button><button disabled={passwordBusy || resetPinValue.length<10} onClick={()=>saveStaffPassword(u)}>{passwordBusy ? 'Updating…' : 'Update password'}</button></div>
+                          </div>}
                         </div>
                       )}
                     </div>
@@ -1863,10 +1826,10 @@ export default function App() {
                 </div>
               )}
 
-              {isAdmin && (
+              {isAdmin && showAddStaff && (
                 <div className="card-enter" style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 14, boxShadow: "0 10px 30px rgba(10,10,10,0.06)" }}>
                   <div>
-                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0a0a0a" }}>Add a new user</div>
+                    <div style={{ fontSize: 15, fontWeight: 900, color: "#0a0a0a" }}>Add staff</div>
                     <div style={{ marginTop: 3, fontSize: 11, lineHeight: 1.5, color: "#6c6a65" }}>Create secure login details and choose what this person can access.</div>
                   </div>
 
@@ -1994,10 +1957,11 @@ export default function App() {
               {settingsSection === "business" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={styles.settingsSectionLabel}>Business settings</div>
+                  <button className="admin-diagnostics" onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostic report</button>
                   {[
                     { title: "Payment methods", value: "Cash and card", note: "Available on every POS order" },
                     { title: "Coal per sale", value: `${COAL_PER_SALE} pieces`, note: "Automatically deducted from stock" },
-                    { title: "Mouth pieces per sale", value: `${MOUTHPIECES_PER_SALE} pieces`, note: "Automatically deducted from stock" },
+                    { title: "Flavour & mouthpieces", value: "Manual counts", note: "Recorded in Stock Taking" },
                     { title: "Data sync", value: supabase ? "Supabase connected" : "Not configured", note: "Protected by authenticated database policies" },
                   ].map((item) => (
                     <div key={item.title} style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 15, display: "flex", justifyContent: "space-between", gap: 14 }}>
