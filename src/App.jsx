@@ -1,3 +1,4 @@
+import { readSellingCache, cacheSellingData } from './sellingCache.js';
 import { estimatedStock } from './offlineStock.js';
 import { approvedExpenseTotal } from './expenseApprovalTotals.js';
 import { presetRange, presetIsActive } from "./managementPresets.js";
@@ -332,7 +333,8 @@ export default function App() {
   const [orders, setOrders] = useState([]);
   const [managerCurrentOrders, setManagerCurrentOrders] = useState([]);
   const [unreturnedPipes, setUnreturnedPipes] = useState([]);
-  const [prices, setPrices] = useState(DEFAULT_PRICES);
+  const [prices, setPrices] = useState(() => readSellingCache()?.prices ?? DEFAULT_PRICES);
+  useEffect(()=>{cacheSellingData({prices});},[prices]);
   const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
   const [users, setUsers] = useState([]);
@@ -408,7 +410,7 @@ export default function App() {
       { id: 11, name: "Rota Tops",    category: "equipment",  quantity: 8,  unit: "units",   lowThreshold: 2 },
       { id: 12, name: "Stove",        category: "equipment",  quantity: 2,  unit: "units",   lowThreshold: 1 },
           ];
-    return defaults;
+    return readSellingCache()?.stock ?? defaults;
   });
   const [usersCollapsed, setUsersCollapsed] = useState(false);
   const [equipmentCollapsed, setEquipmentCollapsed] = useState(false);
@@ -682,6 +684,7 @@ export default function App() {
 
   const confirmOrder = useCallback(async () => {
     if (!selectedFlavour) return;
+    if (!navigator.onLine && !readSellingCache()?.stockAt) {setSyncMessage('Connect once to load confirmed stock before taking offline sales.');return;}
     if (orderType === "full" && (hookahPipeQty <= 1 || rotasQty <= 1 || rotaTopsQty <= 1 || kopsQty <= 1)) return;
 
     const order = {

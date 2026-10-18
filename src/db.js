@@ -1,3 +1,4 @@
+import { cacheSellingData } from './sellingCache.js';
 import { salePayload } from './salePersistence.js'
 import { supabase } from './supabase'
 
@@ -30,11 +31,13 @@ export async function fetchStock() {
   if (!ok()) return null
   const { data, error } = await supabase.from('pos_stock').select('*')
   if (error) { console.error('fetchStock', error); return null }
-  return data.map(r => ({
+  const stock = data.map(r => ({
     id: r.id, name: r.name, category: r.category,
     quantity: r.quantity, unit: r.unit, lowThreshold: r.low_threshold,
     ...(r.sub_items ? { subItems: r.sub_items } : {}),
   }))
+  cacheSellingData({stock,stockAt:new Date().toISOString()})
+  return stock
 }
 
 export async function updateStockItem(item) {
