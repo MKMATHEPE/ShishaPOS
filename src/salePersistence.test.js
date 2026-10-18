@@ -61,3 +61,19 @@ test('failed local cleanup is safely retried without duplicating the remote sale
 test('automatic retry delay increases and stays bounded at one minute',()=>{
  assert.deepEqual([0,1,2,3,4,99].map(syncRetryDelay),[5000,10000,20000,40000,60000,60000]);
 });
+
+test('expired session keeps orders until a later authenticated sync succeeds',async()=>{
+ const pending=new Map([[order.id,order]]);let valid=false;
+ const args={ownerId:'staff-a',list:async()=>[...pending.values()],send:async()=>{if(!valid)throw Error('Session expired');return true;},remove:async id=>pending.delete(id),onSynced:()=>{}};
+ assert.equal(await syncPendingSales(args),0);assert.equal(pending.size,1);
+ valid=true;assert.equal(await syncPendingSales(args),1);assert.equal(pending.size,0);
+});
+
+test('reopened app can sync a serialized queue after a lost response',async()=>{
+ const disk=[];const committed=new Set();let first=true;
+ const send=async sale=>{committed.add(sale.id);if(first){first=false;throw Error('Lost response');}return true;};
+ await persistSale(order,{online:true,queue:async sale=>disk.push(JSON.stringify(sale)),send,remove:async()=>{disk.length=0;}});
+ const reopened=JSON.parse(disk[0]);
+ assert.equal(await syncPendingSales({ownerId:'staff-a',list:async()=>[reopened],send,remove:async()=>{disk.length=0;},onSynced:()=>{}}),1);
+ assert.equal(committed.size,1);assert.equal(disk.length,0);
+});
