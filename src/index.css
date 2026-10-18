@@ -880,3 +880,29 @@ html[data-theme="dark"] .app-shell :is(.order-type-card, .available-pipes-card) 
 }
 .app-shell .app-footer .bottom-nav-tab[aria-current="page"] span { color: #f6f4ef !important; }
 .app-shell .app-footer .bottom-nav-tab[aria-current="page"] svg { stroke: #f6f4ef; }
+
+/* POS ordering panel: compact controls and a quiet photographic grid. */
+.available-pipes-card .pipe-availability-heading { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+.pipe-availability-value { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.pipe-availability-value strong { font-size: 13px; }
+.pipe-availability-value i { width: 6px; height: 6px; border-radius: 50%; background: #16c35a; margin-right: 4px; }
+.pipe-availability-value i.is-low { background: #dc2626; }
+.pipe-availability-track { height: 2px; border-radius: 2px; background: #d8d4cb; overflow: hidden; margin-top: 10px; }
+.pipe-availability-track > div { height: 100%; border-radius: inherit; }
+.app-shell .available-pipes-card { padding: 12px 14px !important; border-radius: 20px !important; }
+.pos-order-controls { display: grid; grid-template-columns: minmax(0,1fr) minmax(0,1fr); gap: 12px; }
+.pos-control-column { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.pos-control-column + .pos-control-column { border-left: 1px solid var(--cp-line); padding-left: 12px; }
+.pos-segments { min-width: 0; gap: 2px !important; padding: 3px !important; }
+.pos-segments button { min-width: 0; min-height: 48px !important; padding: 5px 3px !important; font-size: 11px !important; }
+.order-type-card .flavour-pop { border-radius: 14px !important; }
+.order-type-card .flavour-pop::after { display: none; }
+.order-type-card .flavour-pop[aria-pressed="true"] { outline: 1px solid #353530; outline-offset: 2px; }
+.order-type-card .flavour-pop[aria-pressed="true"]::after { display: grid; }
+html[data-theme="dark"] .order-type-card .flavour-pop[aria-pressed="true"] { outline-color: #f6f4ef; }
+@media (max-width: 340px) {
+  .available-pipes-card .pipe-availability-heading { font-size: 10px; }
+  .pipe-availability-value strong { font-size: 11px; }
+  .pos-order-controls { gap: 8px; }
+  .pos-control-column + .pos-control-column { padding-left: 8px; }
+}

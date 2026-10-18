@@ -968,42 +968,29 @@ export default function App() {
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
         <div className="available-pipes-card" style={styles.availabilityCard}>
-          <span style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#6c6a65" }}>Available pipes</span>
-          <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0a0a0a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
-          <div style={{ height: 5, borderRadius: 99, background: "#d8d4cb", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
+          <div className="pipe-availability-heading"><span>Available pipes</span><span className="pipe-availability-value"><i className={hookahPipeQty <= 2 ? 'is-low' : ''} aria-hidden="true" /><strong>{hookahPipeQty} / {hookahPipeQty + pipesOut}</strong> available</span></div>
+          <div className="pipe-availability-track"><div style={{width: `${hookahPipeQty + pipesOut ? hookahPipeQty / (hookahPipeQty + pipesOut) * 100 : 0}%`, background: hookahPipeQty <= 2 ? '#dc2626' : '#16c35a'}} /></div>
         </div>
         <div className="theme-page-surface order-type-card" style={styles.salePanel}>
-          <div style={styles.sectionHeaderLabel}>Order type</div>
-          <div style={styles.toggleRow}>
-            <div style={styles.toggleGroup}>
-              {["full", "refill"].map((t) => (
-                <button
-                  key={t}
-                  onClick={() => setOrderType(t)}
-                  style={{ ...styles.toggleBtn, ...(orderType === t ? styles.toggleActive : {}) }}
-                >
-                  <span>{t === "full" ? "New Pipe" : "Refill"}</span>
-                  <strong>{formatCurrency(prices[t])}</strong>
-                </button>
-              ))}
+          <div className="pos-order-controls">
+            <div className="pos-control-column"><div style={styles.sectionHeaderLabel}>Order type</div>
+              <div className="pos-segments" role="group" aria-label="Order type" style={styles.toggleGroup}>
+                {["full", "refill"].map(t => <button key={t} aria-pressed={orderType === t} onClick={()=>setOrderType(t)} style={{...styles.toggleBtn,...(orderType === t ? styles.toggleActive : {})}}><span>{t === "full" ? "New Pipe" : "Refill"}</span><strong>{formatCurrency(prices[t])}</strong></button>)}
+              </div>
             </div>
-            <div style={styles.toggleGroup}>
-              {["card", "cash"].map((p) => (
-                <button
-                  key={p}
-                  onClick={() => setPayMethod(p)}
-                  style={{ ...styles.toggleBtn, ...(payMethod === p ? styles.toggleActive : {}) }}
-                >
-                  <span>{p === "card" ? "Card" : "Cash"}</span>
-                  <strong>{p === "card" ? "💳" : "💵"}</strong>
-                </button>
-              ))}
+            <div className="pos-control-column"><div style={styles.sectionHeaderLabel}>Payment</div>
+              <div className="pos-segments" role="group" aria-label="Payment method" style={styles.toggleGroup}>
+                {["card", "cash"].map(method => <button key={method} aria-pressed={payMethod === method} onClick={()=>setPayMethod(method)} style={{...styles.toggleBtn,...(payMethod === method ? styles.toggleActive : {})}}>
+                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.7" aria-hidden="true">{method === "card" ? <><rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 10h18"/></> : <><rect x="2" y="6" width="20" height="12" rx="1.5"/><circle cx="12" cy="12" r="3"/><path d="M5 9h1M18 15h1"/></>}</svg>
+                  <span>{method === "card" ? "Card" : "Cash"}</span>
+                </button>)}
+              </div>
             </div>
           </div>
 
           <div style={styles.panelHeader}>
             <div style={styles.sectionHeaderLabel}>Flavour</div>
-            <div style={styles.panelHint}>Select one item, then confirm</div>
+            <div style={styles.panelHint}>Choose one</div>
           </div>
           <div style={styles.flavourGrid}>
             {FLAVOURS.map((f, fi) => (
@@ -1018,7 +1005,7 @@ export default function App() {
                   color: flash === f.id ? "#fff" : selectedFlavour?.id === f.id ? "#fff" : "#0a0a0a",
                   border: `1px solid ${selectedFlavour?.id === f.id ? "#f6f4ef" : "#292929"}`,
                   transform: "none",
-                  boxShadow: selectedFlavour?.id === f.id ? "0 0 0 2px #f6f4ef, 0 0 0 3px #0a0a0a" : undefined,
+                  boxShadow: "none",
                   transition: "box-shadow 140ms ease, border-color 140ms ease",
                 }}
               >
@@ -1047,9 +1034,9 @@ export default function App() {
               >
                 <span>{saleSaving ? "Saving…" : blocked
                   ? `No ${blockedItem} available · ${selectedFlavour.name}`
-                  : `Confirm order · ${selectedFlavour.name}`
+                  : `Confirm · ${selectedFlavour.name}`
                 }</span>
-                {!blocked && <strong>{formatCurrency(prices[orderType])} ›</strong>}
+                {!blocked && <strong>{formatCurrency(prices[orderType])} →</strong>}
               </button>
             );
           })()}
