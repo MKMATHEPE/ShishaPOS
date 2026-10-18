@@ -29,7 +29,6 @@ export default function ManagementOverview({orders,expenses,from,to,timeFrom,tim
   const hourMax=Math.max(1,...hours.map(h=>h.count));
   const percent=value=>metrics.orders?Math.round(value/metrics.orders*100):0;
   return <div className="management-overview" aria-busy={loading}>
-    <p className="overview-comparison">Compared with {previous.from} – {previous.to} · same weekdays and hours{loading?' · Updating…':''}</p>
     <section className="overview-card overview-performance-summary"><h2>Performance summary</h2><div className="overview-kpis">{[
       ['Revenue',money(metrics.revenue),before?changeLabel(metrics.revenue,before.revenue):'Loading comparison…'],
       ['Orders',metrics.orders,before?changeLabel(metrics.orders,before.orders):'Loading comparison…'],

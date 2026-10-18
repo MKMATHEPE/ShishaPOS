@@ -73,7 +73,7 @@ export default function StockTaking({ stock, refreshStock, pendingOrders, isAdmi
   const formatTime = value => new Date(value).toLocaleString('en-ZA', { timeZone: 'Africa/Johannesburg', dateStyle: 'medium', timeStyle: 'short' });
   return <section className="stock-taking">
     <div className="stock-taking-heading"><h2>Remaining stock</h2><span>Physical count</span></div>
-    <p>Record what is physically remaining. Add stock purchases as expenses in Management → Finance.</p>
+    <p>Record what is physically remaining.</p>
     {pendingOrders > 0 && <p role="status">Sync offline orders before confirming a count.</p>}
     {message && <p role="status">{message}</p>}
     {!mode && <><div className="stock-taking-available"><h3>Available stock</h3>{lines.filter(item=>item.category!=='equipment').map(item=><div className="stock-taking-available-row" key={item.key}><span className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span><strong>{item.quantity.toFixed(2)} {item.unit}</strong></div>)}{isAdmin && <details><summary>Equipment inventory</summary>{lines.filter(item=>item.category==='equipment').map(item=><p key={item.key}>{item.name}: {item.quantity} {item.unit}</p>)}</details>}</div><div className="stock-taking-actions"><button disabled={loading || busy} onClick={()=>start('count')}>Record remaining stock</button></div></>}

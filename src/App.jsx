@@ -1515,15 +1515,6 @@ export default function App() {
 
             return (
               <div key="stock" className="tab-enter theme-page-surface" style={styles.stockPanel}>
-                <div style={styles.settingsBar}>
-                  <div style={styles.totalLeft}>
-                    <span style={styles.totalLabel}>Stock</span>
-                    <span style={styles.totalSub}>
-                      {lowCount > 0 ? `⚠ ${lowCount} item${lowCount > 1 ? "s" : ""} need attention` : "All items stocked"} · {todayLabel}
-                    </span>
-                  </div>
-                </div>
-
                 <div role="tablist" aria-label="Stock sections" style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
                   {[...(isAdmin ? [{ id: "overview", label: "Overview" }] : []), { id: "taking", label: "Stock Taking" }].map(view => (
                     <button role="tab" aria-selected={(isAdmin ? stockView : "taking") === view.id} aria-controls={`stock-${view.id}`} id={`stock-tab-${view.id}`} key={view.id} onClick={() => setStockView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: (isAdmin ? stockView : "taking") === view.id ? "#0a0a0a" : "transparent", color: (isAdmin ? stockView : "taking") === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
