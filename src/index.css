@@ -1098,3 +1098,21 @@ html[data-theme="dark"] .admin-save-feedback.saved { color: #79d59f; }
 .admin-password-form button { padding: 8px 12px; border: 1px solid var(--cp-line); border-radius: 10px; background: var(--cp-stone); color: var(--cp-ink); font: 600 11px Arial,sans-serif; }
 .admin-password-form button:last-child { background: var(--cp-ink); color: var(--cp-paper); }
 .admin-password-form button:disabled { opacity: .45; }
+.sales-chart-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.sales-chart-toolbar > div { display: flex; gap: 3px; border: 1px solid var(--cp-line); padding: 3px; border-radius: 10px; }
+.sales-chart-toolbar button { min-height: 36px; padding: 5px 10px; border: 0; border-radius: 7px; background: transparent; color: var(--cp-muted); font: 600 11px Arial,sans-serif; cursor: pointer; }
+.sales-chart-toolbar button[aria-pressed="true"] { background: var(--cp-ink); color: var(--cp-paper); }
+.sales-performance .sales-current { stroke: var(--cp-ink) !important; }
+.sales-performance .sales-prior { stroke: var(--cp-muted) !important; }
+.sales-performance .sales-point { fill: var(--cp-ink) !important; }
+.sales-performance .sales-axis { stroke: var(--cp-line) !important; }
+.sales-performance svg g[role="button"] { cursor: pointer; }
+.sales-performance svg g:focus-visible .sales-point { stroke: var(--cp-muted); stroke-width: 5; }
+.sales-performance .sales-point-detail { min-height: 26px; margin: 6px 0; font-size: 11px; }
+.sales-insights { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 8px 0 12px; }
+.sales-insights > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.sales-insights > div + div { border-left: 1px solid var(--cp-line); padding-left: 12px; }
+.sales-insights span { font-size: 10px; color: var(--cp-muted); }
+.sales-insights strong { font: 600 12px Arial,sans-serif; color: var(--cp-ink); }
+.sales-daily-row { display: grid; grid-template-columns: 1fr auto 1fr; width: 100%; gap: 8px; text-align: left; min-height: 40px; border: 0; border-top: 1px solid var(--cp-line); background: transparent; color: var(--cp-ink); font: 10px Arial,sans-serif; cursor: pointer; }
+.sales-daily-row > span:last-child { text-align: right; color: var(--cp-muted); }
