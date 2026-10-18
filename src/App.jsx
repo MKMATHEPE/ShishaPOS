@@ -215,11 +215,6 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     setMessage(ok ? "Missing sale added." : "Could not add the sale.");
     if (ok) { setSale(current => ({ ...current, amount: "", description: "", reason: "" })); setActiveAction(null); }
   };
-  const startPayment = (kind, row = null) => {
-    setEntry(current => ({ ...current, kind, profileId: row?.user.id ?? "", amount: row ? String(kind === "reimbursement" ? row.reimbursementDue : row.profitDue) : "", date: localToday() }));
-    setActiveAction(kind);
-    setMessage("");
-  };
   const refundsPaid = reimbursements.reduce((sum, item) => sum + item.amount, 0);
   const profitPaid = payouts.reduce((sum, item) => sum + item.amount, 0);
   const downloadReport = () => {
@@ -266,8 +261,6 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
 
     {isAdmin && <div className="finance-action-grid">
       {isAdmin && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
-      {isAdmin && <button onClick={() => startPayment("reimbursement")}>Pay someone back</button>}
-      {isAdmin && <button onClick={() => startPayment("partner_payout")}>Pay partner</button>}
     </div>}
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
