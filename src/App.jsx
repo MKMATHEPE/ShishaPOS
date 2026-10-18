@@ -237,7 +237,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
       {[
         ["Received", totalRevenue, "#16a34a"], ["Spent", expenseTotal, "#dc2626"], ["Available", businessAvailable, businessAvailable >= 0 ? "#0a0a0a" : "#dc2626"],
-      ].map(([name, value, color]) => <div key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
+      ].map(([name, value, color]) => <div className="frosted-card" key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
     </div>
 
     {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
@@ -1314,7 +1314,7 @@ export default function App() {
                 const rowStyle = anyOut ? styles.stockRowCritical : anyLow ? styles.stockRowLow : styles.stockRow;
                 return (
                   <div key={item.id}>
-                    <div style={{ ...rowStyle, cursor: "pointer" }} onClick={() => toggleStockExpand(item.id)}>
+                    <div className="frosted-card" style={{ ...rowStyle, cursor: "pointer" }} onClick={() => toggleStockExpand(item.id)}>
                       <div style={styles.stockInfo}>
                         <span style={styles.stockName} className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span>
                         <div style={styles.stockMeta}>
@@ -1398,7 +1398,7 @@ export default function App() {
                 };
 
                 return (
-                  <div key={item.id} style={{ ...rowStyle, alignItems: "stretch", flexDirection: "column" }}>
+                  <div className="frosted-card" key={item.id} style={{ ...rowStyle, alignItems: "stretch", flexDirection: "column" }}>
                     <label style={styles.equipmentEditField}>
                       <span>Name</span>
                       <input disabled={equipmentSaving} value={equipmentDraft.name} onChange={(event) => setEquipmentDraft(draft => ({ ...draft, name: event.target.value }))} style={styles.equipmentEditInput} />
@@ -1423,7 +1423,7 @@ export default function App() {
               }
 
               return (
-                <div key={item.id} style={rowStyle}>
+                <div className="frosted-card" key={item.id} style={rowStyle}>
                   <div style={styles.stockInfo}>
                     <span style={styles.stockName} className="stock-item-name"><StockItemPhoto name={item.name} />{item.name}</span>
                     <div style={styles.stockMeta}>
@@ -1562,7 +1562,7 @@ export default function App() {
               {!isAdmin && (
                 <>
                   <div style={styles.settingsSectionLabel}>My Profile</div>
-                  <div style={styles.userCard}>
+                  <div className="frosted-card" style={styles.userCard}>
                     <div style={styles.userRow}>
                       <div style={styles.userAvatar}>
                         {activeUser.name.charAt(0).toUpperCase()}
@@ -1623,7 +1623,7 @@ export default function App() {
               <div style={styles.settingsSectionLabel}>Pricing</div>
 
               <div style={styles.settingsGrid}>
-                <div className="card-enter d-0" style={styles.settingCard}>
+                <div className="card-enter d-0 frosted-card" style={styles.settingCard}>
                   <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
                   <input
                     id="new-pipe-price"
@@ -1640,7 +1640,7 @@ export default function App() {
                     </div>
                   )}
                 </div>
-                <div className="card-enter d-1" style={styles.settingCard}>
+                <div className="card-enter d-1 frosted-card" style={styles.settingCard}>
                   <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
                   <input
                     id="refill-price"
@@ -1690,7 +1690,7 @@ export default function App() {
                   {visibleUsers.map((u, ui) => {
                     const isExpanded = expandedUsers.has(u.id);
                     return (
-                    <div key={u.id} className={`card-enter d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
+                    <div key={u.id} className={`card-enter frosted-card d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
                       <div style={{ ...styles.userRow, cursor: "pointer" }} onClick={() => toggleUserExpanded(u.id)}>
                         <div style={{ ...styles.userAvatar, background: u.paused ? "#8c8982" : undefined }}>
                           {u.name.charAt(0).toUpperCase()}

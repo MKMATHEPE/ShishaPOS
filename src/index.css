@@ -906,3 +906,16 @@ html[data-theme="dark"] .order-type-card .flavour-pop[aria-pressed="true"] { out
   .pos-order-controls { gap: 8px; }
   .pos-control-column + .pos-control-column { padding-left: 8px; }
 }
+
+/* Shared frosted surfaces; apply blur to the backdrop, never card contents. */
+.app-shell {
+  --cp-frosted-surface: rgba(246, 244, 239, .65);
+}
+html[data-theme="dark"] .app-shell {
+  --cp-frosted-surface: rgba(23, 23, 22, .6);
+}
+html .app-shell :is(.frosted-card, .order-type-card, .available-pipes-card, .order-card, .overview-card, .finance-form-card, .expenses-list, .stock-taking, .stock-row-editor, .purchase-planner) {
+  background: var(--cp-frosted-surface) !important;
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+}
