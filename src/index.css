@@ -869,3 +869,14 @@ html:not([data-theme="dark"]) .app-shell :is(.order-type-card, .available-pipes-
 html[data-theme="dark"] .app-shell :is(.order-type-card, .available-pipes-card) {
   background: rgba(23, 23, 22, .6) !important;
 }
+
+.app-shell .app-footer { background: #0a0a0a !important; border-top-color: #262626 !important; }
+.app-shell .app-footer .bottom-nav-tab span { color: #aaa79f !important; }
+.app-shell .app-footer .bottom-nav-tab svg { stroke: #aaa79f; }
+.app-shell .app-footer .bottom-nav-tab { border-radius: 999px !important; box-shadow: inset 0 0 0 1px transparent; }
+.app-shell .app-footer .bottom-nav-tab[aria-current="page"] {
+  background: linear-gradient(180deg, #292927, #20201e) !important;
+  box-shadow: inset 0 0 0 1px #3b3b37, 0 2px 6px rgba(0,0,0,.2) !important;
+}
+.app-shell .app-footer .bottom-nav-tab[aria-current="page"] span { color: #f6f4ef !important; }
+.app-shell .app-footer .bottom-nav-tab[aria-current="page"] svg { stroke: #f6f4ef; }

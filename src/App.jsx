@@ -2009,7 +2009,7 @@ export default function App() {
           </div>
         )}
 
-        <footer style={styles.footer}>
+        <footer className="app-footer" style={styles.footer}>
           <div style={styles.footerBar}>
           {[
             { key: "pos",        label: "POS",        icon: "pos",        badge: currentOrders.length,   access: true },
