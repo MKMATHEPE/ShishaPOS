@@ -1199,7 +1199,7 @@ export default function App() {
                 </div>
               </div>
 
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
+              <div style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
                 {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
                   <button role="tab" aria-selected={managementView === view.id} key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
                 ))}
@@ -1474,19 +1474,19 @@ export default function App() {
                   </div>
                 </div>
 
-                <div role="tablist" aria-label="Stock sections" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
-                  {[{ id: "overview", label: "Overview" }, { id: "taking", label: "Stock Taking" }].map(view => (
-                    <button role="tab" aria-selected={stockView === view.id} aria-controls={`stock-${view.id}`} id={`stock-tab-${view.id}`} key={view.id} onClick={() => setStockView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: stockView === view.id ? "#0a0a0a" : "transparent", color: stockView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                <div role="tablist" aria-label="Stock sections" style={{ display: "grid", gridTemplateColumns: isAdmin ? "1fr 1fr" : "1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
+                  {[...(isAdmin ? [{ id: "overview", label: "Overview" }] : []), { id: "taking", label: "Stock Taking" }].map(view => (
+                    <button role="tab" aria-selected={(isAdmin ? stockView : "taking") === view.id} aria-controls={`stock-${view.id}`} id={`stock-tab-${view.id}`} key={view.id} onClick={() => setStockView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: (isAdmin ? stockView : "taking") === view.id ? "#0a0a0a" : "transparent", color: (isAdmin ? stockView : "taking") === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
                   ))}
                 </div>
-                <div role="tabpanel" id="stock-taking" aria-labelledby="stock-tab-taking" style={{ display: stockView === "taking" ? "block" : "none" }}>
+                <div role="tabpanel" id="stock-taking" aria-labelledby="stock-tab-taking" style={{ display: !isAdmin || stockView === "taking" ? "block" : "none" }}>
                 <StockTaking isAdmin={isAdmin} stock={stock} pendingOrders={pendingOrderCount} refreshStock={async () => {
                   const latest = await fetchStock();
                   if (latest) setStock(latest);
                   return latest;
                 }} />
                 </div>
-                <div role="tabpanel" id="stock-overview" aria-labelledby="stock-tab-overview" style={{ display: stockView === "overview" ? "flex" : "none", flexDirection: "column", gap: 10 }}>
+                {isAdmin && <div role="tabpanel" id="stock-overview" aria-labelledby="stock-tab-overview" style={{ display: stockView === "overview" ? "flex" : "none", flexDirection: "column", gap: 10 }}>
                 <div style={{ display: "flex", gap: 6, overflowX: "auto", paddingBottom: 2 }}>
                   {["Attention", "All", "Flavours", "Consumables", ...(isAdmin ? ["Fixed Assets"] : [])].map((category) => <button key={category} onClick={() => setStockCategory(category)} style={{ border: "1px solid rgba(10,10,10,0.08)", background: stockCategory === category ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: stockCategory === category ? "#fff" : "#6c6a65", borderRadius: 20, padding: "7px 11px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit", whiteSpace: "nowrap" }}>{category}</button>)}
                 </div>
@@ -1543,7 +1543,7 @@ export default function App() {
                 )}
 
 
-                </div>
+                </div>}
               </div>
             );
           })()}
