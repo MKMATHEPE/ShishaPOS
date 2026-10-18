@@ -120,7 +120,11 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}
     {!visible.length && <p>No matching expenses.</p>}
-    {pageExpenses.filter(expense=>expense.status!=='paid').map(renderExpense)}
+    {pageExpenses.some(expense=>expense.status==='pending') && <details className="paid-expenses-group" key={`pending-${filter}-${currentPage}`}>
+      <summary>Pending approval <span>{pageExpenses.filter(expense=>expense.status==='pending').length}{totalPages>1?' on this page':''}</span></summary>
+      {pageExpenses.filter(expense=>expense.status==='pending').map(renderExpense)}
+    </details>}
+    {pageExpenses.filter(expense=>expense.status!=='paid' && expense.status!=='pending').map(renderExpense)}
     {pageExpenses.some(expense=>expense.status==='paid') && <details className="paid-expenses-group" key={`paid-${filter}-${currentPage}`}>
       <summary>Paid expenses <span>{pageExpenses.filter(expense=>expense.status==='paid').length}{totalPages>1?' on this page':''}</span></summary>
       {pageExpenses.filter(expense=>expense.status==='paid').map(renderExpense)}
