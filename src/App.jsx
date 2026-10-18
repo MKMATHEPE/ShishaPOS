@@ -972,7 +972,7 @@ export default function App() {
           <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0a0a0a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
           <div style={{ height: 5, borderRadius: 99, background: "#d8d4cb", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>
         </div>
-        <div className="theme-page-surface" style={styles.salePanel}>
+        <div className="theme-page-surface order-type-card" style={styles.salePanel}>
           <div style={styles.sectionHeaderLabel}>Order type</div>
           <div style={styles.toggleRow}>
             <div style={styles.toggleGroup}>
