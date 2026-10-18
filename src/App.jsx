@@ -1,3 +1,4 @@
+import { blocksSignOut } from './offlineQueueStatus.js';
 import { readSellingCache, cacheSellingData } from './sellingCache.js';
 import { estimatedStock } from './offlineStock.js';
 import { approvedExpenseTotal } from './expenseApprovalTotals.js';
@@ -448,6 +449,7 @@ export default function App() {
   const [financeJournal, setFinanceJournal] = useState({ partners: [], transactions: [], manualSales: [], lockedThrough: null });
   const [isOnline, setIsOnline] = useState(() => navigator.onLine);
   const [pendingOrderCount, setPendingOrderCount] = useState(0);
+  const [lastSyncedAt, setLastSyncedAt] = useState(() => readSellingCache()?.lastSyncedAt ?? null);
   const [syncingOrders, setSyncingOrders] = useState(false);
   const [syncMessage, setSyncMessage] = useState("");
   const [sessionDates, setSessionDates] = useState([]);
@@ -467,6 +469,7 @@ export default function App() {
       }});
       if (synced) { const latest = await fetchStock(); if (latest) setStock(latest); }
       const remaining = await getOfflineOrders();
+      if (synced > 0) { const time = new Date().toISOString(); setLastSyncedAt(time); cacheSellingData({lastSyncedAt:time}); }
       setPendingOrderCount(remaining.length);
       if (remaining.some(order => !order.ownerId || order.ownerId !== activeUser.id)) setSyncMessage('Some queued sales belong to another user or need ownership recovery. They remain safely on this device.');
       else if (remaining.length) setSyncMessage(`${remaining.length} sale${remaining.length === 1 ? '' : 's'} still waiting. Automatic retry is enabled.`);
@@ -717,6 +720,7 @@ export default function App() {
       }
 
       if (result.saved) {
+        const time = new Date().toISOString(); setLastSyncedAt(time); cacheSellingData({lastSyncedAt:time});
         const latest = await fetchStock();
         if (latest) setStock(latest);
       }
@@ -958,7 +962,7 @@ export default function App() {
             <div style={{ display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.7)", backdropFilter: "blur(8px)", WebkitBackdropFilter: "blur(8px)", border: "1px solid rgba(255,255,255,0.85)", borderRadius: 10, padding: "8px 12px" }}>
               <span style={{ fontSize: 13, fontWeight: 700, color: "#0a0a0a" }}>Switch user?</span>
               <button
-                onClick={async () => { await signOut(); setActiveUser(null); setUsers([]); setDbReady(false); setConfirmLogout(false); }}
+                onClick={async () => { if (blocksSignOut(await getOfflineOrders(), activeUser?.id, saleRunning.current, orderSyncRunning.current)) {setSyncMessage('Sync your queued sales before switching users.');setConfirmLogout(false);return;} await signOut(); setActiveUser(null); setUsers([]); setDbReady(false); setConfirmLogout(false); }}
                 style={{ fontSize: 12, fontWeight: 800, color: "#fff", background: "#0a0a0a", border: "none", borderRadius: 7, padding: "5px 12px", cursor: "pointer", fontFamily: "inherit" }}
               >Yes</button>
               <button
@@ -980,11 +984,13 @@ export default function App() {
 
         <PullToRefresh style={styles.mainContent}>
           {cancellationError && <div role="alert" style={{ padding: 12, background: "#fef2f2", color: "#991b1b", borderRadius: 12 }}>{cancellationError}</div>}
-          {(!isOnline || pendingOrderCount > 0 || syncMessage) && (
+          {(!isOnline || pendingOrderCount > 0 || syncMessage || lastSyncedAt) && (
             <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#f6f4ef" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#d8d4cb" : "#a7f3d0" }}>
               <div>
-                <strong>{!isOnline ? "Offline mode" : pendingOrderCount > 0 ? `${pendingOrderCount} waiting to sync` : syncMessage}</strong>
+                <strong>{!isOnline ? "Offline mode" : pendingOrderCount > 0 ? `${pendingOrderCount} waiting to sync` : syncMessage || "All sales synced"}</strong>
                 <span>{!isOnline ? " Orders stay on this device. Stock estimates await server confirmation." : pendingOrderCount > 0 ? " Stock estimates await server confirmation." : ""}</span>
+                {pendingOrderCount > 0 && syncMessage && <span role="status">{syncMessage}</span>}
+                {lastSyncedAt && <span>Last synced: {new Date(lastSyncedAt).toLocaleString('en-ZA', {timeZone:'Africa/Johannesburg',dateStyle:'short',timeStyle:'short'})}</span>}
               </div>
               {isOnline && pendingOrderCount > 0 && <button onClick={syncOfflineOrders} disabled={syncingOrders} style={styles.syncButton}>{syncingOrders ? "Syncing…" : "Sync now"}</button>}
             </div>
@@ -1975,7 +1981,7 @@ export default function App() {
                   <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16 }}>
                     <strong style={{ color: "#0a0a0a", fontSize: 14 }}>Active sessions</strong>
                     <p style={{ color: "#6c6a65", fontSize: 10, lineHeight: 1.5 }}>Sign out this account on every device. You will need to sign in again.</p>
-                    <button onClick={async () => { await signOutEverywhere(); setActiveUser(null); setUsers([]); setDbReady(false); }} style={{ width: "100%", minHeight: 42, border: "1px solid rgba(220,38,38,0.2)", background: "#fef2f2", color: "#b91c1c", borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Sign out all devices</button>
+                    <button onClick={async () => { if (blocksSignOut(await getOfflineOrders(), activeUser?.id, saleRunning.current, orderSyncRunning.current)) {setSecurityMessage('Sync your queued sales before signing out.');return;} await signOutEverywhere(); setActiveUser(null); setUsers([]); setDbReady(false); }} style={{ width: "100%", minHeight: 42, border: "1px solid rgba(220,38,38,0.2)", background: "#fef2f2", color: "#b91c1c", borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Sign out all devices</button>
                   </div>
                 </div>
               )}
