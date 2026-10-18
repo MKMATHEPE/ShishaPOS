@@ -127,7 +127,7 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
+function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, currentUserId, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -146,7 +146,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   const payouts = transactions.filter(item => item.kind === "partner_payout");
   const partnerTotal = partners.reduce((sum, item) => sum + Number(item.profitShare || 0), 0);
   const sharesValid = partnerTotal === 0 || Math.abs(partnerTotal - 100) < 0.01;
-  const personName = id => users.find(user => user.id === id)?.name ?? "Removed user";
+  const personName = id => users.find(user => user.id === id)?.name ?? (allExpenses ?? expenses).find(expense=>expense.paidBy===id && expense.paidByName)?.paidByName ?? "Name unavailable";
   const rows = users.map(user => {
     const spent = expenses.filter(item => item.paidBy === user.id && !(item.status === 'paid' && !item.paidAt)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const refunded = reimbursements.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
@@ -292,7 +292,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
 
     {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
@@ -307,7 +307,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <input placeholder="Note (optional)" value={entry.description} onChange={event => setEntry(current => ({ ...current, description: event.target.value }))} style={field} />
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
       </>}
-      {activeAction === "reimbursement" && entry.profileId && <ExpensesList key={entry.profileId} title={`${personName(entry.profileId)} — unpaid expenses`} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={unpaidExpenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+      {activeAction === "reimbursement" && entry.profileId && <ExpensesList currentUserId={currentUserId} key={entry.profileId} title={`${personName(entry.profileId)} — unpaid expenses`} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={unpaidExpenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}
 
@@ -1259,6 +1259,7 @@ export default function App() {
                   dateFrom={managementDateFrom}
                   dateTo={managementDateTo}
                   isAdmin={isAdmin}
+                  currentUserId={activeUser.id}
                   onExpense={async expense => {
                     const now = new Date();
                     const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00+02:00`);

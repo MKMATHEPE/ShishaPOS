@@ -211,7 +211,11 @@ export async function fetchExpenses() {
     data.push(...page)
     if (page.length < 500) break
   }
+  const {data:people,error:peopleError} = await supabase.rpc('get_pos_expense_people');
+  if (peopleError) console.error('fetchExpensePeople',peopleError);
+  const names = new Map((people ?? []).map(person=>[person.id,person.name]));
   return data.map(r => ({
+    paidByName:names.get(r.paid_by), submittedByName:names.get(r.submitted_by), approvedByName:names.get(r.approved_by), paymentByName:names.get(r.payment_by),
     id: r.id, category: r.category, qty: r.qty,
     amount: Number(r.amount), time: r.time, shiftId: r.shift_id ?? null,
     description: r.description ?? '', paidBy: r.paid_by ?? null,
