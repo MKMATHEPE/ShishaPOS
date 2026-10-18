@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {salePayload,persistSale,syncPendingSales} from './salePersistence.js';
+import {salePayload,persistSale,syncPendingSales,syncRetryDelay} from './salePersistence.js';
 const order={id:123,flavour:{id:'lk',name:'Lady Killer'},type:'full',payment:'cash',price:170,time:'2026-10-13T22:30:00Z',soldBy:'Test',ownerId:'staff-a'};
 test('queued string and online object flavours create identical retry payloads with Johannesburg dates',()=>{
  assert.deepEqual(salePayload(order),salePayload({...order,flavour:'Lady Killer'}));
@@ -29,10 +29,10 @@ test('failed queue cleanup keeps a confirmed sale pending for retry',async()=>{
  const result=await persistSale(order,{online:true,queue:async()=>{},send:async()=>true,remove:async()=>{throw Error('Storage failure');}});
  assert.deepEqual(result,{saved:true,pendingSync:true});
 });
-test('sync stops on an unconfirmed sale and leaves it and later sales queued',async()=>{
+test('sync skips an unconfirmed sale and uploads later sales',async()=>{
  const deleted=[],synced=[];
- const count=await syncPendingSales({ownerId:'staff-a',list:async()=>[{id:1,ownerId:'staff-a'},{id:2,ownerId:'staff-a'},{id:3,ownerId:'staff-a'}],send:async o=>o.id===1,remove:async id=>deleted.push(id),onSynced:o=>synced.push(o.id)});
- assert.equal(count,1);assert.deepEqual(deleted,[1]);assert.deepEqual(synced,[1]);
+ const count=await syncPendingSales({ownerId:'staff-a',list:async()=>[{id:1,ownerId:'staff-a'},{id:2,ownerId:'staff-a'},{id:3,ownerId:'staff-a'}],send:async o=>o.id!==2,remove:async id=>deleted.push(id),onSynced:o=>synced.push(o.id)});
+ assert.equal(count,2);assert.deepEqual(deleted,[1,3]);assert.deepEqual(synced,[1,3]);
 });
 
 test('sync only sends the signed-in owner’s orders and preserves other and legacy sales', async () => {
@@ -44,4 +44,20 @@ test('sync only sends the signed-in owner’s orders and preserves other and leg
 test('signed-out syncing never sends or deletes queued sales', async () => {
  const result=await syncPendingSales({list:async()=>[order],send:()=>{throw Error('Unexpected send');},remove:()=>{throw Error('Unexpected delete');},onSynced:()=>{}});
  assert.equal(result,0);
+});
+
+test('a thrown request failure keeps its sale and does not block later orders',async()=>{
+ const deleted=[];
+ const count=await syncPendingSales({ownerId:'staff-a',list:async()=>[{...order,id:1},{...order,id:2}],send:async o=>{if(o.id===1)throw Error('Network lost');return true;},remove:async id=>deleted.push(id),onSynced:()=>{}});
+ assert.equal(count,1);assert.deepEqual(deleted,[2]);
+});
+test('failed local cleanup is safely retried without duplicating the remote sale',async()=>{
+ const committed=new Set();let fail=true;let removed=0;
+ const args={ownerId:'staff-a',list:async()=>[order],send:async o=>{committed.add(o.id);return true;},remove:async()=>{if(fail)throw Error('Storage busy');removed++;},onSynced:()=>{}};
+ assert.equal(await syncPendingSales(args),0);
+ fail=false;assert.equal(await syncPendingSales(args),1);
+ assert.equal(committed.size,1);assert.equal(removed,1);
+});
+test('automatic retry delay increases and stays bounded at one minute',()=>{
+ assert.deepEqual([0,1,2,3,4,99].map(syncRetryDelay),[5000,10000,20000,40000,60000,60000]);
 });

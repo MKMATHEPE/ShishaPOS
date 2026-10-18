@@ -21,7 +21,7 @@ import {
   fetchFinanceJournal, saveFinancePartners, addFinanceTransaction, addManualSale, setFinanceLock,
   fetchOrdersByDateRange, fetchSessionDates,
 } from "./db";
-import { persistSale, syncPendingSales } from "./salePersistence.js";
+import { persistSale, syncPendingSales, syncRetryDelay } from "./salePersistence.js";
 import { getOfflineOrders, queueOfflineOrder, removeOfflineOrder } from "./offlineOrders";
 
 const FLAVOURS = [
@@ -466,6 +466,7 @@ export default function App() {
       const remaining = await getOfflineOrders();
       setPendingOrderCount(remaining.length);
       if (remaining.some(order => !order.ownerId || order.ownerId !== activeUser.id)) setSyncMessage('Some queued sales belong to another user or need ownership recovery. They remain safely on this device.');
+      else if (remaining.length) setSyncMessage(`${remaining.length} sale${remaining.length === 1 ? '' : 's'} still waiting. Automatic retry is enabled.`);
       else if (synced > 0) setSyncMessage(`${synced} offline order${synced === 1 ? "" : "s"} synced`);
     } catch {
       setSyncMessage("Could not finish syncing. Unsynced orders remain on this device.");
@@ -474,6 +475,20 @@ export default function App() {
       setSyncingOrders(false);
     }
   }, [activeUser]);
+
+  useEffect(() => {
+    if (!activeUser || !isOnline || pendingOrderCount === 0) return;
+    let stopped = false;
+    let attempt = 0;
+    let timer;
+    const retry = async () => {
+      if (stopped) return;
+      await syncOfflineOrders();
+      if (!stopped) timer = setTimeout(retry, syncRetryDelay(++attempt));
+    };
+    timer = setTimeout(retry, syncRetryDelay(attempt));
+    return () => { stopped = true; clearTimeout(timer); };
+  }, [activeUser, isOnline, pendingOrderCount, syncOfflineOrders]);
 
   useEffect(() => {
     const goOnline = () => { setIsOnline(true); syncOfflineOrders(); };

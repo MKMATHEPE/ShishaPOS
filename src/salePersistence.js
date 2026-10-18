@@ -18,9 +18,15 @@ export async function syncPendingSales({list,send,remove,onSynced,ownerId}) {
   const pending=await list();let synced=0;
   for(const order of pending) {
     if (!ownerId || order.ownerId !== ownerId) continue;
-    if(!await send(order)) break;
-    await remove(order.id);
+    try {
+      if (!await send(order)) continue;
+      await remove(order.id);
+    } catch { continue; } // A failed sale stays queued without blocking later sales.
     onSynced(order);synced++;
   }
   return synced;
+}
+
+export function syncRetryDelay(attempt) {
+  return Math.min(60000, 5000 * 2 ** Math.min(Math.max(0, attempt), 4));
 }
