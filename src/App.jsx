@@ -967,7 +967,7 @@ export default function App() {
           )}
           {visibleTab === "pos" && (
             <div key="pos" className="tab-enter">
-        <div style={styles.availabilityCard}>
+        <div className="available-pipes-card" style={styles.availabilityCard}>
           <span style={{ display: "block", fontSize: 10, fontWeight: 800, color: "#6c6a65" }}>Available pipes</span>
           <div style={{ display: "flex", alignItems: "baseline", gap: 5 }}><strong style={{ fontSize: 26, color: hookahPipeQty <= 2 ? "#dc2626" : "#0a0a0a" }}>{hookahPipeQty}</strong><span style={{ fontSize: 11, color: "#8c8982", fontWeight: 700 }}>of {hookahPipeQty + pipesOut}</span></div>
           <div style={{ height: 5, borderRadius: 99, background: "#d8d4cb", overflow: "hidden", marginTop: 6 }}><div style={{ width: `${hookahPipeQty + pipesOut ? (hookahPipeQty / (hookahPipeQty + pipesOut)) * 100 : 0}%`, height: "100%", borderRadius: 99, background: "#22c55e" }} /></div>

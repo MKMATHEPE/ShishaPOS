@@ -859,13 +859,13 @@ html:not([data-theme="dark"]) .app-shell .theme-page-surface {
   background: transparent !important;
 }
 
-.app-shell .order-type-card {
+.app-shell :is(.order-type-card, .available-pipes-card) {
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
-html:not([data-theme="dark"]) .app-shell .order-type-card {
+html:not([data-theme="dark"]) .app-shell :is(.order-type-card, .available-pipes-card) {
   background: rgba(246, 244, 239, .65) !important;
 }
-html[data-theme="dark"] .app-shell .order-type-card {
+html[data-theme="dark"] .app-shell :is(.order-type-card, .available-pipes-card) {
   background: rgba(23, 23, 22, .6) !important;
 }
