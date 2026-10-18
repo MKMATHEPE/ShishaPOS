@@ -14,9 +14,10 @@ export async function persistSale(order,{queue,send,remove,online}) {
   try { await remove(order.id); return {saved:true,pendingSync:false}; }
   catch { return {saved:true,pendingSync:true}; }
 }
-export async function syncPendingSales({list,send,remove,onSynced}) {
+export async function syncPendingSales({list,send,remove,onSynced,ownerId}) {
   const pending=await list();let synced=0;
   for(const order of pending) {
+    if (!ownerId || order.ownerId !== ownerId) continue;
     if(!await send(order)) break;
     await remove(order.id);
     onSynced(order);synced++;

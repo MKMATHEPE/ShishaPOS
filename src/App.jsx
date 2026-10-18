@@ -459,13 +459,14 @@ export default function App() {
     setSyncingOrders(true);
     setSyncMessage("");
     try {
-      const synced = await syncPendingSales({list:getOfflineOrders,send:insertOrder,remove:removeOfflineOrder,onSynced:order => {
+      const synced = await syncPendingSales({ownerId:activeUser.id,list:getOfflineOrders,send:insertOrder,remove:removeOfflineOrder,onSynced:order => {
         setOrders(prev => prev.map(item => item.id === order.id ? { ...item, pendingSync: false } : item));
       }});
       if (synced) { const latest = await fetchStock(); if (latest) setStock(latest); }
       const remaining = await getOfflineOrders();
       setPendingOrderCount(remaining.length);
-      if (synced > 0) setSyncMessage(`${synced} offline order${synced === 1 ? "" : "s"} synced`);
+      if (remaining.some(order => !order.ownerId || order.ownerId !== activeUser.id)) setSyncMessage('Some queued sales belong to another user or need ownership recovery. They remain safely on this device.');
+      else if (synced > 0) setSyncMessage(`${synced} offline order${synced === 1 ? "" : "s"} synced`);
     } catch {
       setSyncMessage("Could not finish syncing. Unsynced orders remain on this device.");
     } finally {
@@ -673,6 +674,7 @@ export default function App() {
       time: new Date(),
       status: "active",
       soldBy: activeUser?.name ?? "Unknown",
+      ownerId: activeUser?.id,
       pipeReturned: false,
     };
 
