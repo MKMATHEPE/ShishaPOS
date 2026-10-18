@@ -1026,3 +1026,13 @@ dialog.receipt-dialog:not([open]) { display: none; }
 /* Keep page controls clear of the fixed navigation and phone safe area. */
 .pagination-space { height: 54px; min-height: 54px; flex-shrink: 0; }
 .list-pagination { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(77px + env(safe-area-inset-bottom, 0px)); z-index: 95; margin: 0; padding: 6px; width: min(250px, calc(100vw - 32px)); border: 1px solid var(--cp-line); border-radius: 14px; background: var(--cp-paper); box-shadow: 0 3px 14px #0002; }
+
+.overview-performance-summary { --metric-green: #187647; --metric-blue: #366eae; --metric-coral: #b65349; }
+html[data-theme="dark"] .overview-performance-summary { --metric-green: #6bce98; --metric-blue: #87b8eb; --metric-coral: #ed9488; }
+.overview-performance-summary .overview-kpi[data-metric="Revenue"] > strong { color: var(--metric-green); }
+.overview-performance-summary .overview-kpi[data-metric="Orders"] > strong { color: var(--metric-blue); }
+.overview-performance-summary .overview-kpi[data-metric="Average sale"] > strong { color: var(--cp-ink); }
+.overview-performance-summary .overview-kpi[data-metric="Expenses"] > strong { color: var(--metric-coral); }
+.overview-performance-summary .overview-kpi > small[data-trend="positive"] { color: var(--metric-green) !important; }
+.overview-performance-summary .overview-kpi > small[data-trend="negative"] { color: var(--metric-coral) !important; }
+.overview-performance-summary .overview-kpi > small[data-trend="neutral"] { color: var(--cp-muted) !important; }
