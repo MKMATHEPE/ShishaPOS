@@ -1,3 +1,4 @@
+import { orderPage } from './orderPagination.js';
 import ReceiptPicker from './ReceiptPicker.jsx';
 import { uploadReceipt } from './expenseReceipts.js';
 import { formHasChanges } from './formDirty.js';
@@ -860,18 +861,14 @@ export default function App() {
     month: "short",
   });
 
-  const PAGE_SIZE = 12;
-  const totalDeliveredPages = Math.max(1, Math.ceil(deliveredOrders.length / PAGE_SIZE));
-  const safePage = Math.min(deliveredPage, totalDeliveredPages - 1);
   const isAdmin = activeUser?.role === "Admin";
   const canViewAllOrders = activeUser?.role === "Admin" || activeUser?.role === "Manager";
-  const queueOrders = ordersView === "Preparing"
-    ? (canViewAllOrders
-      ? managerCurrentOrders.filter((order, index, all) => all.findIndex(candidate => candidate.id === order.id) === index)
-      : currentOrders)
+  const matchingOrders = ordersView === "Preparing"
+    ? (canViewAllOrders ? managerCurrentOrders : currentOrders)
     : ordersView === "Return Pipes"
       ? [...unreturnedPipes, ...deliveredOrders.filter((o) => o.type === "full" && !o.pipeReturned)]
-      : deliveredOrders.slice(safePage * PAGE_SIZE, safePage * PAGE_SIZE + PAGE_SIZE);
+      : deliveredOrders;
+  const { items: queueOrders, page: safePage, totalPages: totalDeliveredPages } = orderPage(matchingOrders, deliveredPage);
 
   const usernameIsValid = /^[a-z0-9._-]{3,32}$/.test(newUsername);
   const passwordIsValid = newUserPin.length >= 10;
@@ -1101,7 +1098,7 @@ export default function App() {
 
               <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 6, padding: 6, borderRadius: 13, background: "rgba(255,255,255,0.62)" }}>
                 {[{ label: "Preparing", count: canViewAllOrders ? managerCurrentOrders.length : currentOrders.length }, { label: "Delivered", count: deliveredOrders.length }, { label: "Return Pipes", count: pipesOut }].map((tab) => (
-                  <button role="tab" aria-selected={ordersView === tab.label} key={tab.label} onClick={() => setOrdersView(tab.label)} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0a0a0a" : "transparent", color: ordersView === tab.label ? "#fff" : "#6c6a65", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
+                  <button role="tab" aria-selected={ordersView === tab.label} key={tab.label} onClick={() => { setOrdersView(tab.label); setDeliveredPage(0); }} style={{ border: 0, borderRadius: 10, padding: "9px 5px", background: ordersView === tab.label ? "#0a0a0a" : "transparent", color: ordersView === tab.label ? "#fff" : "#6c6a65", fontWeight: 800, fontSize: 10, cursor: "pointer", fontFamily: "inherit" }}>
                     {tab.label} <span style={{ opacity: 0.7 }}>{tab.count}</span>
                   </button>
                 ))}
@@ -2015,7 +2012,7 @@ export default function App() {
           )}
         </PullToRefresh>
 
-        {visibleTab === "delivered" && ordersView === "Delivered" && totalDeliveredPages > 1 && (
+        {visibleTab === "delivered" && totalDeliveredPages > 1 && (
           <div style={styles.pagination}>
             <button
               onClick={() => setDeliveredPage((p) => Math.max(0, p - 1))}
