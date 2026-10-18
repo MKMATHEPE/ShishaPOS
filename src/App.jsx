@@ -93,10 +93,6 @@ function createOrderId() {
   return Date.now() * 1000 + randomPart;
 }
 
-function dateInputValue(date) {
-  return [date.getFullYear(), String(date.getMonth() + 1).padStart(2, "0"), String(date.getDate()).padStart(2, "0")].join("-");
-}
-
 function formatSessionDate(dateStr) {
   const d = new Date(dateStr + "T12:00:00");
   return d.toLocaleDateString("en-ZA", { weekday: "short", day: "2-digit", month: "short" });
@@ -133,7 +129,7 @@ function TabIcon({ name, active }) {
 
 function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
-  const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
+  const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), includesStock: false, stockKind: "", stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
   const [activeAction, setActiveAction] = useState(null);
@@ -175,16 +171,23 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     if (ok) setEntry(current => ({ ...current, amount: "", description: "" }));
   };
   const purchaseItems = stockLines(stock);
+  const purchasedItem = purchaseItems.find(item => item.key === spend.stockKey);
+  const purchasedQuantity = Number(spend.stockQuantity);
+  const stockPreview = purchasedItem && Number.isFinite(purchasedQuantity) && purchasedQuantity > 0
+    ? `${purchasedItem.name}: ${purchasedItem.quantity} + ${purchasedQuantity} = ${Math.round((purchasedItem.quantity + purchasedQuantity) * 1000) / 1000} ${purchasedItem.unit}` : '';
+
   const submitExpense = async () => {
     if (expenseSaving) return;
     if (!Number.isFinite(Number(spend.amount)) || Number(spend.amount) <= 0) return setMessage("Enter an amount greater than zero.");
     if (journal.lockedThrough && spend.date <= journal.lockedThrough) return setMessage(`This date is locked through ${journal.lockedThrough}.`);
+    if (spend.includesStock && !spend.stockKey) return setMessage("Choose the stock item purchased.");
+    if (spend.stockKind === "flavour" && !spend.stockKey) return setMessage("Choose the flavour purchased.");
     if (spend.stockKey && (!Number.isFinite(Number(spend.stockQuantity)) || Number(spend.stockQuantity) <= 0)) return setMessage("Enter the quantity bought.");
     setExpenseSaving(true);
     try { await onExpense({ ...spend, amount: Number(spend.amount), stockQuantities: spend.stockKey ? { [spend.stockKey]: Number(spend.stockQuantity) } : {} }); }
     catch(error) { setMessage(error.message || "Could not save expense."); return; }
     finally { setExpenseSaving(false); }
-    setSpend(current => ({ ...current, description: "", amount: "", stockKey: "", stockQuantity: "" }));
+    setSpend(current => ({ ...current, category: "Transport", description: "", amount: "", includesStock: false, stockKind: "", stockKey: "", stockQuantity: "" }));
     setMessage("Expense saved.");
     setActiveAction(null);
   };
@@ -253,37 +256,37 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     </div>
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
-    {activeAction === "expense" && <div className="expand-down finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)", boxShadow: "0 8px 24px rgba(10,10,10,0.05)" }}>
-      <strong style={{ fontSize: 14, color: "#0a0a0a" }}>Add expense</strong>
-      <div style={{ display: "flex", flexDirection: "column", gap: 9, paddingTop: 4 }}>
-        <div className="finance-field-grid">
-          <select value={spend.paidBy} onChange={event => setSpend(current => ({ ...current, paidBy: event.target.value }))} style={selectField} aria-label="Who paid for this expense">
-            <option value="">Paid by business</option>
-            {users.map(user => <option key={user.id} value={user.id}>Paid by {user.name}</option>)}
-          </select>
-          <select value={spend.category} onChange={event => setSpend(current => ({ ...current, category: event.target.value }))} style={selectField} aria-label="Expense category">
-            {['Transport', 'Wages', 'Supplies', 'Rent', 'Utilities', 'Repairs', 'Other'].map(category => <option key={category}>{category}</option>)}
-          </select>
-          <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
-            <span style={{ fontSize: 9, fontWeight: 900, color: "#6c6a65", textTransform: "uppercase", letterSpacing: "0.08em" }}>Expense date</span>
-            <input type="date" value={spend.date} max={localToday()} onChange={event => setSpend(current => ({ ...current, date: event.target.value }))} style={{ ...field, width: "100%" }} aria-label="Expense date" />
+    {activeAction === "expense" && <div className="expand-down finance-form-card add-expense-card" style={card}>
+      <strong className="add-expense-title">Add expense</strong>
+      <fieldset disabled={expenseSaving} className="add-expense-fields">
+        <section className="expense-form-section" aria-labelledby="expense-section-title">
+          <h3 id="expense-section-title">Expense</h3>
+          <div className="expense-form-grid">
+            <label>Category<select value={spend.category} onChange={event=>{const category=event.target.value;setSpend(current=>({...current,category,description:'',includesStock:category==='Flavour',stockKind:category==='Flavour'?'flavour':'',stockKey:'',stockQuantity:''}));}} aria-label="Expense category">{['Transport','Wages','Coal','Flavour','Mouth Pieces'].map(category=><option key={category}>{category}</option>)}</select></label>
+            <label>Amount (R)<input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="0.00" value={spend.amount} onChange={event=>setSpend(current=>({...current,amount:event.target.value}))} aria-label="Expense amount" /></label>
           </div>
-          <label className="finance-field-label"><span style={label}>Amount (R)</span><input type="number" min="0" inputMode="decimal" placeholder="Amount (R)" value={spend.amount} onChange={event => setSpend(current => ({ ...current, amount: event.target.value }))} style={field} aria-label="Expense amount" /></label>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <span style={{ fontSize: 10, color: "#6c6a65", fontWeight: 700 }}>Date:</span>
-          {[{ label: "Today", days: 0 }, { label: "Yesterday", days: -1 }].map(option => {
-            const date = new Date(); date.setDate(date.getDate() + option.days); const value = dateInputValue(date);
-            return <button className="date-preset" key={option.label} onClick={() => setSpend(current => ({ ...current, date: value }))} style={{ border: spend.date === value ? "1px solid #0a0a0a" : "1px solid #d8d4cb", borderRadius: 8, background: spend.date === value ? "#0a0a0a" : "#fff", color: spend.date === value ? "#fff" : "#6c6a65", minHeight: 30, padding: "0 10px", fontSize: 9, fontWeight: 800, cursor: "pointer" }}>{option.label}</button>;
-          })}
-        </div>
-        <div className="expense-edit-form">
-          <label className={spend.stockKey ? undefined : "expense-wide"}>Stock purchased (optional)<select aria-label="Stock purchased" value={spend.stockKey} onChange={event=>setSpend(current=>({...current,stockKey:event.target.value,stockQuantity:""}))}><option value="">No stock purchase</option>{purchaseItems.map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>
-          {spend.stockKey && <label>Quantity bought ({purchaseItems.find(item=>item.key===spend.stockKey)?.unit})<input aria-label="Stock quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label>}
-        </div>
-        <input placeholder="Description (optional)" value={spend.description} onChange={event => setSpend(current => ({ ...current, description: event.target.value }))} style={field} aria-label="Expense description" />
-        <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button disabled={expenseSaving} onClick={submitExpense} style={{ ...styles.addUserBtn, flex: 2 }}>{expenseSaving ? "Saving…" : "Save expense"}</button></div>
-      </div>
+          {spend.category === 'Flavour' ? <div className="expense-form-grid"><label>Description — flavour<select aria-label="Expense flavour" value={spend.stockKey} onChange={event=>{const item=purchaseItems.find(item=>item.key===event.target.value);setSpend(current=>({...current,description:item?.name ?? '',stockKey:event.target.value,stockQuantity:''}));}}><option value="">Choose flavour</option>{purchaseItems.filter(item=>item.flavour).map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></label><label>Quantity bought (boxes)<input aria-label="Flavour quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="0" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label></div> : <label>Description <span className="expense-optional">(optional)</span><input placeholder="What was this expense for?" value={spend.description} onChange={event=>setSpend(current=>({...current,description:event.target.value}))} aria-label="Expense description" /></label>}
+        </section>
+        <section className="expense-form-section" aria-labelledby="expense-payment-title">
+          <h3 id="expense-payment-title">Payment</h3>
+          <div className="expense-form-grid">
+            <label>Paid by<select value={spend.paidBy} onChange={event=>setSpend(current=>({...current,paidBy:event.target.value}))} aria-label="Who paid for this expense"><option value="">Business</option>{users.map(user=><option key={user.id} value={user.id}>{user.name}</option>)}</select></label>
+            <label>Expense date<input type="date" value={spend.date} max={localToday()} onChange={event=>setSpend(current=>({...current,date:event.target.value}))} aria-label="Expense date" /></label>
+          </div>
+        </section>
+        <section className="expense-form-section" aria-label="Stock purchase">
+          <label className="expense-stock-toggle"><span>{spend.category === 'Flavour' ? 'Stock purchase' : 'Includes stock'} <span className="expense-optional">{spend.category === 'Flavour' ? '' : '(optional)'}</span></span><input type="checkbox" disabled={spend.category === 'Flavour'} checked={spend.includesStock} onChange={event=>setSpend(current=>({...current,includesStock:event.target.checked,stockKind:'',stockKey:'',stockQuantity:''}))} /></label>
+          {spend.includesStock && <>
+            <div className="expense-form-grid">
+              {spend.category !== 'Flavour' && <label>Stock purchased<select aria-label="Stock purchased" value={spend.stockKind === 'flavour' ? 'flavour' : spend.stockKey} onChange={event=>{const value=event.target.value;setSpend(current=>({...current,stockKind:value === 'flavour' ? 'flavour' : '',stockKey:value === 'flavour' ? '' : value,stockQuantity:''}));}}><option value="">Choose stock</option><option value="flavour">Flavour</option>{purchaseItems.filter(item=>!item.flavour && item.category!=='equipment').map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>}
+              {spend.category !== 'Flavour' && spend.stockKind === 'flavour' && <label>Flavour<select aria-label="Flavour purchased" value={spend.stockKey} onChange={event=>setSpend(current=>({...current,stockKey:event.target.value,stockQuantity:''}))}><option value="">Choose flavour</option>{purchaseItems.filter(item=>item.flavour).map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></label>}
+              {spend.category !== 'Flavour' && spend.stockKey && <label>Quantity bought ({purchasedItem?.unit})<input aria-label="Stock quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="0" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label>}
+            </div>
+            {stockPreview && <p className="expense-stock-preview" role="status">{stockPreview}</p>}
+          </>}
+        </section>
+        <div className="finance-form-actions expense-save-actions"><button onClick={()=>setActiveAction(null)} style={{...styles.copyBtn,flex:1}}>Cancel</button><button onClick={submitExpense} style={{...styles.addUserBtn,flex:2}}>{expenseSaving ? 'Saving…' : 'Save expense'}</button></div>
+      </fieldset>
     </div>}
 
     {isAdmin && activeAction === "manual_sale" && <div className="expand-down missing-sale-card finance-form-card" style={{ ...card, border: "1px solid rgba(37,99,235,0.18)" }}>

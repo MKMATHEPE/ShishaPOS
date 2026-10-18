@@ -929,3 +929,17 @@ html .app-shell :is(.frosted-card, .order-type-card, .available-pipes-card, .ord
 .overview-collapsible > summary:focus-visible { outline: 2px solid #8c8982; outline-offset: 3px; border-radius: 5px; }
 
 .offline-stock-estimate { margin: 0; font-size: 11px; line-height: 1.5; color: var(--cp-muted); }
+
+.add-expense-title { font-size: 15px; }
+.add-expense-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: grid; gap: 12px; }
+.expense-form-section { display: grid; gap: 9px; min-width: 0; }
+.expense-form-section + .expense-form-section { border-top: 1px solid var(--cp-line); padding-top: 12px; }
+.expense-form-section h3 { margin: 0; font-size: 11px; font-weight: 700; }
+.expense-form-section label { display: flex; flex-direction: column; gap: 5px; min-width: 0; font-size: 11px; }
+.expense-form-grid { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 9px; }
+.expense-optional { color: var(--cp-muted); font-weight: 400; }
+.expense-form-section .expense-stock-toggle { flex-direction: row; align-items: center; justify-content: space-between; min-height: 32px; }
+.add-expense-card input[type="checkbox"] { width: 18px !important; height: 18px !important; min-height: 18px !important; padding: 0 !important; accent-color: #0a0a0a; }
+.expense-stock-preview { margin: 0; padding: 8px 10px; background: rgba(140,137,130,.1); border-radius: 8px; font-size: 11px; line-height: 1.5; overflow-wrap: anywhere; }
+.expense-save-actions button:first-child { background: transparent !important; box-shadow: none; }
+@media(max-width:340px) { .expense-form-grid { grid-template-columns: minmax(0,1fr); } }
