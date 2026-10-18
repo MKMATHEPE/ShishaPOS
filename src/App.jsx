@@ -2074,7 +2074,7 @@ const styles = {
     minHeight: 68,
     background: "#0a0a0a",
     borderBottom: "1px solid #262626",
-    borderRadius: 0,
+    borderRadius: "0 0 24px 24px",
     boxShadow: "0 1px 0 rgba(10,10,10,0.06)",
   },
   screenTitle: {
