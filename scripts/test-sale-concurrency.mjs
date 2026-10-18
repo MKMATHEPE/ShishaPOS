@@ -31,11 +31,13 @@ try {
  create policy stock_read on public.pos_stock for select to authenticated using(true);
  create policy stock_write on public.pos_stock for all to authenticated using(true) with check(true);`);
  sql(readFileSync(new URL('../supabase/atomic-sale-stock.sql',import.meta.url),'utf8'));
+ sql(readFileSync(new URL('../supabase/cancel-orders.sql',import.meta.url),'utf8'));
+ sql(readFileSync(new URL('../supabase/coal-only-sale-usage.sql',import.meta.url),'utf8'));
  const request=id=>`select set_config('request.jwt.claim.sub','00000000-0000-0000-0000-000000000001',false); set role authenticated; select public.record_pos_sale('{"id":${id},"flavour":"Lady Killer","type":"full","payment":"cash","price":170,"time":"2026-10-14T12:00:00Z","session_date":"2026-10-14","sold_by":"Test"}'::jsonb);`;
  await Promise.all([...Array.from({length:20},(_,i)=>parallelSql(request(1000+i))),...Array.from({length:10},()=>parallelSql(request(5000)))]);
  const result=JSON.parse(sql(`select json_build_object('orders',(select count(*) from pos_orders),'coal',(select quantity from pos_stock where name='Coal'),'pieces',(select quantity from pos_stock where name='Mouth Pieces'),'flavour',(select (value->>'quantity')::numeric from pos_stock,jsonb_array_elements(sub_items) where name='Flavour' and value->>'id'='lk'),'pipes',(select quantity from pos_stock where name='Hookah Pipe'));`).trim());
- assert.deepEqual(result,{orders:21,coal:8,pieces:8,flavour:3.994,pipes:20});
- console.log('PASS: 30 concurrent requests committed 21 unique sales and exactly 21 consumable deductions; equipment unchanged.');
+ assert.deepEqual(result,{orders:21,coal:8,pieces:50,flavour:10,pipes:20});
+ console.log('PASS: 30 concurrent requests committed 21 unique sales and exactly 21 coal deductions; flavours, mouthpieces and equipment unchanged.');
  try {sql(request(5000).replace('"price":170','"price":120'));throw Error('Collision accepted');}catch(error){assert.match(error.message,/Order ID already used/);}
  assert.equal(sql('select count(*) from pos_orders;').trim(),'21');
  console.log('PASS: conflicting retries rejected without additional orders.');

@@ -984,3 +984,35 @@ html[data-theme="dark"] .app-shell select:not([multiple]):not([size]) {
 .expenses-list-heading h3 { margin: 0; }
 .expense-add-button { min-height: 36px; flex-shrink: 0; padding: 6px 12px; border: 1px solid var(--cp-line); border-radius: 10px; background: #0a0a0a; color: #f6f4ef; font: 600 11px/1.3 Arial,sans-serif; cursor: pointer; }
 html[data-theme="dark"] .app-shell .expense-add-button { background: #f6f4ef; color: #0a0a0a; border-color: #d8d4cb; }
+
+/* Compact expense entry and optional receipt. */
+.add-expense-card .add-expense-fields { gap: 12px; }
+.add-expense-card .expense-form-section input,
+.add-expense-card .expense-form-section select { min-height: 44px !important; height: 44px; font-size: 14px !important; }
+.receipt-picker { display: grid; gap: 7px; min-width: 0; font-size: 11px; }
+.receipt-upload { display: flex; align-items: center; border: 1px dashed var(--cp-muted); border-radius: 12px; padding: 5px; }
+.receipt-upload button,.receipt-controls button,.receipt-saved > button { background: transparent !important; color: var(--cp-ink) !important; box-shadow: none !important; }
+.receipt-choose { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; text-align: left; border: 0; padding: 8px; }
+.receipt-choose > span:first-child { font-size: 24px; }
+.receipt-choose strong { display: block; font-size: 12px; }
+.receipt-choose small { display: block; font-size: 10px; color: var(--cp-muted); margin-top: 3px; }
+.receipt-camera { flex: 0 0 44px; width: 44px; height: 44px; border: 0; display: grid; place-items: center; padding: 0; }
+.receipt-preview { display: flex; align-items: center; gap: 10px; padding: 8px; border: 1px solid var(--cp-line); border-radius: 12px; min-width: 0; }
+.receipt-preview img { width: 48px; height: 56px; object-fit: cover; border-radius: 6px; }
+.receipt-preview > div { min-width: 0; }
+.receipt-filename { display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 220px; }
+.receipt-controls { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; }
+.receipt-controls button,.receipt-controls a { font: inherit; color: inherit; border: 0; padding: 8px 2px; }
+.receipt-dialog { position: fixed; inset: 0; z-index: 10000; background: #101010f5; display: flex; flex-direction: column; align-items: center; gap: 12px; padding: max(16px,env(safe-area-inset-top)) 16px max(16px,env(safe-area-inset-bottom)); }
+.receipt-dialog img { min-height: 0; max-width: 100%; max-height: calc(100dvh - 100px); object-fit: contain; }
+.receipt-dialog button { flex-shrink: 0; min-height: 44px; }
+
+.receipt-picker input[hidden] { display: none !important; }
+dialog.receipt-dialog { margin: 0; width: 100%; height: 100dvh; max-width: none; max-height: none; border: 0; box-sizing: border-box; }
+dialog.receipt-dialog:not([open]) { display: none; }
+.expense-summary-body { display: flex; align-items: flex-start; justify-content: space-between; gap: 12px; }
+.expense-summary-copy { flex: 1; min-width: 0; }
+.expense-summary-body .receipt-saved { flex: 0 0 58px; width: 58px; padding-top: 4px; }
+.expense-summary-body .receipt-saved > button { display: grid; place-items: center; width: 58px; height: 66px; min-height: 44px; padding: 0; border: 1px solid var(--cp-line); border-radius: 8px; overflow: hidden; font-size: 10px; }
+.receipt-saved > button img { width: 100%; height: 100%; object-fit: cover; }
+.expense-summary-body .receipt-saved > p { font-size: 9px; overflow-wrap: anywhere; }

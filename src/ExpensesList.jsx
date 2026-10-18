@@ -1,3 +1,4 @@
+import ReceiptLink from './ReceiptLink.jsx';
 import { formHasChanges } from './formDirty.js';
 import { canManageExpense } from './expensePermissions.js';
 import { useUnsavedChanges } from "./unsavedChanges";
@@ -20,7 +21,7 @@ function ExpensePurchases({ expense, stockItems }) {
   });
 }
 
-export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd }) {
+export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd, canViewReceipts = false }) {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
@@ -81,9 +82,10 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
     {!visible.length && <p>No matching expenses.</p>}
     {pageExpenses.map(expense=> {
       const locked = lockedThrough && expenseDate(expense.time) <= lockedThrough;
+      const showReceipt = !!expense.receiptPath && (canViewReceipts || isAdmin || expense.submittedBy === currentUserId);
       if (expense.status === 'paid') return <div className="expense-item expense-item-paid" key={expense.id}>
         <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
-        <div className="expense-paid-summary"><span>{expenseDate(expense.time)} · {expense.paidBy ? person(expense.paidBy) : 'Business'} · <strong className="expense-paid-status">Paid ✓</strong></span>
+        <div className="expense-summary-body"><div className="expense-summary-copy"><div className="expense-paid-summary"><span>{expenseDate(expense.time)} · {expense.paidBy ? person(expense.paidBy) : 'Business'} · <strong className="expense-paid-status">Paid ✓</strong></span>
           <details className="expense-paid-details">
             <summary>View details</summary>
             <div>
@@ -94,14 +96,16 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
               {locked && <p>Locked period</p>}
             </div>
           </details>
+        </div></div>{showReceipt && <ReceiptLink key={expense.receiptPath} path={expense.receiptPath} />}
         </div>
       </div>;
       return <div className="expense-item" key={expense.id}>
         <div className="expense-item-heading"><strong>{expense.description || expense.category}</strong><strong>{money(expense.amount)}</strong></div>
-        <p>{expenseDate(expense.time)} · <strong>{labels[expense.status] ?? 'Pending approval'}</strong> · {expense.paidBy ? person(expense.paidBy) : 'Paid by business'}</p>
+        <div className="expense-summary-body"><div className="expense-summary-copy"><p>{expenseDate(expense.time)} · <strong>{labels[expense.status] ?? 'Pending approval'}</strong> · {expense.paidBy ? person(expense.paidBy) : 'Paid by business'}</p>
         <ExpenseAudit expense={expense} person={person} />
         {isAdmin && expense.status !== 'paid' && <div className="expense-actions"><button disabled={busy || locked || expense.status === 'paid'} onClick={()=>changeStatus(expense, expense.status === 'approved' ? 'paid' : 'approved')}>{expense.status === 'approved' ? (expense.paidBy ? 'Mark reimbursed' : 'Mark paid') : 'Approve'}</button></div>}
         <ExpensePurchases expense={expense} stockItems={stockItems} />
+        </div>{showReceipt && <ReceiptLink key={expense.receiptPath} path={expense.receiptPath} />}</div>
         {canManageExpense(expense,currentUserId,isAdmin) && (editId === expense.id ? <div className="expense-edit-form">
           <label>Date<input type="date" value={draft.date} max={today} onChange={event=>setDraft(prev=>({...prev,date:event.target.value}))} /></label>
           <label>Amount (R)<input type="number" inputMode="decimal" min="0.01" step="0.01" value={draft.amount} onChange={event=>setDraft(prev=>({...prev,amount:event.target.value}))} /></label>

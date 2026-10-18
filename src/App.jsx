@@ -1,3 +1,5 @@
+import ReceiptPicker from './ReceiptPicker.jsx';
+import { uploadReceipt } from './expenseReceipts.js';
 import { formHasChanges } from './formDirty.js';
 import { blocksSignOut } from './offlineQueueStatus.js';
 import { readSellingCache, cacheSellingData } from './sellingCache.js';
@@ -128,10 +130,11 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, currentUserId, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
+function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, currentUserId, canViewReceipts, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
+  const [receipt,setReceipt] = useState(null);
   const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
   const [activeAction, updateActiveAction] = useState(null);
   const [formBaselines,setFormBaselines] = useState({expense:spend,manual_sale:sale,partner_payout:entry});
@@ -140,7 +143,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     updateActiveAction(action);
   };
   const activeDraft = activeAction === 'expense' ? spend : activeAction === 'manual_sale' ? sale : entry;
-  useUnsavedChanges(!!formBaselines[activeAction] && formHasChanges(activeDraft,formBaselines[activeAction]));
+  useUnsavedChanges(!!formBaselines[activeAction] && (formHasChanges(activeDraft,formBaselines[activeAction]) || (activeAction === 'expense' && !!receipt)));
   const [message, setMessage] = useState("");
   const partners = journal.partners ?? [];
   const transactions = (journal.transactions ?? []).filter(item => item.date >= dateFrom && item.date <= dateTo);
@@ -191,10 +194,11 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     if (isStockExpense && !purchasedItem) return setMessage(spend.category === 'Flavour' ? 'Choose the flavour purchased.' : 'This item is missing from stock. Refresh stock before saving.');
     if (isStockExpense && (!Number.isFinite(purchasedQuantity) || purchasedQuantity <= 0)) return setMessage('Enter the quantity bought.');
     setExpenseSaving(true);
-    try { await onExpense({ ...spend, amount: Number(spend.amount), stockQuantities: purchasedItem ? { [purchasedItem.key]: purchasedQuantity } : {} }); }
+    try { await onExpense({ ...spend, amount: Number(spend.amount), stockQuantities: purchasedItem ? { [purchasedItem.key]: purchasedQuantity } : {}, receipt }); }
     catch(error) { setMessage(error.message || "Could not save expense."); return; }
     finally { setExpenseSaving(false); }
     setSpend(current => ({ ...current, category: "Transport", description: "", amount: "", stockKey: "", stockQuantity: "" }));
+    setReceipt(null);
     setMessage("Expense saved.");
     setActiveAction(null);
   };
@@ -265,16 +269,16 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     {activeAction === "expense" && <div className="expand-down finance-form-card add-expense-card" style={card}>
       <strong className="add-expense-title">Add expense</strong>
       <fieldset disabled={expenseSaving} className="add-expense-fields">
-        <section className="expense-form-section" aria-labelledby="expense-section-title">
-          <h3 id="expense-section-title">Expense</h3>
+        <section className="expense-form-section" aria-label="Expense details">
           <div className="expense-form-grid">
             <label>Category<select value={spend.category} onChange={event=>{const category=event.target.value;setSpend(current=>({...current,category,description:'',stockKey:'',stockQuantity:''}));}} aria-label="Expense category">{['Transport','Wages','Coal','Flavour','Mouth Pieces'].map(category=><option key={category}>{category}</option>)}</select></label>
             <label>Amount (R)<input type="number" min="0.01" step="0.01" inputMode="decimal" placeholder="0.00" value={spend.amount} onChange={event=>setSpend(current=>({...current,amount:event.target.value}))} aria-label="Expense amount" /></label>
           </div>
-          {spend.category === 'Flavour' ? <div className="expense-form-grid"><label>Description — flavour<select aria-label="Expense flavour" value={spend.stockKey} onChange={event=>{const item=purchaseItems.find(item=>item.key===event.target.value);setSpend(current=>({...current,description:item?.name ?? '',stockKey:event.target.value,stockQuantity:''}));}}><option value="">Choose flavour</option>{purchaseItems.filter(item=>item.flavour).map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></label><label>Quantity bought (boxes)<input aria-label="Flavour quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="0" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label></div> : <label>Description <span className="expense-optional">(optional)</span><input placeholder="What was this expense for?" value={spend.description} onChange={event=>setSpend(current=>({...current,description:event.target.value}))} aria-label="Expense description" /></label>}
+          {spend.category === 'Flavour' ? <div className="expense-form-grid"><label>Description — flavour<select aria-label="Expense flavour" value={spend.stockKey} onChange={event=>{const item=purchaseItems.find(item=>item.key===event.target.value);setSpend(current=>({...current,description:item?.name ?? '',stockKey:event.target.value,stockQuantity:''}));}}><option value="">Choose flavour</option>{purchaseItems.filter(item=>item.flavour).map(item=><option key={item.key} value={item.key}>{item.name}</option>)}</select></label><label>Quantity bought (boxes)<input aria-label="Flavour quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="0" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label></div> : <label><span>Description <span className="expense-optional">(optional)</span></span><input placeholder="What was this expense for?" value={spend.description} onChange={event=>setSpend(current=>({...current,description:event.target.value}))} aria-label="Expense description" /></label>}
           {isStockExpense && spend.category !== 'Flavour' && <label>Quantity bought ({purchasedItem?.unit ?? 'pieces'})<input aria-label="Stock quantity bought" type="number" min="0.001" step="0.001" inputMode="decimal" placeholder="0" value={spend.stockQuantity} onChange={event=>setSpend(current=>({...current,stockQuantity:event.target.value}))} /></label>}
           {stockPreview && <p className="expense-stock-preview" role="status">{stockPreview}</p>}
         </section>
+        <ReceiptPicker file={receipt} onChange={setReceipt} />
         <section className="expense-form-section" aria-labelledby="expense-payment-title">
           <h3 id="expense-payment-title">Payment</h3>
           <div className="expense-form-grid">
@@ -282,7 +286,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
             <label>Expense date<input type="date" value={spend.date} max={localToday()} onChange={event=>setSpend(current=>({...current,date:event.target.value}))} aria-label="Expense date" /></label>
           </div>
         </section>
-        <div className="finance-form-actions expense-save-actions"><button onClick={()=>setActiveAction(null)} style={{...styles.copyBtn,flex:1}}>Cancel</button><button onClick={submitExpense} style={{...styles.addUserBtn,flex:2}}>{expenseSaving ? 'Saving…' : 'Save expense'}</button></div>
+        <div className="finance-form-actions expense-save-actions"><button onClick={()=>{setReceipt(null);setActiveAction(null);}} style={{...styles.copyBtn,flex:1}}>Cancel</button><button onClick={submitExpense} style={{...styles.addUserBtn,flex:2}}>{expenseSaving ? 'Saving…' : 'Save expense'}</button></div>
       </fieldset>
     </div>}
 
@@ -298,7 +302,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList onAdd={activeAction !== "expense" ? async () => { if (await confirmDiscard()) setActiveAction("expense"); } : undefined} currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList canViewReceipts={canViewReceipts} onAdd={activeAction !== "expense" ? async () => { if (await confirmDiscard()) setActiveAction("expense"); } : undefined} currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
 
     {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
@@ -313,7 +317,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <input placeholder="Note (optional)" value={entry.description} onChange={event => setEntry(current => ({ ...current, description: event.target.value }))} style={field} />
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submit} disabled={locked} style={{ ...styles.addUserBtn, flex: 2, opacity: locked ? .5 : 1 }}>{locked ? "Date is locked" : "Confirm payment"}</button></div>
       </>}
-      {activeAction === "reimbursement" && entry.profileId && <ExpensesList currentUserId={currentUserId} key={entry.profileId} title={`${personName(entry.profileId)} — unpaid expenses`} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={unpaidExpenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+      {activeAction === "reimbursement" && entry.profileId && <ExpensesList canViewReceipts={canViewReceipts} currentUserId={currentUserId} key={entry.profileId} title={`${personName(entry.profileId)} — unpaid expenses`} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={unpaidExpenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
       {message && <span style={{ fontSize: 11, color: message.includes("recorded") || message.includes("copied") ? "#16a34a" : "#dc2626" }}>{message}</span>}
     </div>}
 
@@ -680,7 +684,6 @@ export default function App() {
 
   const pendingSales = orders.filter(order => order.pendingSync);
   const offlineEstimate = estimatedStock(stock, pendingSales);
-  const estimatedFlavour = offlineEstimate.find(item => item.name === 'Flavour')?.subItems?.find(item => item.id === selectedFlavour?.id);
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
   const rotaTopsQty   = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("rota top"))?.quantity ?? 0;
@@ -1003,7 +1006,7 @@ export default function App() {
           <div className="pipe-availability-track"><div style={{width: `${hookahPipeQty + pipesOut ? hookahPipeQty / (hookahPipeQty + pipesOut) * 100 : 0}%`, background: hookahPipeQty <= 2 ? '#dc2626' : '#16c35a'}} /></div>
         </div>
         <div className="theme-page-surface order-type-card" style={styles.salePanel}>
-          {pendingSales.length > 0 && <p className="offline-stock-estimate" role="status">Estimated remaining · Coal {offlineEstimate.find(item=>item.name==='Coal')?.quantity ?? '—'} · Mouth pieces {offlineEstimate.find(item=>item.name==='Mouth Pieces')?.quantity ?? '—'}{estimatedFlavour ? ` · ${estimatedFlavour.name} ${Number(estimatedFlavour.quantity).toFixed(2)} boxes` : ''}. Awaiting sync; other devices may change stock.</p>}
+          {pendingSales.length > 0 && <p className="offline-stock-estimate" role="status">Estimated remaining coal: {offlineEstimate.find(item=>item.name==='Coal')?.quantity ?? '—'} pieces. 2 pieces per pending order · awaiting sync; other devices may change stock.</p>}
           <div className="pos-order-controls">
             <div className="pos-control-column"><div style={styles.sectionHeaderLabel}>Order type</div>
               <div className="pos-segments" role="group" aria-label="Order type" style={styles.toggleGroup}>
@@ -1267,10 +1270,12 @@ export default function App() {
                   dateTo={managementDateTo}
                   isAdmin={isAdmin}
                   currentUserId={activeUser.id}
+                  canViewReceipts={['Admin','Manager'].includes(activeUser.role)}
                   onExpense={async expense => {
                     const now = new Date();
                     const time = expense.date === localToday() ? now : new Date(`${expense.date}T12:00:00+02:00`);
                     const record = { id: createOrderId(), category: expense.category, qty: null, amount: expense.amount, time: time.toISOString(), shiftId: null, description: expense.description, paidBy: expense.paidBy || null, stockQuantities: expense.stockQuantities ?? {} };
+                    if (expense.receipt) record.receiptPath = await uploadReceipt(expense.receipt, activeUser.id);
                     await saveExpenseRecord(record);
                     const latestStock = await fetchStock(); if (latestStock) setStock(latestStock);
                     const latestExpenses = await fetchExpenses(); if (latestExpenses) setExpenses(latestExpenses);

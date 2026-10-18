@@ -220,7 +220,7 @@ export async function fetchExpenses() {
     amount: Number(r.amount), time: r.time, shiftId: r.shift_id ?? null,
     description: r.description ?? '', paidBy: r.paid_by ?? null,
     status: r.approval_status, submittedBy: r.submitted_by, approvedAt: r.approved_at, approvedBy: r.approved_by, paidAt: r.payment_at, paymentBy: r.payment_by,
-    reimbursedAt: r.reimbursed_at ?? null, stockQuantities: r.stock_quantities ?? {},
+    receiptPath: r.receipt_path ?? null, reimbursedAt: r.reimbursed_at ?? null, stockQuantities: r.stock_quantities ?? {},
   }))
 }
 
@@ -314,7 +314,7 @@ export async function cancelOrder(id) {
 export async function saveExpenseRecord(expense, original = null) {
   if (!ok()) throw new Error('Connect before saving an expense.')
   const row = { category: expense.category, amount: expense.amount, time: expense.time,
-    description: expense.description || null, paid_by: expense.paidBy || null, stock_quantities: expense.stockQuantities ?? {} }
+    description: expense.description || null, paid_by: expense.paidBy || null, stock_quantities: expense.stockQuantities ?? {}, receipt_path: expense.receiptPath ?? null }
   let query
   if (original) {
     query = supabase.from('pos_expenses').update(row).eq('id', original.id).eq('time', original.time).eq('amount', original.amount).eq('stock_quantities', JSON.stringify(original.stockQuantities ?? {}))

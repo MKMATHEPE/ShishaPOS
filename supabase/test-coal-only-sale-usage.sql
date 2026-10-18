@@ -1,0 +1,21 @@
+begin;
+do $$ declare actor uuid; eid bigint:=890000000000050; snapshot jsonb; coal numeric; payload jsonb; begin
+ select id into actor from public.pos_profiles where role='Admin' and not coalesce(paused,false) limit 1;
+ select jsonb_agg(to_jsonb(s) order by id) into snapshot from public.pos_stock s where name<>'Coal';
+ select quantity into coal from public.pos_stock where name='Coal';
+ payload:=jsonb_build_object('id',eid,'flavour','Mint Cream','type','full','payment','cash','price',170,'time',now(),'session_date',(now() at time zone 'Africa/Johannesburg')::date,'sold_by','Rollback test');
+ perform set_config('request.jwt.claim.sub',actor::text,true);set local role authenticated;
+ perform public.record_pos_sale(payload);perform public.record_pos_sale(payload);
+ if (select quantity from public.pos_stock where name='Coal')<>greatest(0,coal-2) then raise exception 'Coal deduction/retry incorrect'; end if;
+ reset role;
+ if snapshot is distinct from (select jsonb_agg(to_jsonb(s) order by id) from public.pos_stock s where name<>'Coal') then raise exception 'Noncoal inventory changed'; end if;
+ set local role authenticated;
+ perform public.cancel_pos_order(eid);
+ if (select quantity from public.pos_stock where name='Coal')<>coal then raise exception 'Coal not restored'; end if;
+ payload:=jsonb_set(jsonb_set(payload,'{id}',to_jsonb(eid+1)),'{type}','"refill"');
+ perform public.record_pos_sale(payload);
+ if (select quantity from public.pos_stock where name='Coal')<>greatest(0,coal-2) then raise exception 'Refill coal incorrect'; end if;
+ reset role;
+ if snapshot is distinct from (select jsonb_agg(to_jsonb(s) order by id) from public.pos_stock s where name<>'Coal') then raise exception 'Refill changed noncoal inventory'; end if;
+end $$;
+rollback;
