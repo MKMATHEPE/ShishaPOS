@@ -1,3 +1,4 @@
+import { formHasChanges } from './formDirty.js';
 import { canManageExpense } from './expensePermissions.js';
 import { useUnsavedChanges } from "./unsavedChanges";
 import { useState } from 'react';
@@ -19,21 +20,23 @@ function ExpensePurchases({ expense, stockItems }) {
   });
 }
 
-export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId }) {
+export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd }) {
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
   const [editId, setEditId] = useState(null);
   const [deleteId, setDeleteId] = useState(null);
   const [draft, setDraft] = useState({});
+  const [initialDraft,setInitialDraft] = useState({});
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
-  useUnsavedChanges(editId !== null);
+  useUnsavedChanges(editId !== null && formHasChanges(draft,initialDraft));
   const stockItems = stockLines(stock);
   const money = amount => `R${Number(amount).toLocaleString('en-ZA', {minimumFractionDigits:2,maximumFractionDigits:2})}`;
   const edit = expense => {
     if (!canManageExpense(expense,currentUserId,isAdmin)) return;
     setEditId(expense.id); setDeleteId(null); setError(''); setMessage('');
+    setInitialDraft({ category: expense.category, description: expense.description || '', amount: String(expense.amount), paidBy: expense.paidBy || '', date: expenseDate(expense.time), stockKey: Object.keys(expense.stockQuantities ?? {})[0] ?? '', stockQuantity: String(Object.values(expense.stockQuantities ?? {})[0] ?? '') });
     setDraft({ category: expense.category, description: expense.description || '', amount: String(expense.amount), paidBy: expense.paidBy || '', date: expenseDate(expense.time), stockKey: Object.keys(expense.stockQuantities ?? {})[0] ?? '', stockQuantity: String(Object.values(expense.stockQuantities ?? {})[0] ?? '') });
   };
   const save = async expense => {
@@ -71,7 +74,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const expenseNames = new Map(expenses.flatMap(expense => ['paidBy','submittedBy','approvedBy','paymentBy'].filter(field=>expense[field] && expense[`${field}Name`]).map(field=>[expense[field],expense[`${field}Name`]])));
   const person = id => users.find(user => user.id === id)?.name ?? expenseNames.get(id) ?? 'Name unavailable';
   return <section className="expenses-list">
-    <h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3>
+    <div className="expenses-list-heading"><h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3>{onAdd && <button className="expense-add-button" onClick={onAdd} aria-label="Add expense">＋ Add</button>}</div>
     <label className="expense-status-filter">Status<select disabled={busy || editId !== null || deleteId !== null} value={filter} onChange={event=>{setFilter(event.target.value);setPage(1);}}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}

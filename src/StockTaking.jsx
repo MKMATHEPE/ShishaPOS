@@ -1,3 +1,4 @@
+import { formHasChanges } from './formDirty.js';
 import { useUnsavedChanges } from "./unsavedChanges";
 import { useEffect, useRef, useState } from 'react';
 import StockItemPhoto from './StockItemPhoto.jsx';
@@ -16,7 +17,7 @@ export default function StockTaking({ stock, refreshStock, pendingOrders, isAdmi
   const saveRunning = useRef(false);
   const [historyId, setHistoryId] = useState(null);
   const [editingKey, setEditingKey] = useState(null);
-  useUnsavedChanges(mode !== null);
+  useUnsavedChanges(mode !== null && formHasChanges(draft,initialCountDraft(baseline)));
   const lines = stockLines(stock);
   const load = async () => {
     const { data, error } = await supabase.from('pos_stocktakes').select('*').order('opened_at', { ascending: false }).limit(20);

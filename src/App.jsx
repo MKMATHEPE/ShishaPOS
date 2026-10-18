@@ -1,3 +1,4 @@
+import { formHasChanges } from './formDirty.js';
 import { blocksSignOut } from './offlineQueueStatus.js';
 import { readSellingCache, cacheSellingData } from './sellingCache.js';
 import { estimatedStock } from './offlineStock.js';
@@ -132,8 +133,14 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
   const [sale, setSale] = useState({ payment: "cash", description: "", reason: "", amount: "", date: localToday() });
-  const [activeAction, setActiveAction] = useState(null);
-  useUnsavedChanges(activeAction !== null);
+  const [activeAction, updateActiveAction] = useState(null);
+  const [formBaselines,setFormBaselines] = useState({expense:spend,manual_sale:sale,partner_payout:entry});
+  const setActiveAction = action => {
+    if (action && action !== activeAction) setFormBaselines({expense:spend,manual_sale:sale,partner_payout:entry});
+    updateActiveAction(action);
+  };
+  const activeDraft = activeAction === 'expense' ? spend : activeAction === 'manual_sale' ? sale : entry;
+  useUnsavedChanges(!!formBaselines[activeAction] && formHasChanges(activeDraft,formBaselines[activeAction]));
   const [message, setMessage] = useState("");
   const partners = journal.partners ?? [];
   const transactions = (journal.transactions ?? []).filter(item => item.date >= dateFrom && item.date <= dateTo);
@@ -248,12 +255,11 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
 
     {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
 
-    <div className="finance-action-grid">
-      <button onClick={() => setActiveAction(activeAction === "expense" ? null : "expense")}>＋ Add expense</button>
+    {isAdmin && <div className="finance-action-grid">
       {isAdmin && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
       {isAdmin && <button onClick={() => startPayment("reimbursement")}>Pay someone back</button>}
       {isAdmin && <button onClick={() => startPayment("partner_payout")}>Pay partner</button>}
-    </div>
+    </div>}
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
     {activeAction === "expense" && <div className="expand-down finance-form-card add-expense-card" style={card}>
@@ -292,7 +298,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList onAdd={activeAction !== "expense" ? async () => { if (await confirmDiscard()) setActiveAction("expense"); } : undefined} currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
 
     {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>
@@ -359,8 +365,9 @@ export default function App() {
   const [equipmentSaving, setEquipmentSaving] = useState(false);
   const [equipmentSaveError, setEquipmentSaveError] = useState("");
   const equipmentSaveRunning = useRef(false);
-  useUnsavedChanges(editingEquipmentId !== null);
+  const [equipmentBaseline, setEquipmentBaseline] = useState({});
   const [equipmentDraft, setEquipmentDraft] = useState({ name: "", quantity: "", lowThreshold: "" });
+  useUnsavedChanges(editingEquipmentId !== null && formHasChanges(equipmentDraft,equipmentBaseline));
   const [teamSearch, setTeamSearch] = useState("");
   const [teamFilter, setTeamFilter] = useState("All");
   const [currentPassword, setCurrentPassword] = useState("");
@@ -1476,6 +1483,7 @@ export default function App() {
                     <button
                       onClick={() => {
                         setEditingEquipmentId(item.id);
+                        setEquipmentBaseline({ name: item.name, quantity: String(item.quantity), lowThreshold: String(item.lowThreshold) });
                         setEquipmentDraft({ name: item.name, quantity: String(item.quantity), lowThreshold: String(item.lowThreshold) });
                       }}
                       style={styles.equipmentEditBtn}
