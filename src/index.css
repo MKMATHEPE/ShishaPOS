@@ -919,3 +919,11 @@ html .app-shell :is(.frosted-card, .order-type-card, .available-pipes-card, .ord
   backdrop-filter: blur(8px);
   -webkit-backdrop-filter: blur(8px);
 }
+
+.overview-collapsible > summary { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 2px 0; min-height: 32px; list-style: none; }
+.overview-collapsible > summary::-webkit-details-marker { display: none; }
+.overview-collapsible > summary h2 { margin: 0; }
+.overview-collapsible > summary::after { content: '+'; font: 400 20px/1 Arial,sans-serif; }
+.overview-collapsible[open] > summary::after { content: '−'; }
+.overview-collapsible-content { padding-top: 10px; }
+.overview-collapsible > summary:focus-visible { outline: 2px solid #8c8982; outline-offset: 3px; border-radius: 5px; }
