@@ -867,9 +867,9 @@ export default function App() {
     <div style={styles.container}>
       <div className="app-shell" style={styles.appChrome}>
         {authLoading ? (
-          <div style={styles.loginScreen}><div style={styles.loginCard}>Checking secure session…</div></div>
+          <div className="login-screen" style={styles.loginScreen}><div style={styles.loginCard}>Checking secure session…</div></div>
         ) : !activeUser ? (
-          <div style={styles.loginScreen}>
+          <div className="login-screen" style={styles.loginScreen}>
             <div className="float-1" style={styles.loginOrb1} />
             <div className="float-2" style={styles.loginOrb2} />
             <div className="float-3" style={styles.loginOrb3} />
