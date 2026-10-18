@@ -1,3 +1,4 @@
+import { estimatedStock } from './offlineStock.js';
 import { approvedExpenseTotal } from './expenseApprovalTotals.js';
 import { presetRange, presetIsActive } from "./managementPresets.js";
 import { useState, useCallback, useRef, useEffect } from "react";
@@ -671,6 +672,9 @@ export default function App() {
     return () => clearTimeout(loadingTimer);
   }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]);
 
+  const pendingSales = orders.filter(order => order.pendingSync);
+  const offlineEstimate = estimatedStock(stock, pendingSales);
+  const estimatedFlavour = offlineEstimate.find(item => item.name === 'Flavour')?.subItems?.find(item => item.id === selectedFlavour?.id);
   const hookahPipeQty = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("hookah"))?.quantity ?? 0;
   const rotasQty      = stock.find(i => i.category === "equipment" && i.name.toLowerCase() === "rotas")?.quantity ?? 0;
   const rotaTopsQty   = stock.find(i => i.category === "equipment" && i.name.toLowerCase().includes("rota top"))?.quantity ?? 0;
@@ -977,7 +981,7 @@ export default function App() {
             <div style={{ ...styles.syncBanner, background: !isOnline ? "#fff7ed" : pendingOrderCount > 0 ? "#f6f4ef" : "#ecfdf5", borderColor: !isOnline ? "#fed7aa" : pendingOrderCount > 0 ? "#d8d4cb" : "#a7f3d0" }}>
               <div>
                 <strong>{!isOnline ? "Offline mode" : pendingOrderCount > 0 ? `${pendingOrderCount} waiting to sync` : syncMessage}</strong>
-                <span>{!isOnline ? " Orders stay on this device. Stock will not change." : pendingOrderCount > 0 ? " Stock will not be adjusted." : ""}</span>
+                <span>{!isOnline ? " Orders stay on this device. Stock estimates await server confirmation." : pendingOrderCount > 0 ? " Stock estimates await server confirmation." : ""}</span>
               </div>
               {isOnline && pendingOrderCount > 0 && <button onClick={syncOfflineOrders} disabled={syncingOrders} style={styles.syncButton}>{syncingOrders ? "Syncing…" : "Sync now"}</button>}
             </div>
@@ -989,6 +993,7 @@ export default function App() {
           <div className="pipe-availability-track"><div style={{width: `${hookahPipeQty + pipesOut ? hookahPipeQty / (hookahPipeQty + pipesOut) * 100 : 0}%`, background: hookahPipeQty <= 2 ? '#dc2626' : '#16c35a'}} /></div>
         </div>
         <div className="theme-page-surface order-type-card" style={styles.salePanel}>
+          {pendingSales.length > 0 && <p className="offline-stock-estimate" role="status">Estimated remaining · Coal {offlineEstimate.find(item=>item.name==='Coal')?.quantity ?? '—'} · Mouth pieces {offlineEstimate.find(item=>item.name==='Mouth Pieces')?.quantity ?? '—'}{estimatedFlavour ? ` · ${estimatedFlavour.name} ${Number(estimatedFlavour.quantity).toFixed(2)} boxes` : ''}. Awaiting sync; other devices may change stock.</p>}
           <div className="pos-order-controls">
             <div className="pos-control-column"><div style={styles.sectionHeaderLabel}>Order type</div>
               <div className="pos-segments" role="group" aria-label="Order type" style={styles.toggleGroup}>
