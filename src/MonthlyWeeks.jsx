@@ -24,7 +24,6 @@ export default function MonthlyWeeks({month,liveOrders}) {
     {!ready?<p role="status">Loading monthly sales…</p>:failed?<><p role="status">Monthly sales could not be loaded.</p><button onClick={()=>{setHistory({month:'',orders:null});setRetry(n=>n+1);}}>Try again</button></>:<>
       {data.total>0?<div className="monthly-donut-wrap"><div className="monthly-donut" style={{background:`conic-gradient(${stops})`}} role="img" aria-label={`${title}: ${data.weeks.map(w=>`${w.label} ${w.share.toFixed(1)} percent`).join(', ')}`}><div><strong>{money(data.total)}</strong><span>Trading total</span></div></div></div>:<p>No recorded sales this month.</p>}
       <ul className="monthly-week-legend">{data.weeks.map((week,index)=><li key={week.from}><span className="monthly-week-dot" style={{backgroundColor:colours[index]}} aria-hidden="true"/><span><strong>{week.label}</strong><small>{shortDate(week.from)}–{shortDate(week.to)} · Tue 02:00{week.status!=='Complete'?` · ${week.status}`:''}</small></span><span className="monthly-week-value"><strong>{money(week.revenue)}</strong><small>{week.share.toFixed(1)}% · {week.orders} orders</small></span></li>)}</ul>
-      <p>Each week runs from Saturday 00:00 until Tuesday 02:00, South African time. Weeks belong to the month their Saturday falls in, including sales past month-end. Incomplete weeks are still trading.</p>
     </>}
   </div></details>;
 }

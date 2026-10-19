@@ -1318,7 +1318,7 @@ export default function App() {
                     if (await setFinanceLock(date)) setFinanceJournal(current => ({ ...current, lockedThrough: date || null }));
                   }}
                 />
-              ) : <ManagementOverview orders={displayOrders} expenses={expenses} from={managementDateFrom} to={managementDateTo} timeFrom={managementTimeFrom} timeTo={managementTimeTo} loading={managementLoading} />}
+              ) : <ManagementOverview manualSales={financeJournal.manualSales ?? []} orders={displayOrders} expenses={expenses} from={managementDateFrom} to={managementDateTo} timeFrom={managementTimeFrom} timeTo={managementTimeTo} loading={managementLoading} />}
 
             </div>
             );

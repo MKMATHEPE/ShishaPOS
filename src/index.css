@@ -1107,7 +1107,7 @@ html[data-theme="dark"] .admin-save-feedback.saved { color: #79d59f; }
 .sales-performance .sales-point { fill: var(--cp-ink) !important; }
 .sales-performance .sales-axis { stroke: var(--cp-line) !important; }
 .sales-performance svg g[role="button"] { cursor: pointer; }
-.sales-performance svg g:focus-visible .sales-point { stroke: var(--cp-muted); stroke-width: 5; }
+.sales-performance svg g:focus-visible .sales-point { stroke: var(--cp-muted); stroke-width: 2; }
 .sales-performance .sales-point-detail { min-height: 26px; margin: 6px 0; font-size: 11px; }
 .sales-insights { display: grid; grid-template-columns: repeat(2,minmax(0,1fr)); gap: 12px; margin: 8px 0 12px; }
 .sales-insights > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
@@ -1119,3 +1119,36 @@ html[data-theme="dark"] .admin-save-feedback.saved { color: #79d59f; }
 .paid-expenses-group { margin-top: 10px; border-top: 1px solid var(--cp-line); }
 .paid-expenses-group > summary { min-height: 44px; padding: 10px 0; box-sizing: border-box; cursor: pointer; color: var(--cp-ink); font: 600 12px Arial,sans-serif; }
 .paid-expenses-group > summary span { font-size: 10px; font-weight: 400; color: var(--cp-muted); margin-left: 6px; }
+.profit-growth .profit-positive { color: #248652; }
+.profit-growth .profit-negative { color: #ba4848; }
+html[data-theme="dark"] .profit-growth .profit-positive { color: #79d59f; }
+html[data-theme="dark"] .profit-growth .profit-negative { color: #ec9393; }
+@media(max-width:360px) { .sales-chart-toolbar { flex-wrap: wrap; } }
+
+.sales-performance svg .sales-point-hit { fill: transparent !important; stroke: none !important; }
+.profit-growth .profit-month-0 { stroke: var(--cp-ink) !important; }
+.profit-growth .profit-month-1 { stroke: #5686b6 !important; }
+.profit-growth .profit-month-2 { stroke: #a28156 !important; }
+.profit-month-legend { display: flex; flex-wrap: wrap; gap: 12px; margin: 10px 0; font-size: 10px; color: var(--cp-muted); }
+.profit-month-legend > span { display: inline-flex; align-items: center; gap: 5px; }
+.profit-month-legend i { display: inline-block; width: 16px; border-top: 2px solid var(--cp-ink); }
+.profit-month-legend .profit-legend-1 i { border-top: 2px dashed #5686b6; }
+.profit-month-legend .profit-legend-2 i { border-top: 2px dotted #a28156; }
+
+.profit-month-totals { display: grid; grid-template-columns: repeat(3,minmax(0,1fr)); gap: 10px; margin: 8px 0; }
+.profit-month-totals > div { min-width: 0; display: flex; flex-direction: column; gap: 5px; }
+.profit-month-totals span { display: flex; align-items: center; gap: 5px; font-size: 10px; color: var(--cp-muted); }
+.profit-month-totals strong { font: 600 13px Arial,sans-serif; color: var(--cp-ink); font-variant-numeric: tabular-nums; overflow-wrap: anywhere; }
+.profit-month-totals i { width: 12px; border-top: 2px solid var(--cp-ink); }
+.profit-month-totals .profit-legend-1 i { border-top: 2px dashed #5686b6; }
+.profit-month-totals .profit-legend-2 i { border-top: 2px dotted #a28156; }
+
+.profit-growth .profit-axis-value text { font: 8px Arial,sans-serif; fill: var(--cp-ink) !important; }
+.profit-growth .profit-axis-value path { stroke: var(--cp-muted); }
+.profit-growth .profit-axis-1 text { fill: #5686b6 !important; }
+.profit-growth .profit-axis-2 text { fill: #a28156 !important; }
+.profit-chart-dates { margin-left: 24%; }
+
+/* Full-width plot beneath the unchanged amount labels. */
+.profit-chart-dates { margin-left: 0; }
+.profit-growth .profit-axis-value text { paint-order: stroke fill; stroke: var(--cp-card); stroke-width: 3px; stroke-linejoin: round; }
