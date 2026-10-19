@@ -1281,3 +1281,17 @@ html[data-theme="dark"] .partner-settings-heading .partner-total-valid,html[data
 html[data-theme="dark"] .stock-taking .stock-taking-history[aria-pressed="true"] { background: #343430; border-color: #77776e; }
 .stock-taking .stock-taking-history:focus { outline: none; }
 .stock-taking .stock-taking-history:focus-visible { outline: 1px solid var(--cp-muted); outline-offset: 1px; }
+
+.monthly-week-legend li.is-best-week { background: rgba(72,150,108,.09); box-shadow: none; border-radius: 8px; padding-left: 9px; padding-right: 9px; }
+html[data-theme="dark"] .monthly-week-legend li.is-best-week { background: rgba(121,213,159,.08); box-shadow: none; }
+
+.weekly-month-navigation { display: flex; align-items: center; gap: 6px; min-width: 0; margin-bottom: 8px; }
+.weekly-month-navigation .weekly-month-swipe { flex: 1; min-width: 0; touch-action: pan-y; overflow: hidden; }
+.weekly-month-swipe small { display: block; line-height: 1.5; user-select: none; }
+.monthly-weeks .weekly-month-navigation button { flex: 0 0 30px; width: 30px; min-height: 36px; padding: 0; font-size: 22px; background: transparent; color: var(--cp-ink); border-color: var(--cp-line); }
+.weekly-month-navigation button:disabled { opacity: .3; cursor: default; }
+
+.monthly-week-description { min-width: 0; }
+.monthly-week-dates { color: var(--cp-muted); font-weight: 400; }
+.monthly-week-legend .is-upcoming-week { opacity: .55; }
+.monthly-week-value > small { white-space: nowrap; }
