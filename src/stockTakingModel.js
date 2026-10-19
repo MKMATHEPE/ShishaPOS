@@ -1,5 +1,5 @@
 export function stockLines(stock) {
-  return stock.flatMap(item => item.subItems ? item.subItems.map(sub => ({ key: `${item.id}:${sub.id}`, name: sub.name, unit: 'boxes', quantity: Number(sub.quantity), category: item.category, flavour: sub })) : [{ key: String(item.id), name: item.name, unit: item.unit, quantity: Number(item.quantity), category: item.category }]).sort((a,b) => Number(a.category === 'equipment') - Number(b.category === 'equipment'));
+  return stock.flatMap(item => item.subItems ? item.subItems.map(sub => ({ key: `${item.id}:${sub.id}`, name: sub.name, unit: 'boxes', quantity: Number(sub.quantity), category: item.category, flavour: sub })) : [{ key: String(item.id), name: item.name, unit: item.unit, quantity: Number(item.quantity), category: item.category }]).sort((a,b) => Number(a.category === 'equipment') - Number(b.category === 'equipment') || Number(!!a.flavour) - Number(!!b.flavour) || (a.flavour && b.flavour ? b.quantity - a.quantity : 0));
 }
 export function countPayload(lines, draft, additions = false) {
   const result = {};

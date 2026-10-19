@@ -1274,3 +1274,10 @@ html[data-theme="dark"] .partner-settings-heading .partner-total-valid,html[data
   .admin-staff-filters input { font-size: 12px !important; }
   .admin-staff-directory .admin-staff-card { padding: 0 10px !important; }
 }
+
+.stock-taking-history-dates { display: flex; gap: 6px; overflow-x: auto; max-width: 100%; min-width: 0; padding: 6px 2px; overscroll-behavior-x: contain; }
+.stock-taking .stock-taking-history { flex: 0 0 auto; width: auto; height: 36px; min-height: 36px; margin: 0; padding: 6px 10px; border-radius: 10px; font-size: 11px; line-height: 1.2; white-space: nowrap; box-sizing: border-box; box-shadow: none; }
+.stock-taking .stock-taking-history[aria-pressed="true"] { background: #e2dfd6; border-color: #a5a297; }
+html[data-theme="dark"] .stock-taking .stock-taking-history[aria-pressed="true"] { background: #343430; border-color: #77776e; }
+.stock-taking .stock-taking-history:focus { outline: none; }
+.stock-taking .stock-taking-history:focus-visible { outline: 1px solid var(--cp-muted); outline-offset: 1px; }
