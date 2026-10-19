@@ -1603,25 +1603,25 @@ export default function App() {
               {/* Users section — collapsible */}
               {settingsSection === "team" && <>
               <div className="admin-section-heading"><h2>Staff</h2><button type="button" aria-expanded={showAddStaff} onClick={()=>setShowAddStaff(value=>!value)}>{showAddStaff ? 'Close form' : '＋ Add staff'}</button></div>
-              <div style={{ display: "flex", gap: 8 }}>
-                <input type="search" value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search name or username" style={{ ...styles.userNameInput, flex: 1 }} />
-                <select value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ ...styles.userRoleSelect, width: 124 }}>
+              <div className="admin-staff-filters">
+                <input aria-label="Search staff" type="search" value={teamSearch} onChange={(e) => setTeamSearch(e.target.value)} placeholder="Search name or username" style={{ ...styles.userNameInput, flex: 1 }} />
+                <select aria-label="Filter staff" value={teamFilter} onChange={(e) => setTeamFilter(e.target.value)} style={{ ...styles.userRoleSelect, width: 124 }}>
                   {['All', 'Staff', 'Manager', 'Admin', 'Suspended'].map((filter) => <option key={filter}>{filter}</option>)}
                 </select>
               </div>
               {(
-                <div className="expand-down" style={styles.userList}>
-                  {visibleUsers.map((u, ui) => {
+                <div className="expand-down frosted-card admin-staff-directory">
+                  {visibleUsers.map(u => {
                     const isExpanded = expandedUsers.has(u.id);
                     return (
-                    <div key={u.id} className={`card-enter frosted-card admin-staff-card d-${Math.min(ui, 6)}`} style={{ ...styles.userCard, opacity: u.paused ? 0.55 : 1 }}>
+                    <div key={u.id} className={`admin-staff-card${u.paused ? " is-paused" : ""}`}>
                       <button type="button" className="admin-staff-row" aria-expanded={isExpanded} onClick={() => toggleUserExpanded(u.id)}>
-                        <div style={{ ...styles.userAvatar, background: u.paused ? "#8c8982" : undefined }}>
+                        <div className="admin-staff-avatar">
                           {u.name.charAt(0).toUpperCase()}
                         </div>
-                        <div style={styles.userMeta}>
-                          <strong style={styles.userName}>{u.name}</strong>
-                          <span style={styles.userRole}>{u.username ? `@${u.username} · ` : ""}{u.role}</span>
+                        <div className="admin-staff-meta">
+                          <strong>{u.name}</strong>
+                          <span>{u.username ? `@${u.username} · ` : ""}{u.role}</span>
                         </div>
                         <span className={`admin-staff-status ${u.paused ? 'is-paused' : ''}`}><i />{u.paused ? 'Paused' : 'Active'}</span>
                         <span className="admin-staff-chevron" aria-hidden="true">{isExpanded ? '⌃' : '›'}</span>
