@@ -1,4 +1,7 @@
-export function installRuntimeMonitoring(window, record, clock) {
+export function installRuntimeMonitoring(window, report, clock) {
+  const record = (...args) => {
+    try { report(...args); } catch { /* Preserve the original app/network result. */ }
+  };
   window.addEventListener('error',()=>record('error','runtime_error'));
   window.addEventListener('unhandledrejection',()=>record('error','unhandled_rejection'));
   const originalFetch=window.fetch.bind(window);

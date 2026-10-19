@@ -1,20 +1,23 @@
 import { installRuntimeMonitoring } from './monitoringRuntime.js';
-import { diagnosticRecord, appendDiagnostic } from './diagnosticModel';
+import { diagnosticRecord, appendDiagnostic, createDiagnosticGate } from './diagnosticModel';
 import { supabase } from './supabase';
 const KEY = 'chill-pipe:diagnostics';
 let screen = 'app';
 let installed = false;
 let records = [];
 let remoteLastSent = 0;
+const acceptDiagnostic = createDiagnosticGate();
 export function recordDiagnostic(event, code, duration) {
   const record = diagnosticRecord(event, screen, code, duration);
-  if (!record) return;
+  if (!record || !acceptDiagnostic(record)) return;
   records = appendDiagnostic(records,record);
   try { localStorage.setItem(KEY,JSON.stringify(records)); } catch { /* Diagnostics never block the POS. */ }
   // The reviewed monitoring database setup is activated; deployments may opt out.
   if (import.meta.env.VITE_DIAGNOSTICS_REMOTE !== 'false' && supabase && Date.now()-remoteLastSent>10000) {
     remoteLastSent=Date.now();
-    supabase.rpc('record_pos_diagnostic',{event_name:record.event,screen_name:record.screen,error_code:record.code,elapsed_ms:record.duration_ms}).then(()=>{},()=>{});
+    try {
+      Promise.resolve(supabase.rpc('record_pos_diagnostic',{event_name:record.event,screen_name:record.screen,error_code:record.code,elapsed_ms:record.duration_ms})).catch(()=>{});
+    } catch { /* Monitoring failures must not feed the rejection handler. */ }
   }
 }
 export function setDiagnosticScreen(value) { screen=value; }

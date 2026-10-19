@@ -7,6 +7,15 @@ function harness(fetch) {
  installRuntimeMonitoring(window,(...args)=>events.push(args),{now:()=>time,getEntriesByType:()=>[{domContentLoadedEventEnd:350}]});
  return {window,events,listeners,advance(ms){time+=ms;}};
 }
+test('broken monitoring never changes successful requests or replaces the original network error',async()=>{
+ const original=Error('network failure');let fail=false;
+ const response={ok:false,status:403};
+ const window={fetch:async()=>{if(fail)throw original;return response;},addEventListener(){}};
+ installRuntimeMonitoring(window,()=>{throw Error('diagnostics failed');},{now:()=>0});
+ assert.equal(await window.fetch('/save'),response);
+ fail=true;
+ await assert.rejects(window.fetch('/save'),error=>error===original);
+});
 test('failed writes are reported while the original response remains available',async()=>{
  const response={ok:false,status:403};const h=harness(async()=>response);
  assert.equal(await h.window.fetch('/rest/v1/pos_stock',{method:'PATCH',body:'private description'}),response);

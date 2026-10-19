@@ -9,3 +9,16 @@ export function diagnosticRecord(event, screen, code, duration, now = new Date()
 export function appendDiagnostic(records, record) {
   return record ? [...records,record].slice(-200) : records;
 }
+
+// Retain one event per category/screen in each ten-second window.
+export function createDiagnosticGate(windowMs = 10000) {
+  const last = new Map();
+  return record => {
+    const key = `${record.event}/${record.screen}/${record.code}`;
+    const now = Date.parse(record.time);
+    if (last.has(key) && now - last.get(key) >= 0 && now - last.get(key) < windowMs) return false;
+    last.set(key, now);
+    if (last.size > 200) last.delete(last.keys().next().value);
+    return true;
+  };
+}
