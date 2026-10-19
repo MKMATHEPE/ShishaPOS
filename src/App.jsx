@@ -259,10 +259,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
 
     {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
 
-    {isAdmin && <div className="finance-action-grid">
-      {isAdmin && <button onClick={() => setActiveAction(activeAction === "manual_sale" ? null : "manual_sale")}>＋ Missing sale</button>}
-    </div>}
-    {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: message.includes("saved") ? "#f0fdf4" : "#fef2f2", color: message.includes("saved") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
+    {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: (message.includes("saved") || message === "Finance report downloaded.") ? "#f0fdf4" : "#fef2f2", color: (message.includes("saved") || message === "Finance report downloaded.") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
     {activeAction === "expense" && <div className="expand-down finance-form-card add-expense-card" style={card}>
       <strong className="add-expense-title">Add expense</strong>
@@ -300,7 +297,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <div className="finance-form-actions"><button onClick={() => setActiveAction(null)} style={{ ...styles.copyBtn, flex: 1 }}>Cancel</button><button onClick={submitManualSale} style={{ ...styles.addUserBtn, flex: 2 }}>Add sale</button></div>
     </div>}
 
-    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList canViewReceipts={canViewReceipts} onAdd={activeAction !== "expense" ? async () => { if (await confirmDiscard()) setActiveAction("expense"); } : undefined} currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
+    {activeAction !== "reimbursement" && activeAction !== "partner_payout" && <ExpensesList onMissingSale={isAdmin ? async () => { if (await confirmDiscard()) setActiveAction(activeAction === 'manual_sale' ? null : 'manual_sale'); } : undefined} canViewReceipts={canViewReceipts} onAdd={activeAction !== "expense" ? async () => { if (await confirmDiscard()) setActiveAction("expense"); } : undefined} currentUserId={currentUserId} isAdmin={isAdmin} onStatus={onExpenseStatus} stock={stock} expenses={isAdmin ? allExpenses : expenses} users={users} lockedThrough={journal.lockedThrough} today={localToday()} onUpdate={onExpenseUpdate} onDelete={onExpenseDelete} />}
 
     {isAdmin && (activeAction === "reimbursement" || activeAction === "partner_payout") && <div className="expand-down finance-form-card" style={card}>
       <span style={label}>{activeAction === "reimbursement" ? "Pay someone back" : "Pay partner profit"}</span>

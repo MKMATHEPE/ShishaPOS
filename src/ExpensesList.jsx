@@ -24,7 +24,7 @@ function ExpensePurchases({ expense, stockItems }) {
   });
 }
 
-export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd, canViewReceipts = false }) {
+export default function ExpensesList({ stock, expenses, users, lockedThrough, today, onUpdate, onDelete, isAdmin, onStatus, title, currentUserId, onAdd, onMissingSale, canViewReceipts = false }) {
   const listRef = useRef(null);
   const [filter, setFilter] = useState('all');
   const [page, setPage] = useState(1);
@@ -116,7 +116,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
       </div>;
   };
   return <section ref={listRef} className="expenses-list pagination-list-target">
-    <div className="expenses-list-heading"><h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3>{onAdd && <button className="expense-add-button" onClick={onAdd} aria-label="Add expense">＋ Add</button>}</div>
+    <div className="expenses-list-heading"><h3>{title ?? (isAdmin ? 'All expenses' : 'Expenses')}</h3><div className="expense-heading-actions">{onAdd && <button className="expense-add-button" onClick={onAdd} aria-label="Add expense">＋ Add</button>}{onMissingSale && <button className="expense-add-button expense-missing-sale-button" onClick={onMissingSale}>＋ Missing sale</button>}</div></div>
     <label className="expense-status-filter">Status<select disabled={busy || editId !== null || deleteId !== null} value={filter} onChange={event=>{setFilter(event.target.value);setPage(1);}}><option value="all">All</option>{Object.entries(labels).map(([key,label])=><option key={key} value={key}>{label}</option>)}</select></label>
     {error && <p className="expense-error" role="alert">{error}</p>}
     {message && <p role="status">{message}</p>}

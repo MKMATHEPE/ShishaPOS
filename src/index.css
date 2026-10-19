@@ -1190,3 +1190,8 @@ html[data-theme="dark"] .profit-growth .profit-negative { color: #ec9393; }
 .expense-name-purchase { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
 .expense-name-purchase > strong { white-space: normal !important; }
 .expense-inline-purchase { color: var(--cp-muted); font-size: 10px; font-weight: 400; }
+
+.expense-heading-actions { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+.expense-heading-actions .expense-missing-sale-button { min-height: 30px; padding: 5px 8px; font-size: 10px; border-radius: 8px; }
+@media(max-width:340px) { .expense-heading-actions { gap: 4px; } .expense-heading-actions .expense-add-button { padding-left: 7px; padding-right: 7px; } .expenses-list-heading { gap: 6px; } }
+.expense-heading-actions .expense-add-button { min-height: 30px; padding-top: 5px; padding-bottom: 5px; font-size: 10px; border-radius: 8px; }
