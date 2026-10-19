@@ -1358,3 +1358,21 @@ html[data-theme="dark"] .shift-review .review-matched { color: #99c7a0; }
 
 .review-count-selectors { grid-template-columns: repeat(2,minmax(0,1fr)); }
 .app-shell .review-count-selectors select { padding-left: 6px !important; padding-right: 22px !important; font-size: 12px !important; }
+.review-date-control { position: relative; display: block; min-width: 0; }
+.review-selected-date { position: absolute; inset: 0 24px 0 7px; display: flex; align-items: center; pointer-events: none; color: var(--cp-ink); font: 400 12px Arial,sans-serif; white-space: nowrap; }
+.app-shell .review-count-selectors .review-date-control select { color: transparent !important; }
+.review-date-control option { color: var(--cp-ink); background: var(--cp-stone); }
+.review-estimate-info { margin: 8px 0 12px; }
+.review-estimate-info summary { display: inline-flex; align-items: center; gap: 6px; border: 1px solid var(--cp-line); border-radius: 999px; padding: 5px 9px; color: var(--cp-muted); font: 500 10px Arial,sans-serif; cursor: pointer; }
+.review-estimate-info p,.review-calculation-info p { color: var(--cp-muted); font-size: 11px; line-height: 1.6; margin: 8px 0; }
+.review-flavour-table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+.review-flavour-table thead th { color: var(--cp-muted); font-size: 10px; font-weight: 400; text-align: right; padding: 8px 0; border-bottom: 1px solid var(--cp-line); }
+.review-flavour-table thead th:first-child { width: 42%; text-align: left; }
+.review-flavour-table thead th:nth-child(2) { width: 18%; }
+.review-flavour-table thead th span { font-size: 9px; }
+.review-flavour-values th { text-align: left; font-size: 12px; font-weight: 600; overflow-wrap: anywhere; }
+.review-flavour-values td { text-align: right; font-size: 12px; font-variant-numeric: tabular-nums; }
+.review-flavour-values > * { padding: 12px 0 2px; }
+.review-flavour-chart td { padding: 0 0 10px; border-bottom: 1px solid var(--cp-line); }
+.review-calculation-info { margin-top: 12px; }
+.review-calculation-info summary { color: var(--cp-muted); font-size: 11px; font-weight: 400; }

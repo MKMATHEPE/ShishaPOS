@@ -1,5 +1,9 @@
 const round=value=>Math.round((value+Number.EPSILON)*1000)/1000;
 const nameKey=value=>String(value??'').toLowerCase().replace(/[^a-z0-9]/g,'');
+export function sortReviewFlavours(rows) {
+ const gap=row=>row.low===null?0:Math.max(0,row.low-row.recorded,row.recorded-row.high);
+ return rows.filter(row=>row.recorded||row.used!==0).sort((a,b)=>gap(b)-gap(a)||b.recorded-a.recorded);
+}
 const quantity=(counts,key)=>Object.hasOwn(counts??{},key)&&counts[key]!==null&&Number.isFinite(Number(counts[key]))?Number(counts[key]):null;
 export function validReviewAmount(value) {
  return value==='' || (value!=null && String(value).trim()!=='' && Number.isFinite(Number(value)) && Number(value)>=0 && Number(value)<=100000000 && Math.abs(Number(value)*100-Math.round(Number(value)*100))<1e-6);

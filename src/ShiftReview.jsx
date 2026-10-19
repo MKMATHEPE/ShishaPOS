@@ -1,11 +1,12 @@
-import {useEffect,useRef,useState} from 'react';
+import {Fragment,useEffect,useRef,useState} from 'react';
 import {stockLines} from './stockTakingModel.js';
-import {buildShiftReview,validReviewAmount} from './shiftReviewModel.js';
+import {buildShiftReview,validReviewAmount,sortReviewFlavours} from './shiftReviewModel.js';
 import {fetchReviewSetup,fetchReviewInterval,saveShiftReview} from './shiftReviewDb.js';
 import {confirmDiscard,useUnsavedChanges} from './unsavedChanges';
 import {recordDiagnostic} from './monitoring';
 const money=value=>`R${Number(value).toLocaleString('en-ZA',{minimumFractionDigits:2,maximumFractionDigits:2})}`;
 const number=value=>Number(value.toFixed(2)).toLocaleString('en-ZA');
+const shortCountDate=value=>new Date(value).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',day:'numeric',month:'short',hour:'2-digit',minute:'2-digit'}).replace(',',' ·');
 const date=value=>new Date(value).toLocaleString('en-ZA',{timeZone:'Africa/Johannesburg',day:'numeric',month:'short',year:'numeric',hour:'2-digit',minute:'2-digit'});
 export default function ShiftReview({stock,pendingOrders}) {
  const [setup,setSetup]=useState(null),[selection,setSelection]=useState({start:'',end:''});
@@ -35,6 +36,8 @@ export default function ShiftReview({stock,pendingOrders}) {
  };
  const validInterval=start&&end&&+new Date(start.closed_at)<+new Date(end.closed_at);
  const result=validInterval&&interval?.key===intervalKey&&interval.data?buildShiftReview({start,end,lines:stockLines(stock),trackingStart:setup.trackingStart,...interval.data}):null;
+ const flavourRows=result?sortReviewFlavours(result.flavours):[];
+ const chartMax=Math.max(1,...flavourRows.flatMap(row=>[row.recorded,row.high??0]));
  const valid=validReviewAmount(draft.cash)&&validReviewAmount(draft.card);
  const save=async()=>{
   if(!result||!valid||running.current||pendingOrders||saved)return;
@@ -54,16 +57,18 @@ export default function ShiftReview({stock,pendingOrders}) {
   {!setup&&!error&&<p role="status">Loading stock counts…</p>}
   {setup&&setup.counts.length<2&&<section className="frosted-card review-card"><p>Save at least two remaining stock counts to compare usage.</p></section>}
   {setup&&setup.counts.length>=2&&<>
-   <section className="frosted-card review-card review-count-card"><h3>Flavours</h3><div className="review-count-selectors">{[['start','Opening count'],['end','Closing count']].map(([field,label])=><label key={field}>{label}<select disabled={busy} value={selection[field]} onChange={event=>choose(field,event.target.value)}>{setup.counts.map(row=><option key={row.id} value={row.id}>{date(row.closed_at)}</option>)}</select></label>)}</div>
-    {!validInterval?<p role="status">Choose an opening count earlier than the closing count.</p>:!result&&!error?<p role="status">Loading comparison…</p>:null}
+   <section className="frosted-card review-card review-count-card"><h3>Flavour reconciliation</h3>
+    <div className="review-count-selectors">{[['start','From count'],['end','To count']].map(([field,label])=><label key={field}>{label}<span className="review-date-control"><span className="review-selected-date" aria-hidden="true">{shortCountDate((field==='start'?start:end).closed_at)}</span><select disabled={busy} value={selection[field]} onChange={event=>choose(field,event.target.value)}>{setup.counts.map(row=><option key={row.id} value={row.id}>{date(row.closed_at)}</option>)}</select></span></label>)}</div>
+    {!validInterval?<p role="status">Choose a From count earlier than the To count.</p>:!result&&!error?<p role="status">Loading comparison…</p>:null}
     {result&&<>
-     {!result.tracked&&<p className="review-warning">Historical estimate: purchase tracking started {date(setup.trackingStart)}. Earlier purchases may have been edited or removed.</p>}
+     {!result.tracked&&<details className="review-estimate-info"><summary>Historical estimate <span aria-hidden="true">ⓘ</span></summary><p>Purchase tracking started {date(setup.trackingStart)}. Earlier purchases may have been edited or removed. These comparisons are estimates, not confirmed shortages.</p></details>}
      <div className="review-chart-legend"><span><i/>Recorded orders</span><span><i/>Estimated usage range</span></div>
-     {result.flavours.filter(row=>row.recorded||row.used!==0).map(row=>{
-      const max=Math.max(1,...result.flavours.flatMap(item=>[item.recorded,item.high??0]));
-      return <div className="review-flavour" key={row.key}><div><strong>{row.name}</strong><span>{row.recorded} orders · {row.low===null?'Usage unavailable':`${number(row.low)}–${number(row.high)} estimated`}</span></div><div className="review-bars" role="img" aria-label={`${row.name}: ${row.recorded} recorded orders, ${row.low===null?'usage unavailable':`${number(row.low)} to ${number(row.high)} estimated servings`}`}><div className="review-order-bar" style={{width:`${row.recorded/max*100}%`}}/><div className="review-range-track">{row.low!==null&&<i style={{left:`${row.low/max*100}%`,width:`${Math.max(.5,(row.high-row.low)/max*100)}%`}}/>}</div></div><small className={row.status==='Review difference'||row.status==='Check counts'?'review-warning':row.status==='Within range'?'review-matched':''}>{row.status}</small></div>;
-     })}
-     <small>3–3.5 servings per flavour box · differences need review, including waste and counting errors.</small>
+     <table className="review-flavour-table"><thead><tr><th scope="col">Flavour</th><th scope="col">Orders</th><th scope="col">Estimated usage<br/><span>servings</span></th></tr></thead><tbody>{flavourRows.map(row=><Fragment key={row.key}>
+      <tr className="review-flavour-values"><th scope="row">{row.name}</th><td>{row.recorded}</td><td>{row.low===null?'Unavailable':`${number(row.low)}–${number(row.high)}`}</td></tr>
+      <tr className="review-flavour-chart"><td colSpan={3}><div className="review-bars" role="img" aria-label={`${row.name}: ${row.recorded} recorded orders, ${row.low===null?'usage unavailable':`${number(row.low)} to ${number(row.high)} estimated servings`}`}><div className="review-order-bar" style={{width:`${row.recorded/chartMax*100}%`}}/><div className="review-range-track">{row.low!==null&&<i style={{left:`${row.low/chartMax*100}%`,width:`${Math.max(.5,(row.high-row.low)/chartMax*100)}%`}}/>}</div></div>{(result.tracked||row.status==='Check counts')&&<small className={row.status==='Review difference'||row.status==='Check counts'?'review-warning':row.status==='Within range'?'review-matched':''}>{row.status}</small>}</td></tr>
+     </Fragment>)}</tbody></table>
+     {!flavourRows.length&&<p>No flavour usage or orders recorded for these counts.</p>}
+     <details className="review-calculation-info"><summary>How it’s calculated</summary><p>Opening count + stock added − closing count = boxes used. Multiply boxes used by 3–3.5 servings per box to estimate usage. Compare this range with recorded orders. Waste, portions and counting errors can cause differences.</p></details>
     </>}
    </section>
    {!!pendingOrders&&<p className="review-warning">Sync queued sales before saving this review.</p>}

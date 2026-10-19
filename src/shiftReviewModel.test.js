@@ -1,6 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {buildShiftReview,validReviewAmount} from './shiftReviewModel.js';
+import {buildShiftReview,validReviewAmount,sortReviewFlavours} from './shiftReviewModel.js';
+test('flavour rows prioritise distance outside the expected range without changing the source',()=>{
+ const rows=[{name:'Gum',recorded:10,low:9,high:10.5,used:3},{name:'Lady',recorded:10,low:13.8,high:16.1,used:4.6},{name:'Mint',recorded:6,low:15,high:17.5,used:5},{name:'Unused',recorded:0,low:0,high:0,used:0}];
+ assert.deepEqual(sortReviewFlavours(rows).map(row=>row.name),['Mint','Lady','Gum']);
+ assert.equal(rows[0].name,'Gum');
+});
 const input={start:{closed_at:'2026-10-18T15:00:00Z',closing:{'14:lk':3,'1':72}},end:{closed_at:'2026-10-19T22:00:00Z',closing:{'14:lk':1,'1':60}},lines:[{key:'14:lk',name:'Lady Killer',flavour:{}},{key:'1',name:'Coal'}],trackingStart:'2026-10-01T00:00:00Z',orders:Array.from({length:6},(_,id)=>({id,flavour:'Lady Killer',time:'2026-10-18T18:00:00Z',price:170,payment:'cash'}))};
 test('physical counts produce flavour ranges and independent coal usage',()=>{
  const result=buildShiftReview(input);assert.equal(result.flavours[0].used,2);assert.equal(result.flavours[0].low,6);assert.equal(result.flavours[0].high,7);assert.equal(result.flavours[0].status,'Within range');assert.equal(result.coal.difference,0);assert.equal(result.payments.cash,1020);
