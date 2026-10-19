@@ -28,3 +28,10 @@ test('profit months cover three full months across year and leap boundaries',asy
  assert.deepEqual(profitMonths('2026-01'),[{month:'2026-01',from:'2026-01-01',to:'2026-01-31'},{month:'2025-12',from:'2025-12-01',to:'2025-12-31'},{month:'2025-11',from:'2025-11-01',to:'2025-11-30'}]);
  assert.equal(profitMonths('2024-03')[1].to,'2024-02-29');
 });
+
+test('month navigation handles year transitions and short months',async()=>{
+ const {shiftSalesMonth}=await import('./salesPerformanceModel.js');
+ assert.equal(shiftSalesMonth('2026-01',-1),'2025-12');
+ assert.equal(shiftSalesMonth('2025-12',1),'2026-01');
+ assert.equal(shiftSalesMonth('2024-03',-1),'2024-02');
+});

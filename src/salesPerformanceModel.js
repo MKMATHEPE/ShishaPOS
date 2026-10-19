@@ -37,3 +37,8 @@ export function profitMonths(month) {
     return {month:first.toISOString().slice(0,7),from:first.toISOString().slice(0,10),to:last.toISOString().slice(0,10)};
   });
 }
+
+export function shiftSalesMonth(month,offset) {
+  const [year,number]=month.split('-').map(Number);
+  return new Date(Date.UTC(year,number-1+offset,1)).toISOString().slice(0,7);
+}

@@ -36,7 +36,6 @@ export default function ProfitGrowth({month,expenses,manualSales,measure='profit
   for(let index=axisLabels.length-1;index>=0;index--) axisLabels[index].labelY=Math.min(axisLabels[index].labelY,index===axisLabels.length-1?112:axisLabels[index+1].labelY-13);
   const selectDay=day=>setSelected(day);
   return <div className="profit-growth">
-    <p className="sales-point-detail">{monthLabel(month)} · Full month · Running {label}</p>
     {loading?<p role="status">Loading monthly {label}…</p>:history.error?<p role="alert">Could not load {label} history. <button onClick={()=>{setHistory({month:'',orders:null,error:false});setRetry(value=>value+1);}}>Retry</button></p>:<>
       <svg viewBox="0 0 360 145" aria-label={`Cumulative monthly ${label} compared with the previous two months`}>
         <line x1="0" x2="0" y1="24" y2="112" className="sales-axis"/>
