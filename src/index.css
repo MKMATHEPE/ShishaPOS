@@ -1173,3 +1173,9 @@ html[data-theme="dark"] .profit-growth .profit-negative { color: #ec9393; }
 .sales-month-selector label { position: relative; display: grid; place-items: center; min-height: 36px; color: var(--cp-ink); font: 600 12px Arial,sans-serif; }
 .sales-month-selector input { position: absolute; inset: 0; width: 100%; min-width: 0; height: 100%; opacity: 0; cursor: pointer; }
 .sales-month-selector label:focus-within { outline: 2px solid var(--cp-muted); border-radius: 8px; }
+
+.sales-chart-toolbar > .sales-month-legend { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 5px 8px; border: 0; padding: 0; border-radius: 0; }
+.sales-month-legend span { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; color: var(--cp-muted); font: 9px Arial,sans-serif; }
+.sales-month-legend i { width: 12px; border-top: 2px solid var(--cp-ink); }
+.sales-month-legend .profit-legend-1 i { border-top: 2px dashed #5686b6; }
+.sales-month-legend .profit-legend-2 i { border-top: 2px dotted #a28156; }
