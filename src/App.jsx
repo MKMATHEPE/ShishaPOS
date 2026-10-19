@@ -749,16 +749,23 @@ export default function App() {
       setSelectedFlavour(null);
 
       if (result.pendingSync) {
-        const pending = await getOfflineOrders();
-        setPendingOrderCount(pending.length);
+        setPendingOrderCount(count => count + 1);
+        await runBackgroundTask(async () => {
+          const pending = await getOfflineOrders();
+          setPendingOrderCount(pending.length);
+        }, "sale_queue_refresh_failed", recordDiagnostic);
         setIsOnline(navigator.onLine);
         setSyncMessage("Order saved on this device");
       }
 
       if (result.saved) {
         const time = new Date().toISOString(); setLastSyncedAt(time); cacheSellingData({lastSyncedAt:time});
-        const latest = await fetchStock();
-        if (latest) setStock(latest);
+        const refreshed = await runBackgroundTask(async () => {
+          const latest = await fetchStock();
+          if (!latest) throw new Error('Stock refresh unavailable');
+          setStock(latest);
+        }, "sale_stock_refresh_failed", recordDiagnostic);
+        if (!refreshed) setSyncMessage("Sale saved. Stock could not refresh; reconnect to update it.");
       }
 
       setFlash(selectedFlavour.id);

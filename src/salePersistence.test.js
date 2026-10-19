@@ -1,6 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {salePayload,persistSale,syncPendingSales,syncRetryDelay} from './salePersistence.js';
+import {runBackgroundTask} from './backgroundTask.js';
+test('a failed post-sale refresh does not turn a confirmed sale into a failed sale',async()=>{
+ let sent=0;const events=[];
+ const result=await persistSale({id:123},{online:true,queue:async()=>{},send:async()=>{sent++;return true;},remove:async()=>{}});
+ const refreshed=await runBackgroundTask(async()=>{throw Error('Connection lost after commit');},'sale_stock_refresh_failed',(...args)=>events.push(args));
+ assert.equal(result.saved,true);
+ assert.equal(result.pendingSync,false);
+ assert.equal(refreshed,false);
+ assert.equal(sent,1);
+ assert.deepEqual(events,[['error','sale_stock_refresh_failed']]);
+});
 const order={id:123,flavour:{id:'lk',name:'Lady Killer'},type:'full',payment:'cash',price:170,time:'2026-10-13T22:30:00Z',soldBy:'Test',ownerId:'staff-a'};
 test('queued string and online object flavours create identical retry payloads with Johannesburg dates',()=>{
  assert.deepEqual(salePayload(order),salePayload({...order,flavour:'Lady Killer'}));

@@ -1,3 +1,4 @@
+import {recordDiagnostic} from './monitoring';
 import {useEffect,useState} from 'react';
 import {useUnsavedChanges} from './unsavedChanges';
 import {validateProfitPartners} from './partnerSettings.js';
@@ -27,7 +28,7 @@ export default function ProfitPartnerSettings({users,partners,onSave}) {
     setBusy(true);setMessage('');
     const next=draft.map(row=>({profileId:row.profileId,profitShare:Number(row.profitShare)}));
     try {await onSave(next,JSON.parse(baseline));setDraft(next);setBaseline(JSON.stringify(next));setEditing(null);setFailed(false);setMessage('✓ Saved');}
-    catch(error){setFailed(true);setMessage(error.message||'Could not save partner shares.');}
+    catch(error){recordDiagnostic('save_failed','partner_save_failed');setFailed(true);setMessage(error.message||'Could not save partner shares.');}
     finally{setBusy(false);}
   };
   return <section className="profit-partner-settings frosted-card"><div className="partner-settings-heading"><h3>Profit partners</h3><div className="partner-heading-status">{message&&!failed&&<span role="status" className="partner-save-success">{message}</span>}<span className={error?'':'partner-total-valid'}>Total {Number(total.toFixed(2))}%{!error?' ✓':''}</span></div></div>
