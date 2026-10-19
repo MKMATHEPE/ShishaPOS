@@ -17,6 +17,7 @@ import StockItemPhoto from "./StockItemPhoto.jsx";
 import PullToRefresh from "./PullToRefresh.jsx";
 import { saveEquipmentChange } from "./equipmentSave.js";
 import { useUnsavedChanges, confirmDiscard } from "./unsavedChanges";
+import { runBackgroundTask } from "./backgroundTask.js";
 import { recordDiagnostic, setDiagnosticScreen, downloadDiagnostics } from "./monitoring";
 import ManagementOverview from "./ManagementOverview.jsx";
 import ExpensesList from "./ExpensesList.jsx";
@@ -600,7 +601,7 @@ export default function App() {
       if (remotePrices) setPrices(remotePrices);
       setDbReady(true);
     }
-    load();
+    runBackgroundTask(load, "initial_load_failed", recordDiagnostic);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeUser?.id]);
 
@@ -629,7 +630,7 @@ export default function App() {
         setExpenses(remoteExpenses);
       }
     }
-    refresh();
+    runBackgroundTask(refresh, "tab_refresh_failed", recordDiagnostic);
   }, [activeTab]); // eslint-disable-line
 
   // Keep manager-facing sales views current while staff are taking orders.
@@ -657,6 +658,8 @@ export default function App() {
           ]);
         }
         if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
+      } catch {
+        recordDiagnostic("error", "management_refresh_failed");
       } finally {
         refreshing = false;
       }
@@ -670,7 +673,10 @@ export default function App() {
   // Fetch session dates list once management tab is opened
   useEffect(() => {
     if (activeTab !== "management" || !supabase || sessionDates.length > 0) return;
-    fetchSessionDates().then(dates => { if (dates) setSessionDates(dates); });
+    runBackgroundTask(async () => {
+      const dates = await fetchSessionDates();
+      if (dates) setSessionDates(dates);
+    }, "session_dates_failed", recordDiagnostic);
   }, [activeTab]); // eslint-disable-line
 
   useEffect(() => {
@@ -678,9 +684,10 @@ export default function App() {
     const fromDate = new Date();
     fromDate.setDate(fromDate.getDate() - 56);
     fromDate.setHours(0, 0, 0, 0);
-    fetchOrdersByDateRange(fromDate.toISOString(), new Date().toISOString()).then(recentOrders => {
+    runBackgroundTask(async () => {
+      const recentOrders = await fetchOrdersByDateRange(fromDate.toISOString(), new Date().toISOString());
       if (recentOrders) setStockPlanningOrders(recentOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
-    });
+    }, "planning_history_failed", recordDiagnostic);
   }, [activeTab]);
 
   // Fetch orders when the management date/time range changes
@@ -693,11 +700,18 @@ export default function App() {
     const loadingTimer = setTimeout(() => setManagementLoading(true), 0);
     const from = new Date(`${managementDateFrom}T${managementTimeFrom}:00`).toISOString();
     const to   = new Date(`${managementDateTo}T${managementTimeTo}:59`).toISOString();
-    fetchOrdersByDateRange(from, to).then(o => {
-      setManagementOrders((o ?? []).map(ord => ({ ...ord, flavour: normalizeFlavour(ord.flavour) })));
-      setManagementLoading(false);
-    });
-    return () => clearTimeout(loadingTimer);
+    let alive = true;
+    runBackgroundTask(async () => {
+      try {
+        const o = await fetchOrdersByDateRange(from, to);
+        if (alive && o) setManagementOrders(o.map(ord => ({ ...ord, flavour: normalizeFlavour(ord.flavour) })));
+        if (o === null) recordDiagnostic("error", "management_history_failed");
+      } finally {
+        clearTimeout(loadingTimer);
+        if (alive) setManagementLoading(false);
+      }
+    }, "management_history_failed", recordDiagnostic);
+    return () => { alive = false; clearTimeout(loadingTimer); };
   }, [managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo]);
 
   const pendingSales = orders.filter(order => order.pendingSync);

@@ -1,3 +1,4 @@
+import { recordDiagnostic } from './monitoring';
 import SalesPerformance from './SalesPerformance.jsx';
 import MonthlyWeeks from './MonthlyWeeks.jsx';
 import { useEffect, useState } from 'react';
@@ -12,7 +13,7 @@ export default function ManagementOverview({orders,expenses,from,to,timeFrom,tim
   const key=`${previous.from}/${previous.to}`;
   useEffect(()=>{
     let alive=true;
-    fetchOrdersByDateRange(`${previous.from}T00:00:00+02:00`,`${previous.to}T23:59:59+02:00`).then(rows=>{if(alive)setComparison({key,orders:rows});});
+    fetchOrdersByDateRange(`${previous.from}T00:00:00+02:00`,`${previous.to}T23:59:59+02:00`).then(rows=>{if(alive)setComparison({key,orders:rows});}).catch(()=>{if(alive)recordDiagnostic("error","comparison_load_failed");});
     return ()=>{alive=false;};
   },[key,previous.from,previous.to]);
   const current=periodRecords(orders,from,to,timeFrom,timeTo);
