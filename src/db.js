@@ -283,14 +283,12 @@ export async function addManualSale(sale) {
   return { id: data.id, date: data.sale_date, amount: Number(data.amount), payment: data.payment, description: data.description, reason: data.reason, createdAt: data.created_at }
 }
 
-export async function saveFinancePartners(partners) {
-  if (!ok()) return false
-  const { error: clearError } = await supabase.from('pos_finance_partners').delete().not('profile_id', 'is', null)
-  if (clearError) { console.error('saveFinancePartners clear', clearError); return false }
-  if (!partners.length) return true
-  const { error } = await supabase.from('pos_finance_partners').insert(partners.map(p => ({ profile_id: p.profileId, profit_share: p.profitShare })))
-  if (error) { console.error('saveFinancePartners', error); return false }
-  return true
+export async function saveFinancePartners(partners, expectedPartners) {
+  if (!ok()) throw new Error('Connect before saving partner settings.');
+  const {data,error}=await supabase.rpc('configure_pos_profit_partners',{partners,expected_partners:expectedPartners});
+  if(error) throw new Error(error.message);
+  if(data!==true) throw new Error('Could not save partner settings.');
+  return true;
 }
 
 export async function addFinanceTransaction(transaction) {

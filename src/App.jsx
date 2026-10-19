@@ -1,3 +1,5 @@
+import ProfitPartnerSettings from './ProfitPartnerSettings.jsx';
+import { partnerProfitSplit } from './partnerProfitSplit.js';
 import { outstandingExpenses } from './expenseOutstanding.js';
 import Pagination from './Pagination.jsx';
 import { orderPage } from './orderPagination.js';
@@ -161,15 +163,13 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   const profit = totalRevenue - expenseTotal;
   const reimbursements = transactions.filter(item => item.kind === "reimbursement");
   const payouts = transactions.filter(item => item.kind === "partner_payout");
-  const partnerTotal = partners.reduce((sum, item) => sum + Number(item.profitShare || 0), 0);
-  const sharesValid = partnerTotal === 0 || Math.abs(partnerTotal - 100) < 0.01;
+  const profitSplit = partnerProfitSplit(profit,partners,payouts);
   const personName = id => users.find(user => user.id === id)?.name ?? (allExpenses ?? expenses).find(expense=>expense.paidBy===id && expense.paidByName)?.paidByName ?? "Name unavailable";
   const rows = users.map(user => {
     const spent = expenses.filter(item => item.paidBy === user.id && !(item.status === 'paid' && !item.paidAt)).reduce((sum, item) => sum + Number(item.amount || 0), 0);
     const refunded = reimbursements.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
     const partner = partners.find(item => item.profileId === user.id);
-    const effectiveShare = partner ? (partnerTotal === 0 ? 100 / partners.length : sharesValid ? Number(partner.profitShare || 0) : 0) : 0;
-    const share = partner && profit > 0 ? profit * effectiveShare / 100 : 0;
+    const share = partner ? profitSplit.rows.find(item=>item.profileId===user.id)?.share ?? 0 : 0;
     const paid = payouts.filter(item => item.profileId === user.id).reduce((sum, item) => sum + item.amount, 0);
     return { user, spent, refunded, reimbursementDue: Math.max(0, spent - refunded), share, paid, profitDue: Math.max(0, share - paid) };
   }).filter(row => row.spent || row.refunded || row.share || row.paid || partners.some(item => item.profileId === row.user.id));
@@ -224,17 +224,20 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
     const money = value => `R${Number(value || 0).toLocaleString('en-ZA', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
     const issued = new Date().toLocaleDateString('en-ZA', { day: 'numeric', month: 'long', year: 'numeric' });
     const refundsDue = rows.reduce((sum, row) => sum + row.reimbursementDue, 0);
-    const profitDue = rows.reduce((sum, row) => sum + row.profitDue, 0);
+    const profitDue = profitSplit.rows.reduce((sum, row) => sum + row.remaining, 0);
+    const unpaid = outstandingExpenses(expenses);
     const paymentRows = transactions.map(item => `<tr><td>${esc(item.date)}</td><td>${esc(personName(item.profileId))}</td><td>${item.kind === 'reimbursement' ? 'Refund of expenses' : 'Profit payout'}</td><td class="n">${money(item.amount)}</td></tr>`).join('');
-    const manualSaleRows = manualSales.map(item => `<tr><td>${esc(item.date)}</td><td>${esc(item.payment === 'card' ? 'Card' : 'Cash')}</td><td>${esc(item.description)}</td><td>${esc(item.reason)}</td><td class="n">${money(item.amount)}</td></tr>`).join('');
     const personRows = rows.map(row => `<tr><td>${esc(row.user.name)}${partners.some(partner => partner.profileId === row.user.id) ? ' <small>(partner)</small>' : ''}</td><td class="n">${money(row.spent)}</td><td class="n">${money(row.refunded)}</td><td class="n">${money(row.share)}</td><td class="n">${money(row.paid)}</td><td class="n">${money(row.refunded + row.paid)}</td><td class="n"><b>${money(row.reimbursementDue + row.profitDue)}</b></td></tr>`).join('');
+    const splitRows = profitSplit.rows.map(row=>`<tr><td>${esc(personName(row.profileId))}</td><td class="n">${Number(row.percentage.toFixed(2))}%</td><td class="n">${money(row.share)}</td><td class="n">${money(row.paid)}</td><td class="n"><b>${money(row.remaining)}</b></td></tr>`).join('');
+    const splitNotice = profitSplit.error ? `<p class="notice">${esc(profitSplit.error)}</p>` : unpaid.count ? `<p class="notice">Provisional allocation: ${unpaid.count} expenses totalling ${money(unpaid.amount)} remain unpaid in this period. These expenses have already been deducted from profit. Settle or reimburse them before paying out the profit split.</p>` : `<p class="muted">All expenses in this period are paid. ${profitSplit.equal?'Partner percentages are unset; profit is split equally.':'Profit is split using the configured partner percentages.'}</p>`;
     const html = `<!doctype html><html><head><meta charset="utf-8"><title>The Chill Pipe finance report</title><style>
-      *{box-sizing:border-box}body{margin:0;background:#f6f4ef;color:#20201e;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}.toolbar{position:sticky;top:0;padding:12px;text-align:center;background:#0a0a0a}.toolbar button{border:0;border-radius:8px;background:#fff;color:#0a0a0a;padding:10px 18px;font-weight:800;cursor:pointer}.paper{max-width:1050px;margin:24px auto;background:#fff;padding:46px 48px;box-shadow:0 10px 35px #0001}.head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #216f59;padding-bottom:20px;margin-bottom:32px}.head h1{font-size:36px;line-height:1;margin:0 0 7px}.muted{color:#6d6c67}.issued{text-align:right}.section{margin-top:32px}.section h2{font-size:16px;letter-spacing:.07em;color:#6d6c67;text-transform:uppercase;margin:0 0 18px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px 42px}.summary div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted #aaa;padding:7px 0}.summary b{white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#f1f0eb;color:#4b4a47;text-align:left;font-size:13px}th,td{padding:12px 9px;border-bottom:1px solid #ddd}.n{text-align:right;white-space:nowrap}small{color:#6d6c67}.total td{font-weight:900;font-size:16px}@media(max-width:700px){.paper{margin:0;padding:24px 18px}.summary{grid-template-columns:1fr}.sc{overflow-x:auto}.head h1{font-size:28px}}@media print{body{background:#fff}.toolbar{display:none}.paper{box-shadow:none;margin:0;max-width:none;padding:16px 10px}@page{size:A4 landscape;margin:12mm}}
+      *{box-sizing:border-box}body{margin:0;background:#f6f4ef;color:#20201e;font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}.toolbar{position:sticky;top:0;padding:12px;text-align:center;background:#0a0a0a}.toolbar button{border:0;border-radius:8px;background:#fff;color:#0a0a0a;padding:10px 18px;font-weight:800;cursor:pointer}.paper{max-width:1050px;margin:24px auto;background:#fff;padding:46px 48px;box-shadow:0 10px 35px #0001}.head{display:flex;justify-content:space-between;gap:20px;border-bottom:4px solid #216f59;padding-bottom:20px;margin-bottom:32px}.head h1{font-size:36px;line-height:1;margin:0 0 7px}.muted{color:#6d6c67}.issued{text-align:right}.section{margin-top:32px}.section h2{font-size:16px;letter-spacing:.07em;color:#6d6c67;text-transform:uppercase;margin:0 0 18px}.summary{display:grid;grid-template-columns:1fr 1fr;gap:7px 42px}.summary div{display:flex;justify-content:space-between;gap:16px;border-bottom:1px dotted #aaa;padding:7px 0}.summary b{white-space:nowrap}table{width:100%;border-collapse:collapse}th{background:#f1f0eb;color:#4b4a47;text-align:left;font-size:13px}th,td{padding:12px 9px;border-bottom:1px solid #ddd}.n{text-align:right;white-space:nowrap}small{color:#6d6c67}.notice{padding:12px;border:1px solid #d6b669;background:#fff8e5;border-radius:8px;color:#71520f}.total td{font-weight:900;font-size:16px}@media(max-width:700px){.paper{margin:0;padding:24px 18px}.summary{grid-template-columns:1fr}.sc{overflow-x:auto}.head h1{font-size:28px}}@media print{body{background:#fff}.toolbar{display:none}.paper{box-shadow:none;margin:0;max-width:none;padding:16px 10px}@page{size:A4 landscape;margin:12mm}}
     </style></head><body><div class="toolbar"><button onclick="window.print()">Download / Save as PDF</button></div><main class="paper"><header class="head"><div><h1>The Chill Pipe</h1><div class="muted">Combined statement of account</div><div class="muted">${esc(periodLabel)}</div></div><div class="issued muted">Issued ${esc(issued)}</div></header>
-    <section class="section"><h2>Business summary</h2><div class="summary"><div><span>Income received</span><b>${money(totalRevenue)}</b></div><div><span>Less: expenses</span><b>${money(expenseTotal)}</b></div><div><span>Profit after deductions</span><b>${money(profit)}</b></div><div><span>Profit paid to partners</span><b>${money(profitPaid)}</b></div><div><span>Profit remaining to pay</span><b>${money(profitDue)}</b></div><div><span>Refunds paid</span><b>${money(refundsPaid)}</b></div><div><span>Refunds still owed</span><b>${money(refundsDue)}</b></div><div><span>Profit (received − expenses)</span><b>${money(profit)}</b></div>${manualRevenue ? `<div><span>Manual sale adjustments</span><b>${money(manualRevenue)}</b></div>` : ''}</div></section>
+    <section class="section"><h2>Business summary</h2><div class="summary"><div><span>Income received</span><b>${money(totalRevenue)}</b></div><div><span>Less: expenses</span><b>${money(expenseTotal)}</b></div><div><span>Profit after deductions</span><b>${money(profit)}</b></div><div><span>Profit paid to partners</span><b>${money(profitPaid)}</b></div><div><span>Profit remaining to pay</span><b>${money(profitDue)}</b></div><div><span>Refunds paid</span><b>${money(refundsPaid)}</b></div><div><span>Refunds still owed</span><b>${money(refundsDue)}</b></div><div><span>Profit (received − expenses)</span><b>${money(profit)}</b></div></div></section>
+    <section class="section"><h2>Partner profit split</h2>${splitNotice}${splitRows ? `<div class="sc"><table><thead><tr><th>Partner</th><th class="n">Share %</th><th class="n">Profit share</th><th class="n">Already paid</th><th class="n">Still to pay</th></tr></thead><tbody>${splitRows}<tr class="total"><td colspan="4">Remaining payout</td><td class="n">${money(profitDue)}</td></tr></tbody></table></div><p class="muted">This report calculates amounts due. Downloading it does not record a partner payment.</p>` : ''}</section>
     <section class="section"><h2>Each person</h2><div class="sc"><table><thead><tr><th>Person</th><th class="n">Spent</th><th class="n">Refunded</th><th class="n">Profit share</th><th class="n">Profit paid</th><th class="n">Total paid</th><th class="n">Still owed</th></tr></thead><tbody>${personRows || '<tr><td colspan="7" class="muted">No balances for this period.</td></tr>'}</tbody></table></div></section>
     <section class="section"><h2>Payments made</h2><div class="sc"><table><thead><tr><th>Date</th><th>Person</th><th>Type</th><th class="n">Amount</th></tr></thead><tbody>${paymentRows || '<tr><td colspan="4" class="muted">No payments for this period.</td></tr>'}<tr class="total"><td colspan="3">Total paid out</td><td class="n">${money(refundsPaid + profitPaid)}</td></tr></tbody></table></div></section>
-    ${manualSaleRows ? `<section class="section"><h2>Manual sale adjustments</h2><div class="sc"><table><thead><tr><th>Date</th><th>Payment</th><th>Description</th><th>Reason</th><th class="n">Amount</th></tr></thead><tbody>${manualSaleRows}</tbody></table></div></section>` : ''}</PullToRefresh></body></html>`;
+    </main></body></html>`;
     const blob = new Blob([html], { type: 'text/html;charset=utf-8' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -1261,9 +1264,6 @@ export default function App() {
                     if (saved) setFinanceJournal(current => ({ ...current, manualSales: [saved, ...(current.manualSales ?? [])] }));
                     return !!saved;
                   }}
-                  onPartnersChange={async partners => {
-                    if (await saveFinancePartners(partners)) setFinanceJournal(current => ({ ...current, partners }));
-                  }}
                   onTransaction={async transaction => {
                     const saved = await addFinanceTransaction(transaction);
                     if (saved) setFinanceJournal(current => ({ ...current, transactions: [saved, ...current.transactions] }));
@@ -1586,50 +1586,9 @@ export default function App() {
               {/* ── Admin view: full settings ── */}
               {isAdmin && <>
 
-              <nav className="admin-settings-tabs" aria-label="Settings sections">
-                {[['team','Staff'],['pricing','Pricing'],['security','Security'],['business','Business']].map(([key,label])=><button type="button" key={key} aria-current={settingsSection===key ? 'page' : undefined} onClick={()=>setSettingsSection(key)}><SettingsIcon name={key} /><span>{label}</span></button>)}
+              <nav className="admin-settings-tabs admin-settings-three-tabs" aria-label="Settings sections">
+                {[['team','Staff'],['security','Security'],['business','Business']].map(([key,label])=><button type="button" key={key} aria-current={settingsSection===key ? 'page' : undefined} onClick={()=>setSettingsSection(key)}><SettingsIcon name={key} /><span>{label}</span></button>)}
               </nav>
-
-              {settingsSection === "pricing" && <>
-              <div style={styles.settingsSectionLabel}>Pricing</div>
-
-              <div style={styles.settingsGrid}>
-                <div className="card-enter d-0 frosted-card" style={styles.settingCard}>
-                  <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
-                  <input
-                    id="new-pipe-price"
-                    type="number"
-                    min="0"
-                    value={draftPrices.full}
-                    onChange={(e) => setDraftPrices((p) => ({ ...p, full: e.target.value }))}
-                    style={{ ...styles.priceInput, ...(draftPrices.full !== String(prices.full) ? styles.priceInputDirty : {}) }}
-                  />
-                  {draftPrices.full !== String(prices.full) && (
-                    <div style={styles.priceConfirmRow}>
-                      <button onClick={() => updatePrice("full", draftPrices.full)} style={styles.priceConfirmBtn}>Confirm</button>
-                      <button onClick={() => setDraftPrices((p) => ({ ...p, full: String(prices.full) }))} style={styles.priceCancelBtn}>Cancel</button>
-                    </div>
-                  )}
-                </div>
-                <div className="card-enter d-1 frosted-card" style={styles.settingCard}>
-                  <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
-                  <input
-                    id="refill-price"
-                    type="number"
-                    min="0"
-                    value={draftPrices.refill}
-                    onChange={(e) => setDraftPrices((p) => ({ ...p, refill: e.target.value }))}
-                    style={{ ...styles.priceInput, ...(draftPrices.refill !== String(prices.refill) ? styles.priceInputDirty : {}) }}
-                  />
-                  {draftPrices.refill !== String(prices.refill) && (
-                    <div style={styles.priceConfirmRow}>
-                      <button onClick={() => updatePrice("refill", draftPrices.refill)} style={styles.priceConfirmBtn}>Confirm</button>
-                      <button onClick={() => setDraftPrices((p) => ({ ...p, refill: String(prices.refill) }))} style={styles.priceCancelBtn}>Cancel</button>
-                    </div>
-                  )}
-                </div>
-              </div>
-              </>}
 
               {/* Users section — collapsible */}
               {settingsSection === "team" && <>
@@ -1896,6 +1855,45 @@ export default function App() {
               {settingsSection === "business" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={styles.settingsSectionLabel}>Business settings</div>
+                  <div style={styles.settingsSectionLabel}>Pricing</div>
+
+              <div style={styles.settingsGrid}>
+                <div className="card-enter d-0 frosted-card" style={styles.settingCard}>
+                  <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
+                  <input
+                    id="new-pipe-price"
+                    type="number"
+                    min="0"
+                    value={draftPrices.full}
+                    onChange={(e) => setDraftPrices((p) => ({ ...p, full: e.target.value }))}
+                    style={{ ...styles.priceInput, ...(draftPrices.full !== String(prices.full) ? styles.priceInputDirty : {}) }}
+                  />
+                  {draftPrices.full !== String(prices.full) && (
+                    <div style={styles.priceConfirmRow}>
+                      <button onClick={() => updatePrice("full", draftPrices.full)} style={styles.priceConfirmBtn}>Confirm</button>
+                      <button onClick={() => setDraftPrices((p) => ({ ...p, full: String(prices.full) }))} style={styles.priceCancelBtn}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+                <div className="card-enter d-1 frosted-card" style={styles.settingCard}>
+                  <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
+                  <input
+                    id="refill-price"
+                    type="number"
+                    min="0"
+                    value={draftPrices.refill}
+                    onChange={(e) => setDraftPrices((p) => ({ ...p, refill: e.target.value }))}
+                    style={{ ...styles.priceInput, ...(draftPrices.refill !== String(prices.refill) ? styles.priceInputDirty : {}) }}
+                  />
+                  {draftPrices.refill !== String(prices.refill) && (
+                    <div style={styles.priceConfirmRow}>
+                      <button onClick={() => updatePrice("refill", draftPrices.refill)} style={styles.priceConfirmBtn}>Confirm</button>
+                      <button onClick={() => setDraftPrices((p) => ({ ...p, refill: String(prices.refill) }))} style={styles.priceCancelBtn}>Cancel</button>
+                    </div>
+                  )}
+                </div>
+              </div>
+                  <ProfitPartnerSettings users={users} partners={financeJournal.partners ?? []} onSave={async (partners,expected)=>{await saveFinancePartners(partners,expected);setFinanceJournal(current=>({...current,partners}));}} />
                   <button className="admin-diagnostics" onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostic report</button>
                   {[
                     { title: "Payment methods", value: "Cash and card", note: "Available on every POS order" },
