@@ -125,7 +125,10 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
       <summary>Pending approval <span>{pageExpenses.filter(expense=>expense.status==='pending').length}{totalPages>1?' on this page':''}</span></summary>
       {pageExpenses.filter(expense=>expense.status==='pending').map(renderExpense)}
     </details>}
-    {pageExpenses.filter(expense=>expense.status!=='paid' && expense.status!=='pending').map(renderExpense)}
+    {pageExpenses.some(expense=>expense.status!=='paid' && expense.status!=='pending') && <details className="paid-expenses-group" key={`unpaid-${filter}-${currentPage}`}>
+      <summary>Unpaid expenses <span>{pageExpenses.filter(expense=>expense.status!=='paid' && expense.status!=='pending').length}{totalPages>1?' on this page':''}</span></summary>
+      {pageExpenses.filter(expense=>expense.status!=='paid' && expense.status!=='pending').map(renderExpense)}
+    </details>}
     {pageExpenses.some(expense=>expense.status==='paid') && <details className="paid-expenses-group" key={`paid-${filter}-${currentPage}`}>
       <summary>Paid expenses <span>{pageExpenses.filter(expense=>expense.status==='paid').length}{totalPages>1?' on this page':''}</span></summary>
       {pageExpenses.filter(expense=>expense.status==='paid').map(renderExpense)}

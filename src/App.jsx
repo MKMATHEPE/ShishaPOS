@@ -1,3 +1,4 @@
+import { outstandingExpenses } from './expenseOutstanding.js';
 import Pagination from './Pagination.jsx';
 import { orderPage } from './orderPagination.js';
 import ReceiptPicker from './ReceiptPicker.jsx';
@@ -176,7 +177,8 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   const unpaidExpenses = (allExpenses ?? expenses).filter(expense => expense.paidBy === entry.profileId && expense.status !== 'paid');
   const paymentPeople = entry.kind === 'partner_payout' ? users.filter(user => partners.some(partner => partner.profileId === user.id)) : users.filter(user => (allExpenses ?? expenses).some(expense => expense.paidBy === user.id && expense.status !== 'paid'));
   const paymentMoney = value => `R${Number(value || 0).toLocaleString('en-ZA', {minimumFractionDigits:2, maximumFractionDigits:2})}`;
-  const totalDue = rows.reduce((sum, row) => sum + row.reimbursementDue + row.profitDue, 0);
+  const outstanding = outstandingExpenses(allExpenses ?? expenses);
+  const totalDue = outstanding.amount;
   const locked = journal.lockedThrough && entry.date <= journal.lockedThrough;
 
   const submit = async () => {
@@ -249,7 +251,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   return <div className="finance-panel expand-down">
     <div style={styles.managementSectionHeading}>
       <div><span style={styles.managementEyebrow}>Finance journal</span><strong style={styles.managementSectionTitle}>{periodLabel}</strong></div>
-      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge}>{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #d8d4cb", background: "#fff", color: "#4a4843", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
+      <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge} title="All unpaid expenses">{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #d8d4cb", background: "#fff", color: "#4a4843", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
     </div>
     <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
       {[
@@ -257,7 +259,6 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       ].map(([name, value, color]) => <div className="frosted-card" key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
     </div>
 
-    {totalDue > 0 && <div style={{ padding: "10px 12px", borderRadius: 11, background: "#fff7ed", border: "1px solid #fed7aa", color: "#9a3412", fontSize: 12, fontWeight: 800 }}>{formatCurrency(totalDue)} still needs to be paid to {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length} {rows.filter(row => row.reimbursementDue + row.profitDue > 0).length === 1 ? "person" : "people"}.</div>}
 
     {message && (!activeAction || activeAction === "expense") && <div style={{ padding: "9px 11px", borderRadius: 9, background: (message.includes("saved") || message === "Finance report downloaded.") ? "#f0fdf4" : "#fef2f2", color: (message.includes("saved") || message === "Finance report downloaded.") ? "#15803d" : "#b91c1c", fontSize: 11, fontWeight: 800 }}>{message}</div>}
 
