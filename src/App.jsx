@@ -1,3 +1,4 @@
+import PriceSettings from './PriceSettings.jsx';
 import ProfitPartnerSettings from './ProfitPartnerSettings.jsx';
 import { partnerProfitSplit } from './partnerProfitSplit.js';
 import { outstandingExpenses } from './expenseOutstanding.js';
@@ -24,7 +25,7 @@ import { planWeekend } from "./purchasePlanner";
 import { supabase } from "./supabase";
 import { changeOwnPassword, getCurrentProfile, manageStaff, onAuthChange, signIn, signOut, signOutEverywhere } from "./auth";
 import {
-  fetchUsers, updateStaffAccess,
+  fetchUsers, updateStaffAccess, fetchPrices, savePrices,
   fetchStock, updateStockItem,
   fetchOrders, fetchUnfinishedOrders, fetchUnreturnedPipes, insertOrder, markOrderDelivered, returnOrderPipe, deleteOrder, cancelOrder,
   fetchExpenses, saveExpenseRecord, deleteExpenseRecord, transitionExpense,
@@ -339,7 +340,6 @@ export default function App() {
   const [unreturnedPipes, setUnreturnedPipes] = useState([]);
   const [prices, setPrices] = useState(() => readSellingCache()?.prices ?? DEFAULT_PRICES);
   useEffect(()=>{cacheSellingData({prices});},[prices]);
-  const [draftPrices, setDraftPrices] = useState({ full: String(DEFAULT_PRICES.full), refill: String(DEFAULT_PRICES.refill) });
   const [dbReady, setDbReady] = useState(false);
   const [users, setUsers] = useState([]);
   const [activeUser, setActiveUser] = useState(null);
@@ -577,8 +577,8 @@ export default function App() {
   useEffect(() => {
     if (!activeUser || !supabase) return;
     async function load() {
-      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, remoteUnreturned, remoteFinance, pendingOrders] = await Promise.all([
-        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchUnreturnedPipes(), fetchFinanceJournal(), getOfflineOrders(),
+      const [remoteUsers, remoteStock, remoteOrders, remoteExpenses, remoteUnreturned, remoteFinance, pendingOrders, remotePrices] = await Promise.all([
+        fetchUsers(), fetchStock(), fetchOrders(), fetchExpenses(), fetchUnreturnedPipes(), fetchFinanceJournal(), getOfflineOrders(), fetchPrices(),
       ]);
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser.role) ? await fetchUnfinishedOrders() : null;
       if (remoteUsers && remoteUsers.length > 0) {
@@ -597,6 +597,7 @@ export default function App() {
       if (remoteUnreturned) setUnreturnedPipes(remoteUnreturned.map(o => ({ ...o, flavour: normalizeFlavour(o.flavour) })));
       if (remoteExpenses && remoteExpenses.length > 0) setExpenses(remoteExpenses);
       if (remoteFinance) setFinanceJournal(remoteFinance);
+      if (remotePrices) setPrices(remotePrices);
       setDbReady(true);
     }
     load();
@@ -607,8 +608,8 @@ export default function App() {
   useEffect(() => {
     if (!dbReady || !supabase) return;
     async function refresh() {
-      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned, pendingOrders] = await Promise.all([
-        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), getOfflineOrders(),
+      const [remoteOrders, remoteStock, remoteExpenses, remoteUnreturned, pendingOrders, remotePrices] = await Promise.all([
+        fetchOrders(), fetchStock(), fetchExpenses(), fetchUnreturnedPipes(), getOfflineOrders(), fetchPrices(),
       ]);
       const unfinishedOrders = ["Admin", "Manager"].includes(activeUser?.role) ? await fetchUnfinishedOrders() : null;
       if (remoteOrders) {
@@ -623,6 +624,7 @@ export default function App() {
       if (remoteStock && remoteStock.length > 0) {
         setStock(remoteStock);
       }
+      if (remotePrices) setPrices(remotePrices);
       if (remoteExpenses) {
         setExpenses(remoteExpenses);
       }
@@ -755,14 +757,6 @@ export default function App() {
       setSyncMessage("Could not save this sale on the device. Please try again.");
     } finally { saleRunning.current = false; setSaleSaving(false); }
   }, [selectedFlavour, orderType, payMethod, prices, hookahPipeQty, rotasQty, rotaTopsQty, kopsQty, activeUser, setActiveTab]);
-
-  const updatePrice = useCallback((type, value) => {
-    const nextPrice = Number(value);
-    setPrices((prev) => ({
-      ...prev,
-      [type]: Number.isFinite(nextPrice) && nextPrice >= 0 ? nextPrice : 0,
-    }));
-  }, []);
 
   const handleLogin = useCallback(async () => {
     try {
@@ -1854,58 +1848,12 @@ export default function App() {
 
               {settingsSection === "business" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <div style={styles.settingsSectionLabel}>Business settings</div>
-                  <div style={styles.settingsSectionLabel}>Pricing</div>
-
-              <div style={styles.settingsGrid}>
-                <div className="card-enter d-0 frosted-card" style={styles.settingCard}>
-                  <label style={styles.statLabel} htmlFor="new-pipe-price">New Pipe Price</label>
-                  <input
-                    id="new-pipe-price"
-                    type="number"
-                    min="0"
-                    value={draftPrices.full}
-                    onChange={(e) => setDraftPrices((p) => ({ ...p, full: e.target.value }))}
-                    style={{ ...styles.priceInput, ...(draftPrices.full !== String(prices.full) ? styles.priceInputDirty : {}) }}
-                  />
-                  {draftPrices.full !== String(prices.full) && (
-                    <div style={styles.priceConfirmRow}>
-                      <button onClick={() => updatePrice("full", draftPrices.full)} style={styles.priceConfirmBtn}>Confirm</button>
-                      <button onClick={() => setDraftPrices((p) => ({ ...p, full: String(prices.full) }))} style={styles.priceCancelBtn}>Cancel</button>
-                    </div>
-                  )}
-                </div>
-                <div className="card-enter d-1 frosted-card" style={styles.settingCard}>
-                  <label style={styles.statLabel} htmlFor="refill-price">Refill Price</label>
-                  <input
-                    id="refill-price"
-                    type="number"
-                    min="0"
-                    value={draftPrices.refill}
-                    onChange={(e) => setDraftPrices((p) => ({ ...p, refill: e.target.value }))}
-                    style={{ ...styles.priceInput, ...(draftPrices.refill !== String(prices.refill) ? styles.priceInputDirty : {}) }}
-                  />
-                  {draftPrices.refill !== String(prices.refill) && (
-                    <div style={styles.priceConfirmRow}>
-                      <button onClick={() => updatePrice("refill", draftPrices.refill)} style={styles.priceConfirmBtn}>Confirm</button>
-                      <button onClick={() => setDraftPrices((p) => ({ ...p, refill: String(prices.refill) }))} style={styles.priceCancelBtn}>Cancel</button>
-                    </div>
-                  )}
-                </div>
-              </div>
+                  <PriceSettings prices={prices} onSave={async (next,expected)=>{await savePrices(next,expected);setPrices(next);}} />
                   <ProfitPartnerSettings users={users} partners={financeJournal.partners ?? []} onSave={async (partners,expected)=>{await saveFinancePartners(partners,expected);setFinanceJournal(current=>({...current,partners}));}} />
-                  <button className="admin-diagnostics" onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostic report</button>
-                  {[
-                    { title: "Payment methods", value: "Cash and card", note: "Available on every POS order" },
-                    { title: "Coal per sale", value: `${COAL_PER_SALE} pieces`, note: "Automatically deducted from stock" },
-                    { title: "Flavour & mouthpieces", value: "Manual counts", note: "Recorded in Stock Taking" },
-                    { title: "Data sync", value: supabase ? "Supabase connected" : "Not configured", note: "Protected by authenticated database policies" },
-                  ].map((item) => (
-                    <div key={item.title} style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 14, padding: 15, display: "flex", justifyContent: "space-between", gap: 14 }}>
-                      <span><strong style={{ display: "block", color: "#0a0a0a", fontSize: 13 }}>{item.title}</strong><span style={{ display: "block", color: "#6c6a65", fontSize: 9, marginTop: 4 }}>{item.note}</span></span>
-                      <strong style={{ color: "#047857", fontSize: 11, textAlign: "right", whiteSpace: "nowrap" }}>{item.value}</strong>
-                    </div>
-                  ))}
+                  <section className="business-rules-card frosted-card"><h3>Business rules</h3>
+                    {[['Payment methods','Cash and card'],['Coal usage',`${COAL_PER_SALE} pieces per order`],['Flavour & mouthpieces','Manual counts']].map(([name,value])=><div key={name}><span>{name}</span><strong>{value}</strong></div>)}
+                  </section>
+                  <details className="business-system"><summary>System</summary><div><span>Data sync</span><strong>{supabase?'Connected':'Not configured'}</strong></div><button className="admin-diagnostics" onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostics</button></details>
                 </div>
               )}
               </>}

@@ -351,3 +351,16 @@ export async function transitionExpense(expense, status) {
   if (error) throw new Error(error.message);
   if (!data) throw new Error('Expense changed. Refresh and try again.');
 }
+
+export async function fetchPrices() {
+ if(!ok())return null;
+ const {data,error}=await supabase.from('pos_prices').select('full_price,refill_price').eq('id',true).maybeSingle();
+ if(error){console.error('fetchPrices',error);return null;}
+ return data?{full:Number(data.full_price),refill:Number(data.refill_price)}:null;
+}
+export async function savePrices(prices,expected) {
+ if(!ok())throw new Error('Connect before saving prices.');
+ const {data,error}=await supabase.rpc('save_pos_prices',{new_full:prices.full,new_refill:prices.refill,expected_full:expected.full,expected_refill:expected.refill});
+ if(error)throw new Error(error.message);
+ if(data!==true)throw new Error('Could not save prices.');
+}
