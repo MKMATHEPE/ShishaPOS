@@ -1,3 +1,4 @@
+import ShiftReview from './ShiftReview.jsx';
 import PriceSettings from './PriceSettings.jsx';
 import ProfitPartnerSettings from './ProfitPartnerSettings.jsx';
 import { partnerProfitSplit } from './partnerProfitSplit.js';
@@ -119,7 +120,7 @@ function formatCurrency(n) {
 }
 
 function SettingsIcon({name}) {
-  const paths={team:<><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3zM16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/></>,pricing:<><path d="M3 12 12 3h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></>,security:<path d="m12 2 8 3v6c0 5-4 9-8 11-4-2-8-6-8-11V5z"/>,business:<><path d="M3 9h18l-2-6H5zM4 9v12h16V9M9 21v-7h6v7"/><path d="M3 9c0 4 4 4 4 0 0 4 5 4 5 0 0 4 5 4 5 0 0 4 4 4 4 0"/></>};
+  const paths={team:<><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3zM16 4a3 3 0 0 1 0 6m2 4a5 5 0 0 1 3 5v2"/></>,pricing:<><path d="M3 12 12 3h8v8l-9 10z"/><circle cx="16" cy="7" r="1"/></>,review:<><path d="M4 20V10h3v10M10 20V4h3v16M16 20v-8h3v8"/></>,security:<path d="m12 2 8 3v6c0 5-4 9-8 11-4-2-8-6-8-11V5z"/>,business:<><path d="M3 9h18l-2-6H5zM4 9v12h16V9M9 21v-7h6v7"/><path d="M3 9c0 4 4 4 4 0 0 4 5 4 5 0 0 4 5 4 5 0 0 4 4 4 4 0"/></>};
   return <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">{paths[name]}</svg>;
 }
 
@@ -1597,7 +1598,7 @@ export default function App() {
               {isAdmin && <>
 
               <nav className="admin-settings-tabs admin-settings-three-tabs" aria-label="Settings sections">
-                {[['team','Staff'],['security','Security'],['business','Business']].map(([key,label])=><button type="button" key={key} aria-current={settingsSection===key ? 'page' : undefined} onClick={()=>setSettingsSection(key)}><SettingsIcon name={key} /><span>{label}</span></button>)}
+                {[['team','Staff'],['review','Shift review'],['business','Business']].map(([key,label])=><button type="button" key={key} aria-current={settingsSection===key ? 'page' : undefined} onClick={async()=>{if(await confirmDiscard())setSettingsSection(key);}}><SettingsIcon name={key} /><span>{label}</span></button>)}
               </nav>
 
               {/* Users section — collapsible */}
@@ -1837,8 +1838,16 @@ export default function App() {
               )}
               </>}
 
-              {settingsSection === "security" && (
+              {settingsSection === "review" && <ShiftReview stock={stock} pendingOrders={pendingOrderCount} />}
+
+              {settingsSection === "business" && (
                 <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+                  <PriceSettings prices={prices} onSave={async (next,expected)=>{await savePrices(next,expected);setPrices(next);}} />
+                  <ProfitPartnerSettings users={users} partners={financeJournal.partners ?? []} onSave={async (partners,expected)=>{await saveFinancePartners(partners,expected);setFinanceJournal(current=>({...current,partners}));}} />
+                  <section className="business-rules-card frosted-card"><h3>Business rules</h3>
+                    {[['Payment methods','Cash and card'],['Coal usage',`${COAL_PER_SALE} pieces per order`],['Flavour & mouthpieces','Manual counts']].map(([name,value])=><div key={name}><span>{name}</span><strong>{value}</strong></div>)}
+                  </section>
+                  <details className="business-system business-security"><summary>Security</summary>                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
                   <div style={styles.settingsSectionLabel}>Security</div>
                   <div style={{ background: "rgba(255,255,255,0.72)", border: "1px solid rgba(255,255,255,0.9)", borderRadius: 16, padding: 16, display: "flex", flexDirection: "column", gap: 12 }}>
                     <div><strong style={{ color: "#0a0a0a", fontSize: 14 }}>Change my password</strong><p style={{ margin: "4px 0 0", color: "#6c6a65", fontSize: 10, lineHeight: 1.5 }}>Use at least 10 characters. Your current password is required.</p></div>
@@ -1859,16 +1868,7 @@ export default function App() {
                     <p style={{ color: "#6c6a65", fontSize: 10, lineHeight: 1.5 }}>Sign out this account on every device. You will need to sign in again.</p>
                     <button onClick={async () => { if (blocksSignOut(await getOfflineOrders(), activeUser?.id, saleRunning.current, orderSyncRunning.current)) {setSecurityMessage('Sync your queued sales before signing out.');return;} await signOutEverywhere(); setActiveUser(null); setUsers([]); setDbReady(false); }} style={{ width: "100%", minHeight: 42, border: "1px solid rgba(220,38,38,0.2)", background: "#fef2f2", color: "#b91c1c", borderRadius: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>Sign out all devices</button>
                   </div>
-                </div>
-              )}
-
-              {settingsSection === "business" && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-                  <PriceSettings prices={prices} onSave={async (next,expected)=>{await savePrices(next,expected);setPrices(next);}} />
-                  <ProfitPartnerSettings users={users} partners={financeJournal.partners ?? []} onSave={async (partners,expected)=>{await saveFinancePartners(partners,expected);setFinanceJournal(current=>({...current,partners}));}} />
-                  <section className="business-rules-card frosted-card"><h3>Business rules</h3>
-                    {[['Payment methods','Cash and card'],['Coal usage',`${COAL_PER_SALE} pieces per order`],['Flavour & mouthpieces','Manual counts']].map(([name,value])=><div key={name}><span>{name}</span><strong>{value}</strong></div>)}
-                  </section>
+                </div></details>
                   <details className="business-system"><summary>System</summary><div><span>Data sync</span><strong>{supabase?'Connected':'Not configured'}</strong></div><button className="admin-diagnostics" onClick={downloadDiagnostics} style={styles.copyBtn}>Download diagnostics</button></details>
                 </div>
               )}
