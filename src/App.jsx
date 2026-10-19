@@ -17,6 +17,7 @@ import StockItemPhoto from "./StockItemPhoto.jsx";
 import PullToRefresh from "./PullToRefresh.jsx";
 import { saveEquipmentChange } from "./equipmentSave.js";
 import { useUnsavedChanges, confirmDiscard } from "./unsavedChanges";
+import { startBackgroundPolling } from "./backgroundPolling.js";
 import { runBackgroundTask } from "./backgroundTask.js";
 import { recordDiagnostic, setDiagnosticScreen, downloadDiagnostics } from "./monitoring";
 import ManagementOverview from "./ManagementOverview.jsx";
@@ -639,17 +640,14 @@ export default function App() {
     if (!["management", "delivered"].includes(activeTab)) return;
 
     let alive = true;
-    let refreshing = false;
     const refreshManagerSales = async () => {
-      if (refreshing) return;
-      refreshing = true;
-      try {
         const [dailyOrders, unfinishedOrders, pendingOrders] = await Promise.all([
           fetchOrders(),
           fetchUnfinishedOrders(),
           getOfflineOrders(),
         ]);
         if (!alive) return;
+        if (!dailyOrders || !unfinishedOrders) throw new Error('Sales refresh unavailable');
         if (dailyOrders) {
           const remoteIds = new Set(dailyOrders.map(order => order.id));
           setOrders([
@@ -658,16 +656,13 @@ export default function App() {
           ]);
         }
         if (unfinishedOrders) setManagerCurrentOrders(unfinishedOrders.map(order => ({ ...order, flavour: normalizeFlavour(order.flavour) })));
-      } catch {
-        recordDiagnostic("error", "management_refresh_failed");
-      } finally {
-        refreshing = false;
-      }
     };
-
-    refreshManagerSales();
-    const interval = setInterval(refreshManagerSales, 5000);
-    return () => { alive = false; clearInterval(interval); };
+    const stop = startBackgroundPolling({
+      task: refreshManagerSales,
+      online: () => navigator.onLine,
+      onError: () => recordDiagnostic("error", "management_refresh_failed"),
+    });
+    return () => { alive = false; stop(); };
   }, [activeTab, activeUser?.role, dbReady]);
 
   // Fetch session dates list once management tab is opened
