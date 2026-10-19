@@ -1,3 +1,4 @@
+import { expensePersonLabel } from './expensePersonLabel.js';
 import Pagination from './Pagination.jsx';
 import ReceiptLink from './ReceiptLink.jsx';
 import { formHasChanges } from './formDirty.js';
@@ -75,7 +76,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
   const currentPage = Math.min(page, totalPages);
   const pageExpenses = [...visible].sort((a,b)=>Number(a.status === 'paid')-Number(b.status === 'paid') || new Date(b.time)-new Date(a.time) || b.id-a.id).slice((currentPage-1)*10, currentPage*10);
   const expenseNames = new Map(expenses.flatMap(expense => ['paidBy','submittedBy','approvedBy','paymentBy'].filter(field=>expense[field] && expense[`${field}Name`]).map(field=>[expense[field],expense[`${field}Name`]])));
-  const person = id => users.find(user => user.id === id)?.name ?? expenseNames.get(id) ?? 'Name unavailable';
+  const person = id => expensePersonLabel(users.find(user => user.id === id)?.name ?? expenseNames.get(id) ?? 'Name unavailable');
   const renderExpense = expense => {
       const locked = lockedThrough && expenseDate(expense.time) <= lockedThrough;
       const showReceipt = !!expense.receiptPath && (canViewReceipts || isAdmin || expense.submittedBy === currentUserId);
@@ -106,7 +107,7 @@ export default function ExpensesList({ stock, expenses, users, lockedThrough, to
           <label>Date<input type="date" value={draft.date} max={today} onChange={event=>setDraft(prev=>({...prev,date:event.target.value}))} /></label>
           <label>Amount (R)<input type="number" inputMode="decimal" min="0.01" step="0.01" value={draft.amount} onChange={event=>setDraft(prev=>({...prev,amount:event.target.value}))} /></label>
           <label>Category<select value={draft.category} onChange={event=>setDraft(prev=>({...prev,category:event.target.value}))}>{[...new Set([expense.category,'Transport','Wages','Coal','Flavour','Mouth Pieces'])].map(category=><option key={category}>{category}</option>)}</select></label>
-          <label>Paid by<select value={draft.paidBy} onChange={event=>setDraft(prev=>({...prev,paidBy:event.target.value}))}><option value="">Business</option>{users.map(user=><option key={user.id} value={user.id}>{user.name}</option>)}{draft.paidBy && !users.some(user=>user.id===draft.paidBy) && <option value={draft.paidBy}>{person(draft.paidBy)}</option>}</select></label>
+          <label>Paid by<select value={draft.paidBy} onChange={event=>setDraft(prev=>({...prev,paidBy:event.target.value}))}><option value="">Business</option>{users.map(user=><option key={user.id} value={user.id}>{expensePersonLabel(user.name)}</option>)}{draft.paidBy && !users.some(user=>user.id===draft.paidBy) && <option value={draft.paidBy}>{person(draft.paidBy)}</option>}</select></label>
           <label>Stock purchased<select value={draft.stockKey} onChange={event=>setDraft(prev=>({...prev,stockKey:event.target.value,stockQuantity:''}))}><option value="">No stock purchase</option>{stockItems.map(item=><option key={item.key} value={item.key}>{item.name} ({item.unit})</option>)}</select></label>
           {draft.stockKey && <label>Quantity bought ({stockItems.find(item=>item.key===draft.stockKey)?.unit})<input type="number" min="0.001" step="0.001" inputMode="decimal" value={draft.stockQuantity} onChange={event=>setDraft(prev=>({...prev,stockQuantity:event.target.value}))} /></label>}
           <label className="expense-wide">Description (optional)<input value={draft.description} onChange={event=>setDraft(prev=>({...prev,description:event.target.value}))} /></label>
