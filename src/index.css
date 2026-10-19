@@ -1179,3 +1179,14 @@ html[data-theme="dark"] .profit-growth .profit-negative { color: #ec9393; }
 .sales-month-legend i { width: 12px; border-top: 2px solid var(--cp-ink); }
 .sales-month-legend .profit-legend-1 i { border-top: 2px dashed #5686b6; }
 .sales-month-legend .profit-legend-2 i { border-top: 2px dotted #a28156; }
+
+.expense-main-actions { display: flex; flex-wrap: nowrap; gap: 6px; }
+.expense-main-actions button { min-width: 0; padding: 7px 9px; white-space: nowrap; font-size: 11px; }
+.expense-main-actions > span { flex-shrink: 1; }
+@media(max-width:340px) { .expense-main-actions button { padding: 7px 6px; font-size: 10px; } }
+.expense-main-actions button { min-height: 34px; padding: 5px 8px; font-size: 10px; border-radius: 8px; }
+@media(max-width:340px) { .expense-main-actions button { padding: 5px 6px; font-size: 10px; } }
+
+.expense-name-purchase { display: flex; align-items: baseline; flex-wrap: wrap; gap: 4px 8px; min-width: 0; }
+.expense-name-purchase > strong { white-space: normal !important; }
+.expense-inline-purchase { color: var(--cp-muted); font-size: 10px; font-weight: 400; }
