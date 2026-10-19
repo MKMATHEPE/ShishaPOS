@@ -1195,63 +1195,7 @@ export default function App() {
 
             return (
             <div key="management" className="tab-enter theme-page-surface" style={styles.settingsPanel}>
-              <div style={{ ...styles.settingsBar, justifyContent: "space-between", alignItems: "center" }}>
-                <div style={styles.totalLeft}>
-                  <span style={styles.totalLabel}>Management</span>
-                  <span style={styles.totalSub}>
-                    <span
-                      onClick={() => { setManagementDateFrom(localToday()); setManagementDateTo(localToday()); setManagementTimeFrom("00:00"); setManagementTimeTo("23:59"); }}
-                      style={{ cursor: "pointer", borderBottom: "1px dotted rgba(255,255,255,0.3)" }}
-                    >{currentTime}</span>
-                    {" · "}{mgmtDateLabel}
-                  </span>
-                </div>
-                <div style={{ display: "flex", alignItems: "center", gap: 8, background: "rgba(255,255,255,0.1)", borderRadius: 12, padding: "8px 12px", flexShrink: 0 }}>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
-                    <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>From</span>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateFrom)}</span>
-                      <input type="date" value={managementDateFrom} max={managementDateTo}
-                        onChange={e => { if (e.target.value) setManagementDateFrom(e.target.value); }}
-                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
-                      />
-                    </div>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                      {managementTimeFrom !== "00:00" && <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{managementTimeFrom}</span>}
-                      <input type="time" value={managementTimeFrom}
-                        onChange={e => { if (e.target.value) setManagementTimeFrom(e.target.value); }}
-                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", minWidth: 32, minHeight: 16, height: "100%" }}
-                      />
-                    </div>
-                  </div>
-                  <span style={{ fontSize: 10, color: "rgba(255,255,255,0.25)", fontWeight: 700 }}>→</span>
-                  <div style={{ display: "flex", flexDirection: "column", gap: 3, alignItems: "flex-start" }}>
-                    <span style={{ fontSize: 8, fontWeight: 900, color: "rgba(255,255,255,0.4)", textTransform: "uppercase", letterSpacing: "0.14em" }}>To</span>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                      <span style={{ fontSize: 13, fontWeight: 800, color: "#fff", whiteSpace: "nowrap" }}>{formatDateShort(managementDateTo)}</span>
-                      <input type="date" value={managementDateTo} min={managementDateFrom} max={todayStr}
-                        onChange={e => { if (e.target.value) setManagementDateTo(e.target.value); }}
-                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", height: "100%" }}
-                      />
-                    </div>
-                    <div style={{ position: "relative", display: "flex", alignItems: "center" }}>
-                      {managementTimeTo !== "23:59" && <span style={{ fontSize: 11, fontWeight: 700, color: "rgba(255,255,255,0.55)", whiteSpace: "nowrap" }}>{managementTimeTo}</span>}
-                      <input type="time" value={managementTimeTo}
-                        onChange={e => { if (e.target.value) setManagementTimeTo(e.target.value); }}
-                        style={{ position: "absolute", inset: 0, opacity: 0, cursor: "pointer", width: "100%", minWidth: 32, minHeight: 16, height: "100%" }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
-                {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
-                  <button role="tab" aria-selected={managementView === view.id} key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
-                ))}
-              </div>
-
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 6 }}>
+              <div className="management-date-presets" role="group" aria-label="Date presets">
                 {["Today", "Yesterday", "7 Days", "Month"].map(preset => {
                   const active = presetIsActive(preset, managementPreset, managementDateFrom, managementDateTo, managementTimeFrom, managementTimeTo);
                   return <button className="date-preset" aria-pressed={active} key={preset} onClick={() => {
@@ -1261,6 +1205,19 @@ export default function App() {
                   }} style={{ border: "1px solid rgba(10,10,10,0.08)", background: active ? "#0a0a0a" : "rgba(255,255,255,0.7)", color: active ? "#fff" : "#6c6a65", borderRadius: 10, padding: "9px 4px", fontSize: 10, fontWeight: 800, cursor: "pointer", fontFamily: "inherit" }}>{preset}</button>;
                 })}
               </div>
+              <div className="management-inline-range">
+                <label className="management-range-date"><span>From</span><span className="management-date-value">{formatDateShort(managementDateFrom)}<input aria-label="From date" type="date" value={managementDateFrom} max={managementDateTo} onChange={event=>{if(event.target.value)setManagementDateFrom(event.target.value);}} /></span></label>
+                <span className="management-range-arrow" aria-hidden="true">→</span>
+                <label className="management-range-date"><span>To</span><span className="management-date-value">{formatDateShort(managementDateTo)}<input aria-label="To date" type="date" value={managementDateTo} min={managementDateFrom} max={todayStr} onChange={event=>{if(event.target.value)setManagementDateTo(event.target.value);}} /></span></label>
+                <details className="management-time-filter"><summary aria-label="Edit time range" title="Edit time range">◷</summary><div><label>From time<input aria-label="From time" type="time" value={managementTimeFrom} onChange={event=>{if(event.target.value)setManagementTimeFrom(event.target.value);}} /></label><label>To time<input aria-label="To time" type="time" value={managementTimeTo} onChange={event=>{if(event.target.value)setManagementTimeTo(event.target.value);}} /></label></div></details>
+              </div>
+
+              <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 5, padding: 5, borderRadius: 13, background: "rgba(255,255,255,0.62)", border: "1px solid rgba(10,10,10,0.06)" }}>
+                {[{ id: "overview", label: "Overview" }, { id: "finance", label: "Finance" }].map(view => (
+                  <button role="tab" aria-selected={managementView === view.id} key={view.id} onClick={() => setManagementView(view.id)} style={{ border: 0, borderRadius: 9, minHeight: 38, background: managementView === view.id ? "#0a0a0a" : "transparent", color: managementView === view.id ? "#fff" : "#6c6a65", fontSize: 11, fontWeight: 900, cursor: "pointer", fontFamily: "inherit" }}>{view.label}</button>
+                ))}
+              </div>
+
 
               {managementView === "finance" ? (
                 <FinancePanel

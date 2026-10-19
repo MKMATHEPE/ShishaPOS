@@ -1152,3 +1152,17 @@ html[data-theme="dark"] .profit-growth .profit-negative { color: #ec9393; }
 /* Full-width plot beneath the unchanged amount labels. */
 .profit-chart-dates { margin-left: 0; }
 .profit-growth .profit-axis-value text { paint-order: stroke fill; stroke: var(--cp-card); stroke-width: 3px; stroke-linejoin: round; }
+
+.management-date-presets { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 4px; padding: 4px; border: 1px solid var(--cp-line); border-radius: 13px; background: var(--cp-stone); }
+.management-date-presets .date-preset { min-height: 40px; }
+.management-inline-range { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 0 10px; min-height: 44px; border: 1px solid var(--cp-line); border-radius: 12px; background: var(--cp-card); color: var(--cp-ink); }
+.management-range-date { display: inline-flex; align-items: center; gap: 8px; min-width: 0; font-size: 11px; white-space: nowrap; }
+.management-range-date > span:first-child,.management-range-arrow { color: var(--cp-muted); }
+.management-date-value { position: relative; display: inline-flex; align-items: center; min-height: 44px; font-size: 12px; font-weight: 600; }
+.management-date-value input { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; min-width: 0; cursor: pointer; }
+.management-time-filter { position: relative; flex-shrink: 0; }
+.management-time-filter summary { display: grid; place-items: center; width: 32px; min-height: 44px; cursor: pointer; list-style: none; font-size: 20px; color: var(--cp-muted); }
+.management-time-filter summary::-webkit-details-marker { display: none; }
+.management-time-filter > div { position: absolute; right: 0; top: 100%; z-index: 25; display: grid; gap: 10px; width: 170px; padding: 12px; border: 1px solid var(--cp-line); border-radius: 12px; background: var(--cp-card); box-shadow: 0 8px 25px #0003; }
+.management-time-filter label { display: grid; gap: 5px; font-size: 11px; }
+.management-time-filter input { width: 100%; min-height: 40px; box-sizing: border-box; }
