@@ -1,3 +1,4 @@
+import {periodRecords,performance as salesPerformance} from './overviewModel.js';
 import ShiftReview from './ShiftReview.jsx';
 import PriceSettings from './PriceSettings.jsx';
 import ProfitPartnerSettings from './ProfitPartnerSettings.jsx';
@@ -143,7 +144,7 @@ function TabIcon({ name, active }) {
   return <svg {...common}><circle cx="12" cy="8" r="3.2" /><path d="M5.5 21v-2.2a6.5 6.5 0 0 1 13 0V21M4 21h16" /></svg>;
 }
 
-function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, journal, periodLabel, dateFrom, dateTo, isAdmin, currentUserId, canViewReceipts, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
+function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, revenue, recordedRevenue, journal, periodLabel, dateFrom, dateTo, isAdmin, currentUserId, canViewReceipts, onExpense, onExpenseUpdate, onExpenseDelete, onManualSale, onTransaction }) {
   const [entry, setEntry] = useState({ kind: "reimbursement", profileId: "", amount: "", description: "", date: localToday() });
   const [spend, setSpend] = useState({ category: "Transport", description: "", paidBy: "", amount: "", date: localToday(), stockKey: "", stockQuantity: "" });
   const [expenseSaving, setExpenseSaving] = useState(false);
@@ -165,6 +166,7 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
   const totalRevenue = revenue + manualRevenue;
   const expenseTotal = expenses.reduce((sum, item) => sum + Number(item.amount || 0), 0);
   const profit = totalRevenue - expenseTotal;
+  const receivedDifference = Math.round((totalRevenue-recordedRevenue)*100)/100;
   const reimbursements = transactions.filter(item => item.kind === "reimbursement");
   const payouts = transactions.filter(item => item.kind === "partner_payout");
   const profitSplit = partnerProfitSplit(profit,partners,payouts);
@@ -260,10 +262,10 @@ function FinancePanel({ users, stock, expenses, allExpenses, onExpenseStatus, re
       <div><span style={styles.managementEyebrow}>Finance journal</span><strong style={styles.managementSectionTitle}>{periodLabel}</strong></div>
       <div style={{ display: "flex", alignItems: "center", gap: 6 }}><span style={styles.managementPeriodBadge} title="All unpaid expenses">{formatCurrency(totalDue)} owed</span><button onClick={downloadReport} aria-label="Open downloadable finance report" title="Download report" style={{ width: 30, height: 30, display: "grid", placeItems: "center", borderRadius: 9, border: "1px solid #d8d4cb", background: "#fff", color: "#4a4843", cursor: "pointer", fontSize: 15 }}>⇩</button></div>
     </div>
-    <div style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 6 }}>
+    <div className="finance-summary-grid">
       {[
-        ["Received", totalRevenue, "#16a34a"], ["Expenses", expenseTotal, "#dc2626"], ["Profit", profit, profit >= 0 ? "#0a0a0a" : "#dc2626"],
-      ].map(([name, value, color]) => <div className="frosted-card" key={name} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
+        ["Received", totalRevenue, "#16a34a"], ["Expenses", expenseTotal, "#dc2626"], ["Profit", profit, profit >= 0 ? "#0a0a0a" : "#dc2626"], ["Difference", receivedDifference, receivedDifference === 0 ? "#6c6a65" : "#b98532"],
+      ].map(([name, value, color]) => <div className="frosted-card" key={name} title={name==='Difference'?'Received − recorded Revenue':undefined} style={{ ...styles.kpiCard, padding: 10, minWidth: 0 }}><span style={{ ...styles.kpiLabel, fontSize: 8 }}>{name}</span><strong style={{ fontSize: 18, color, whiteSpace: "nowrap" }}>{formatCurrency(value)}</strong></div>)}
     </div>
 
 
@@ -1244,6 +1246,7 @@ export default function App() {
                     setExpenses(latest); setFinanceJournal(journal);
                   }}
                   revenue={displayTotals.gross}
+                  recordedRevenue={salesPerformance(periodRecords(displayOrders,managementDateFrom,managementDateTo,managementTimeFrom,managementTimeTo)).revenue}
                   journal={financeJournal}
                   periodLabel={mgmtDateLabel}
                   dateFrom={managementDateFrom}

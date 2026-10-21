@@ -1376,3 +1376,8 @@ html[data-theme="dark"] .shift-review .review-matched { color: #99c7a0; }
 .review-flavour-chart td { padding: 0 0 10px; border-bottom: 1px solid var(--cp-line); }
 .review-calculation-info { margin-top: 12px; }
 .review-calculation-info summary { color: var(--cp-muted); font-size: 11px; font-weight: 400; }
+
+.finance-summary-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 6px; }
+@media (max-width: 540px) {
+ .finance-summary-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+}
